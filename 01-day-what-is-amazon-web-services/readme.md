@@ -221,3 +221,172 @@ Chalein hum **Figure 1.5** ke diagram ko bacho ki tarah asaan breakdown ke sath 
 
 Alexa ne is behtareen planning se apne startup ko kisi bhi barrey nuksan ya outage se bacha liya hai. Lekin cloud engineering ka asool yahi hai ke aap kabhi sukoon se nahi baithte; Alexa aur un ki team hamesha agle kisi failure ke liye pehle se plan karti rehti hai aur apne systems ki mazbooti (resilience) ko lagatar behtar bana rahi hai. *(Aaj ke modern cloud era mein yeh Multi-AZ deployment har barri production application ka standard asool hai).*
 
+---
+
+## Profiting from low costs for batch processing infrastructure
+
+**Nick** aik data scientist hai jise gas turbines (jo barri barri gas se chalne wali machines hoti hain) se ikatha hone wale bohot barray data (massive measurement data) ko process karna hota hai. Us ka asal kaam yeh hai ke woh rozana aik report taiyar kare jo bataye ke in sainkron (hundreds) turbines ki maintenance ki haalat kya hai. Is report ko dekh kar pata chalta hai ke kis turbine mein kya kharabi aa sakti hai.
+
+Is kaam ko karne ke liye Nick ki team ko aik computing infrastructure (yaani bhaari computers aur servers) ki zaroorat hoti hai jo din mein sirf **aik baar** naye aane wale data ko analyze kar sakay.
+
+### Nick Ka System Kaise Kaam Karta Hai? (Step-by-Step Flow)
+
+1. **Scheduled Batch Jobs:** Nick ka system aik mukammal schedule (waqt) par chalta hai, jise batch jobs kehte hain. Yeh jobs tab chalte hain jab naya data aata hai.
+2. **Database Storage:** Batch jobs chalne ke baad jo baari bareek calculations hoti hain, un ke nichorr (aggregated results) ko aik database mein save kar diya jata hai.
+3. **Business Intelligence (BI) Tool:** Aakhir mein aik BI tool is database se sara data uthata hai aur us se asaan aur khoobsurat reports bana kar tyar karta hai taake business chalanay wale log usay asani se samajh sakein.
+
+---
+
+### Chota Budget Aur AWS Ka Clever Pricing Model
+
+Nick ke paas computers lagane ya chalanay ke liye budget bohot hi chota (very small budget) hai, is liye us ki team koi aisa tareeqa dhoond rahi thi jahan paise kam se kam lagein. Nick ne AWS ke pricing model (paise lene ke tareeqay) ka bohot hi chalaaki aur aqalmandana istemaal kiya, jo ke yeh hain:
+
+* **Per-Second Billing:** AWS virtual machines ka bill har aik second ke hisab se banata hai, bashart-e-ke kam az kam bill 60 seconds (aik minute) ka zaroor banta hai. Nick ne is ka faida uthatay huay aik rule banaya: Jaise hi batch job shuru hota hai, woh virtual machine ko **start (launch)** karta hai, aur jaise ہی kaam mukammal hota hai, woh machine ko foran **band (terminate)** kar deta hai. Is tarah woh computing infrastructure ke paise sirf ussi waqt ke deta hai jab woh waqai chal rahi hoti hai. Purane zamane ke traditional data centers ke muwazne yeh aik bohot barra badlao (**game changer**) hai, jahan machine chahe farigh baithi rahe ya chale, aap ko har mahine ka poora flat bill dena parta tha.
+* **Spare Capacity (Spot Instances):** AWS ke barray barray data centers mein kuch aisi computing power (khali servers) hoti hai jo faltu pari hoti hai aur use nahi ho rahi hoti. AWS is khali capacity ko bohot barri chout (substantial discount) par bechta hai. Nick ke liye yeh zaroori nahi hai ke us ka batch job bilkul kisi pakke fixed minute par hi chale; woh intezar kar sakta hai ke jab cloud mein khali computers available hon, tab us ka kaam chal jaye. Is sabr ki wajah se AWS usay poore **75% discount** par virtual machine de deta hai! *(Aaj 2026 ke modern cloud daur mein is ko **Spot Instances** kaha jata hai, jo bade analytics aur batch processing ke liye sab se sasta tareeqa mana jata hai).*
+
+---
+
+### Figure 1.6 Ka Breakdown (Pay-per-use price model)
+
+<div align="center">
+  <img src="./images/06.png" width="700"/>
+</div>
+
+Agar hum diye gaye **Figure 1.6** ko ghaur se dekhein, to yeh bohot hi asaan tarike se On-premises (purane zati servers) aur AWS Cloud ke kharche ka faraq samjhata hai:
+
+* **Left Side (On-premises):**
+* **Utilization Line:** Is mein kale (black) aur safaid (white) dabbay hain. Kale dabbay ka matlab hai ke machine par kaam ho raha hai (Machines are used) aur safaid dabbay ka matlab hai machine farigh baithi hai (Machines are idle).
+* **Billing Line:** Yeh line poori ki poori kali (black) hai. Is ke niche likha hai: *"You are paying for the hardware, no matter if you use it."* Yaani jab Nick ka computer farigh baitha tha, tab bhi company ko poore mahine ka bill bharna par raha hai. Is se bohot paisa zaya hota hai.
+
+
+* **Right Side (AWS):**
+* **Utilization Line:** Is mein bhi bilkul wese hi kale aur safaid dabbay hain, kyunke Nick ka kaam din mein sirf thodi der chalta hai.
+* **Billing Line:** Ghaur karein! Is line mein sirf wahan kala rang hai jahan utilization mein kala rang tha. Baqi saari line safaid (khali) hai. Is ke niche likha hai: *"You are paying only for machines that are actually in use."* Yaani jaise hi Nick ne kaam khatam kar ke machine band ki, bill ka meter bhi foran ruk gaya aur bill bilkul zero ($0) ho gaya.
+
+
+
+Nick is baat se bohot khush hai ke ab us ki team ke paas aik aisa computing infrastructure mojud hai jo bohot hi kam kharche (low costs) mein itne barray data ko minto mein analyze kar leta hai.
+
+Ab aap ko aik broad idea mil chuka hai ke AWS ke sath kya kuch kiya ja sakta hai—aam tor par kahein to aap dunya ki **kisi bhi application** ko AWS par host kar sakte hain. Next section mein hum un **nau (9) sab se barray faidon** ke baare mein baat karenge jo AWS hamain deta hai.
+
+---
+
+## How you can benefit from using AWS
+
+AWS use karne ka sab se barra aur ahem faida kya hai? Aap shayad foran kahein ke paise bachana (cost savings). Lekin yaad rakhein ke sirf paisa bachana hi akela faida nahi hai. Chalein hum AWS ke kuch khaas features ko dekhte hain aur samajhte hain ke is se aap ko mazeed kya kya behtareen faide mil sakte hain.
+
+---
+
+## Innovative and fast-growing platform
+
+AWS aik aisa platform hai jo bohot hi tezi se barh raha hai aur har waqt nayi cheezein ijaad (innovate) kar raha hai.
+
+* AWS lagatar nayi services, naye features, aur purani cheezon mein behtari (improvements) ka elaan karta rehta hai.
+* Agar aap un ki website ke "What's New" page par jayein, to aap ko andaza hoga ke un ke kaam karne ki raftar kitni tez hai. Aik andaze ke mutabaq, saal 2021 mein AWS ne **2,080 naye elaanaat** kiye thay. *(Aaj 2026 ke modern daur mein yeh raftar mazeed barh chuki hai, jahan AI aur advanced automation har haftay launch ho rahi hain).*
+* In modern aur nayi tekhnologies ka faida utha kar aap apne customers ke liye aala qism ke solutions bana sakte hain. Is se aap ko market mein baqi sab par aik barri bartari (competitive advantage) haasil ho jati hai.
+* Amazon ne saal 2021 mein **$62 billion** ki net sales report ki thin. Is barri kamai aur size se yeh saaf zahir hota hai ke AWS aane wale saalon mein apne platform aur data centers ka jaal mazeed phelaye ga.
+
+---
+
+## Services solve common problems
+
+Jaise hum ne pehle parha, AWS mukhtalif services ka aik bohot barra platform hai. Software dunya ke jo aam maslay hotay hain, AWS ne unhein pehle se hi hal kar ke rakh diya hai:
+
+* **Aam Maslay (Common Problems):** Traffic ko barabar banta (load balancing), data ko line mein lagana (queuing), emails bhejney (sending email), aur files ko mahfooz rakhna (storing files). In sab ke liye bani-banayi services mojud hain.
+* **Bacho Wali Misaal:** Aap ko "pahiya dobara ijaad" (reinvent the wheel) karne ki koi zaroorat nahi hai. Yaani jo cheez pehle se bani hui aur test shuda hai, usay khud se zero se banane mein apna waqt aur paisa zaya mat karein.
+* **Aap Ka Kaam:** Aap ka asal kaam bas yeh hai ke market se sahi services ko uthaein aur unhein aapas mein jor kar aik mazboot system kharra kar dein. Pichli saari mushkil management AWS khud sambhale ga, jabki aap poori tawajjoh sirf apne customers ki zarooriyat par lagayenge.
+
+---
+
+## Enabling automation
+
+AWS poori tarah se **API driven** hai, yaani is ka har component code ke zariye chalaya ja sakta hai. Is wajah se aap har choti-bardi cheez ko automatic (automate) kar sakte hain:
+
+* **Code Se Infrastructure:** Aap sirf code likh kar poora network design kar sakte hain, virtual machines ka poora cluster (gurooh) minto mein shuru kar sakte hain, ya aik relational database deploy kar sakte hain. Automation se system par bhrosa (reliability) barhta hai aur kaam mein tezi (efficiency) aati hai.
+* **Theoretical Aspect (Insaan vs Computer):** Aap ka system jitna bara hota jata hai, us mein aapas ke jor aur taluqaat (dependencies) utne hi ulajhte jate hain. Aik insaan itni saari bareekiyon mein bhatak sakta hai aur ghalti kar sakta hai, lekin computer chahe jitna bhi barra aur aapas mein jura hua network ho, usay asani se handle kar leta hai.
+* **Trade-off Decision:** Insaan ko un kaamon par focus karna chahiye jo woh behtar kar sakta hai—jaise system ka blueprint (naksha) likhna. Computer khud hi dhoond nikalega ke un saari dependencies ko aapas mein kaise hal karna hai. Cloud mein apne nakshay ke mutabaq automatically poora environment kharra karne ke is asool ko **Infrastructure as Code (IaC)** kehte hain, jise hum aage Chapter 4 mein detail se parhenge.
+
+---
+
+## Flexible capacity (scalability)
+
+Flexible capacity ka matlab hai aisi gunjaish jo zaroorat ke mutabaq barh ya ghat sakay. Is se "overcapacity" (faltu ya zyaada computers rakhna jin ka use na ho) ka khatma ho jata hai.
+
+* Aap aik akeli virtual machine se shuru kar ke hazaron virtual machines tak ja sakte hain.
+* Aap ki data store karne ki jagah (storage) gigabytes (GB) se petabytes (PB) tak phail sakti hai.
+* Purane zamane ki tarah ab aap ko agle mahino ya saalon ka andaza laga kar pehle se mehanga hardware khareed kar rakhne ki koi zaroorat nahi hai.
+* **Real-World Example (Web Shop):** Agar aap aik online shop chalate hain, to us par traffic hamesha aik jaisi nahi rehti, balkay badalti rehti hai (seasonal traffic patterns). Jaise din ke waqt log zyaada aate hain aur raat ko kam. Haftay ke aam dino aur chuttiyon (weekends/holidays) mein faraq hota hai. AWS par aap minto mein naye servers barha sakte hain aur traffic kam hone par unhein delete kar sakte hain.
+* Cloud mein resources ki koi aakhri hadd (capacity constraints) nahi hoti. Aap ko hardware racks, network switches, aur power supplies ki fikar chor kar bas virtual machines add karte jana hai.
+* **Writer's Project Example:** Writer batate hain ke un ke aik pichle project mein, jo test environment tha woh sirf haftay ke dino (weekdays) mein subah 7:00 a.m. se raat 8:00 p.m. tak chalta tha. Unho ne baqi farigh waqt (raat ko aur weekends par) saare unused systems ko shut down (band) kar diya, jis se unho ne seedha **60% kharcha bacha liya**!
+
+---
+
+### Figure 1.7 Ka Breakdown (Seasonal traffic patterns for a web shop)
+
+<div align="center">
+  <img src="./images/07.png" width="700"/>
+</div>
+
+Chalein hum **Figure 1.7** ki teeno graphs ko ghaur se dekhte hain jo bacho ki tarah asaan karke samjhati hain ke aik web shop par traffic ka utaar-chadhon kaisa hota hai:
+
+1. **Daily Pattern (6 a.m. - 12 p.m. - 6 p.m.):** Pehla graph dikhata hai ke subah ke waqt system par load bohot kam hota hai. Dopahar 12 baje se lekar shaam 6 baje tak graph upar chala jata hai (peak traffic), aur raat ko wapas niche gir jata hai. Flexible capacity ke tehat, AWS sirf un peak hours mein servers barhaye ga.
+2. **Weekly Pattern (Monday - Thursday - Sunday):** Doosra graph batata hai ke haftay ke shuruati dino (Monday se Thursday) mein shopping ka load kafi upar rehta hai, jabke Sunday aate hi log farigh hotay hain ya baahir hotay hain, to website ka load bilkul niche gir jata hai.
+3. **Yearly Pattern (January - December):** Teesra graph poore saal ka haal batata hai. January se November tak load aik seedhi sasti line mein chalta hai, lekin **December** (holiday season/deals) aate hi graph bilkul asman ko chhune lagta hai. Traditional data center mein aap ko is aik mahine ke peak ke liye saal ke baqi 11 mahine mehnge servers ka faltu bill bharna parta, lekin AWS par aap sirf December mein capacity barha kar baqi saal paise bacha sakte hain.
+
+---
+
+## Built for failure (reliability)
+
+AWS ke andar zyaada tar services pehle se hi **highly available** (hamesha chalne wali) ya **fault tolerant** (kisi bhi kharabi ko khud hi jhelne wali) design ki gayi hain.
+
+* Agar aap in services ko as-it-is istemaal karte hain, to aap ko system ki mazbooti aur reliability bilkul muft (for free) mil jati hai.
+* Is ke ilawa, AWS aap ko aise advanced tools aur software faraham karta hai jinhain use kar ke aap apni marzi ka mukammal failure-proof system khud kharra kar sakte hain.
+
+---
+
+## Reducing time to market
+
+"Time to market" ka matlab hai ke aap ka naya software ya product kitni jaldi market mein bikney ya chalne ke liye tayyar hota hai.
+
+* AWS mein jab aap koi naye virtual machine ki request karte hain, to kuch hi minto mein woh ready ho kar aap ke saamne hoti hai. AWS ki har service isi tarah aik click par on-demand available hai.
+* Is sahulat ki wajah se software banane ka tareeqakar (development process) bohot fast ho jata hai kyunke testing aur feedback ke loops chote ho jate hain.
+* Purani rukawatein—jaise test karne ke liye servers kam par jana—bilkul khatam ho jati hain. Agar aap ko test karne ke liye aik alag se naya network environment chahiye, to aap usay sirf kuch ghanton ke liye banaein aur kaam ke baad mita dein.
+
+---
+
+## Benefiting from economies of scale
+
+"Economies of scale" ko asaan zaban mein **wholesale (thoke ka bhav) ka faida** kehte hain. Jab koi company bohot hi barray paimane par hardware khareedti hai, to usay cheezein bohot sasti parti hain. AWS lagatar poori dunya mein apna infrastructure barha raha hai, jis se un ki apni costs kam hoti hain, aur aik customer hone ke naate is sastepan ka faida aap ko bhi milta hai.
+
+AWS waqt waqt par apni cloud services ki qeemtein khud hi kam karta rehta hai. Chalein unho ne jo real-world misalein di hain, unhein dekhte hain:
+
+* **January 2019:** AWS ne Fargate par containers chalane ki qeemat mein vCPU ke liye **20%** aur memory ke liye **65%** tak ki bari discount di.
+* **November 2020:** Cold HDD type ke EBS storage volumes ki qeemton ko **40%** tak sasta kiya gaya.
+* **November 2021:** S3 storage ki teen barri storage classes mein qeemtein **31%** tak ghatai gayin.
+* **April 2022:** Data centers ke darmiyan hone wale network traffic par se izafi charges ko bilkul khatam kar diya gaya, jab aap AWS PrivateLink, AWS Transit Gateway, ya AWS Client VPN ka use kar rahe hon.
+
+---
+
+## Global infrastructure
+
+Agar aap ke customers poori dunya mein phailey huay hain, to AWS ka dunya bhar mein phela hua network use karne ke teen barray faide hain:
+
+1. **Low Network Latency:** Aap ke customers aur servers ke darmiyan faasla kam hone ki wajah se website bina kisi delay (lag) ke minto mein khulegi.
+2. **Regional Data Protection:** Har mulk ka qanoon hota hai ke un ke shahriyon ka sensitive data unhi ke mulk ke andar save rahe. AWS ke alag alag data centers se aap un sarkari qawaneen par asani se amal kar sakte hain.
+3. **Price Benefits:** Mukhtalif mulkon ya regions mein infrastructure ki qeemtein alag hoti hain, aap saste region ka faida utha sakte hain.
+
+AWS ke data centers North America, South America, Europe, Africa, Asia, aur Australia mein mojud hain, taake aap bina kisi mushkil ke apni application poori dunya mein kahin bhi chala sakein.
+
+---
+
+## Professional partner
+
+Jab aap AWS ka intikhab karte hain, to aap aik certified aur professional partner ke sath kaam kar rahe hotay hain. AWS ki quality aur security dunya ke sab se aala standards ke mutabaq hoti hai:
+
+* **ISO 27001:** Dunya bhar mein information security ka sab se bada aur certified standard, jise bahaar ke azaad idaray check karte hain.
+* **ISO 9001:** Dunya bhar mein mana jane wala behtareen quality management ka tareeqakar.
+* **PCI DSS Level 1:** Credit card aur online banking ka data mehfooz rakhne ke liye payment card industry ka sab se karrka security certification.
+
+Agar aap ko abhi bhi shaq hai, to aap ko pata hona chahiye ke dunya ke sab se barray aur serious brands jaise **Expedia, Volkswagen, FINRA, Airbnb, aur Slack** apna poora karobar aur bhaari workloads AWS par hi kamyabi se chala rahe hain.
+
+---
