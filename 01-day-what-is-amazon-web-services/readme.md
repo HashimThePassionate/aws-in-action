@@ -59,7 +59,7 @@ Aik AWS customer hone ke naate, aap apni marzi se duniya ke mukhtalif data cente
 ### Figure 1.1 Ka Breakdown (AWS data center locations)
 
 <div align="center">
-  <img src="./images/01.png" width="700"/>
+  <img src="./images/01.png" width="600"/>
 </div>
 
 Agar hum diye gaye **Figure 1.1** ke map ko ghaur se dekhein, to yeh dunya ke mukhtalif hisson mein AWS ke data centers (Regions) ko dikhata hai:
@@ -97,7 +97,7 @@ John ab yeh dekh raha hai ke agar woh isi setup ko AWS par le jaye, to us ki com
 ### Figure 1.2 Ka Breakdown (Running a web shop on-premises vs. on AWS)
 
 <div align="center">
-  <img src="./images/02.png" width="700"/>
+  <img src="./images/02.png" width="600"/>
 </div>
 
 Agar aap **Figure 1.2** ko dekhein, to is mein do hissay dikhaaye gaye hain jo John ke purane aur naye setup ka muwazna (comparison) karte hain:
@@ -120,7 +120,7 @@ John sirf apne purane setup ko "Lift-and-shift" (jaisa hai waisa hi utha kar clo
 **Figure 1.3** mein John ka aik mukammal, modern aur behtareen cloud architecture dikhaya gaya hai. Chalein is ke har component ko step-by-step aur bacho ki tarah asaan karke samajhte hain ke request kaise flow karti hai:
 
 <div align="center">
-  <img src="./images/03.png" width="700"/>
+  <img src="./images/03.png" width="600"/>
 </div>
 
 
@@ -161,7 +161,7 @@ Maureen ne security ko itna tight banaya ke koi aam banda ya hacker database tak
 ### Figure 1.4 Ka Breakdown (Running a Java EE application with enterprise networking)
 
 <div align="center">
-  <img src="./images/04.png" width="700"/>
+  <img src="./images/04.png" width="600"/>
 </div>
 
 Chalein hum **Figure 1.4** ke pooray network flow ko step-by-step aur bacho ki tarah asaan kar ke samajhte hain ke data kaise travel kar raha hai:
@@ -204,7 +204,7 @@ AWS ki khubsurti yeh hai ke is ki saari services ya to pehle se highly available
 ### Figure 1.5 Ka Breakdown (Building a highly available system on AWS)
 
 <div align="center">
-  <img src="./images/05.png" width="700"/>
+  <img src="./images/05.png" width="600"/>
 </div>
 
 Chalein hum **Figure 1.5** ke diagram ko bacho ki tarah asaan breakdown ke sath samajhte hain ke yeh "Failure-proof" system kaise kaam karta hai:
@@ -249,7 +249,7 @@ Nick ke paas computers lagane ya chalanay ke liye budget bohot hi chota (very sm
 ### Figure 1.6 Ka Breakdown (Pay-per-use price model)
 
 <div align="center">
-  <img src="./images/06.png" width="700"/>
+  <img src="./images/06.png" width="600"/>
 </div>
 
 Agar hum diye gaye **Figure 1.6** ko ghaur se dekhein, to yeh bohot hi asaan tarike se On-premises (purane zati servers) aur AWS Cloud ke kharche ka faraq samjhata hai:
@@ -324,7 +324,7 @@ Flexible capacity ka matlab hai aisi gunjaish jo zaroorat ke mutabaq barh ya gha
 ### Figure 1.7 Ka Breakdown (Seasonal traffic patterns for a web shop)
 
 <div align="center">
-  <img src="./images/07.png" width="700"/>
+  <img src="./images/07.png" width="600"/>
 </div>
 
 Chalein hum **Figure 1.7** ki teeno graphs ko ghaur se dekhte hain jo bacho ki tarah asaan karke samjhati hain ke aik web shop par traffic ka utaar-chadhon kaisa hota hai:
@@ -620,3 +620,115 @@ Is kitab mein hum in services ko poori gehrai (deep detail) ke sath parhenge:
 Yahan teen barray topics (Continuous Delivery, Machine Learning, aur Analytics) ko shamil nahi kiya gaya kyunke un par alag se poori kitabein bhari ja sakti hain. Agar aap baad mein Machine Learning seekhna chahein, to Manning ki hi aik alag kitab mojud hai (*AI as a Service: Serverless Machine Learning with AWS*). Lekin writer ka kehna hai ke pehle is kitab ko mukammal karein, kyunke yeh aap ko woh pakki **bunyadi samajh (foundational knowledge)** de degi, jis ke baad aap cloud ki dunya ki kisi bhi advanced service ko bacho ki tarah khud hi samajh payenge.
 
 ---
+
+## Interacting with AWS
+
+Jab bhi aap AWS par koi kaam karte hain, us ki configuration badalte hain ya koi service use karte hain, to piche aap asal mein AWS ki **API** (Application Programming Interface) ko calls bhej rahe hotay hain. Asaan zaban mein samjhein to API AWS ka main entry point (shuruati darwaza) hai, jahan se saari requests andar jati hain.
+
+AWS ki is API ke sath baat-cheet (communicate) karne ke liye hamare paas mukhtalif tools mojud hain, jin ka overview hum step-by-step niche dekhenge. In tools mein **Management Console**, **Command-Line Interface (CLI)**, **SDKs**, aur **Infrastructure Blueprints** shamil hain. Hum in ka aapas mein muwazna (comparison) bhi karenge taake aap ko pata ho ke kis mauqe par kaun sa tool chunna hai.
+
+---
+
+### Figure 1.12 Ka Breakdown (Different ways to access the AWS API)
+
+<div align="center">
+  <img src="./images/14.png" width="600"/>
+</div>
+
+Agar aap **Figure 1.12** ke diagram ko ghaur se dekhein, to yeh aap ko aik patri ya line par do raste dikhata hai:
+
+* **Manual (Upar ki taraf):** Jab aap khud apne hath se aik aik click kar ke kaam karte hain. Is taraf **Management Console** aur **Command-line interface** aate hain.
+* **Automation (Niche ki taraf):** Jab aap saara kaam automatic code par chor dete hain. Is taraf **SDKs** aur **Blueprints** aate hain.
+* **Central Point:** Yeh saare alag alag tareeqay ghum phir kar aik hi jagah aakar lagte hain, jise **API** ka darwaza kehte hain, aur yahan se saari requests piche chalne wali **Services** tak pahonchti hain.
+
+---
+
+### Management Console
+
+AWS Management Console aik mukammal **Graphical User Interface (GUI)** hai. Is ka matlab yeh hai ke yeh aik bani-banayi khoobsurat website ki tarah hai jise aap apne desktop computers, laptops, ya tablets par chalne wale modern web browsers par asani se open kar sakte hain.
+
+* **Sikhne Ke Liye Sab Se Behtar:** Jab aap cloud ki dunya mein bilkul naye hotay hain ya cloud ke sath koi naya experiment kar rahe hotay hain, to Management Console shuruat ke liye sab se behtareen jagah hai. Yeh aap ko minto mein saari alag alag services ka aik quick overview de deta hai.
+* **Dev aur Test Environments:** Agar aap ne coding seekhne ke liye ya testing karne ke liye koi chota mota temporary setup banana ho, to hath se click kar ke settings karne ke liye yeh tool bohot mufeed hai.
+
+---
+
+#### Figure 1.13 Ka Breakdown (The AWS Management Console GUI)
+
+<div align="center">
+  <img src="./images/15.png" width="600"/>
+</div>
+
+**Figure 1.13** mein aap ko actual AWS web page ki screen dikhayi gayi hai:
+
+* Yeh **EC2 Management Console** ka dashboard hai jahan virtual machines ko dekha jata hai.
+* Aap screen par dekh sakte hain ke aik Table ke andar aik virtual machine chal rahi hai jiska Name **"AWS in Action"** rakha gaya hai, us ki Instance ID mojud hai, Instance State ke sath hara (green) checkmark lag kar **"Running"** likha hua hai, aur us ka size ya Instance Type **`t2.micro`** hai.
+* Upar aik barra orange rang ka button hai jis par **"Launch instances"** likha hai, jisay mouse se click kar ke naya computer minto mein start kiya ja sakta hai.
+
+---
+
+### Command-line interface
+
+Command-Line Interface (CLI) aap ko is baat ki ijazat deta hai ke aap bina mouse ko hath lagaye, apne computer ke **Terminal** (kali screen) ke andar short commands likh kar AWS ki saari services ko access aur manage kar sakein.
+
+* **Recurring Tasks Ki Automation:** Kyunke aap terminal mein code ki commands likhte hain, is liye aap un kaamon ko jo baar baar karne parte hain (recurring tasks), bohot asani se automatic ya aadha-automatic (semi-automate) kar sakte hain, jo ke aik cloud engineer ke liye bohot qeemti cheez hai.
+* **CLI Ke Baqaida Kaam:** CLI ke zariye aap naye blueprints par mabni naya cloud infrastructure kharra kar sakte hain, zati files ko cloud ke object store (S3) par upload kar sakte hain, ya apne poore network ki configuration ki gehri details rozana terminal se nikal sakte hain.
+* **CI Servers (Jenkins Integration):** Agar aap ki company mein code ko automatically test aur deploy karne ke liye koi continuous integration server jaise **Jenkins** chal raha hai, to wahan par kaam karne ke liye CLI sab se behtareen aur sahi tool hai. CLI ki madad se aap bohot saari API calls ko aapas mein jor kar aik automatic script (file) bana sakte hain.
+* **Har OS Par Available:** CLI ka tool har barray operating system par chalta hai—chahe aap **Windows**, **Mac**, ya **Linux** istemaal kar rahe hon, ya phir **PowerShell** ka use karte hon.
+
+---
+
+#### Figure 1.14 Ka Breakdown (The CLI in action)
+
+<div align="center">
+  <img src="./images/16.png" width="600"/>
+</div>
+
+**Figure 1.14** mein terminal (command window) ka aik screenshot dikhaya gaya hai jahan live kaam ho raha hai:
+
+* Upar aik command likhi hui hai: `aws ec2 describe-instances`. Is command ka matlab hai "AWS! Mujhe mere saare chalte huay computers ki details batao".
+* Is command ke chalte hi niche aik bada data block khul jata hai jise programming zaban mein **JSON** kehte hain. Is text ke andar computer ki choti se choti bareeki likhi hui hai, jaise ImageId, InstanceId (`i-0d9c1f5ccff0d8314`), InstanceType (`t3.nano`), LaunchTime, AvailabilityZone (`us-east-1a`), aur machine ka Private aur Public IP address (`3.237.171.227`).
+
+---
+
+### SDKs
+
+SDK ka matlab hota hai **Software Development Kit**. Agar aap hath se click nahi karna chahte aur terminal par commands bhi nahi likhna chahte, balkay aap chahte hain ke aap ki apni pasandida programming language ke andar se AWS control ho, to aap SDK ka use karte hain.
+
+AWS dunya ki in tamam mashhoor programming languages aur platforms ke liye bani-banayi SDKs faraham karta hai:
+
+* JavaScript  Python  PHP
+* .NET  Ruby  Java
+* Go  Node.js  C++
+* **Application Integration:** SDKs ka asal istemaal tab hota hai jab aap koi software ya app bana rahe hotay hain aur aap us app ke andar AWS ki services ko fit (integrate) karna chahte hain. *Example:* Agar aap aik web app bana rahe hain aur aap chahte hain ke jab koi user sign-up kare, to aap ki app khud-ba-khud piche AWS ke NoSQL database mein data save kar de ya user ke mobile par aik push-notification bhej de, to yahan aap SDK ka code likhenge.
+* *Zaroori Rule:* AWS ki kuch khaas services jaise ke distributed queues (SQS) aur topics, unhein use karne ke liye SDK ka istemaal bilkul laazmi (must) hota hai.
+
+---
+
+### Blueprints
+
+Blueprint ka matlab hota hai **naksha ya sancha**. Yeh aap ke poore system ki aik aisi likhi hui text description (file) hoti hai jis mein aap ke cloud ke saare resources aur un ki aapas ki dependencies (jor) pehle se likh diye jaate hain.
+
+* **IaC Tool Ka Kamaal:** Jab aap aik **Infrastructure as Code (IaC)** tool ko yeh blueprint faraham karte hain, to woh tool aap ke is nakshe ko uthata hai aur us ka muwazna (compare) cloud par chalne wale maujuda live system ke sath karta hai. Woh khud hi calculations kar ke yeh dhoond nikalta hai ke naye nakshe ke mutabaq cloud par naye resources kaise banane (create), purano ko kaise badalna (update), ya faltu ko kaise mitana (delete) hai.
+
+---
+
+#### Figure 1.15 Ka Breakdown (Infrastructure automation with blueprints)
+
+<div align="center">
+  <img src="./images/17.png" width="600"/>
+</div>
+
+**Figure 1.15** ke diagram mein blueprint se lekar live system banne tak ka poora safar bacho ki tarah asaan karke dikhaya gaya hai:
+
+1. **Left Side (The Blueprint):** Yahan aik simple text code ka dabba hai jahan dmaagh chala kar poora system likha gaya hai (jaise ke: `infrastructure: { loadbalancer: { vm: { ... } }, cdn: { ... }, database: { ... }, dns: { ... }, static: { ... } }`).
+2. **Middle Arrow (The Engine):** Darmiyan mein likha hai *"Infrastructure as Code tool converts blueprint into running infrastructure"*. Yaani yeh tool is likhay huay nakshe ko real hardware mein tabdeel karne ka engine hai.
+3. **Right Side (The Running System):** Engine chalne ke baad, cloud ke andar automatic tarike se poora system kharra ho jata hai, jahan **DNS**, **CDN**, **Load balancer**, **Virtual machines**, **Static files**, aur **Database** aapas mein khud-ba-khud perfect tarike se jorr diye jaate hain.
+
+#### Barray Networks Ka Trade-off Decision (Custom Code vs Blueprints)
+
+* **Complex Environments:** Agar aap ko bohot barray ya complex (mushkil) cloud networks ko sambhalna ho, to hath se kaam karne ki bajaye hamesha blueprints ka istemaal karein. Yeh cloud ki configuration ko automatic karne mein sab se zyada madadgar sabit hotay hain.
+* **Asli Challenge (Nuksan):** Aap CLI scripts ya SDKs ka use kar ke apna custom code likh kar bhi infrastructure ko automatic kharra to kar sakte hain. Lekin agar aap khud script likhenge, to system ki saari aapas ki dependencies ko khud hal karna, versions ke badalne par code ko update rakhna, aur codes mein aane wale errors ko khud handle karna—yeh sab aap ka sar-dard ban jayega.
+* **Behtareen Solution:** Jaisa ke hum aage chal kar Chapter 4 mein tafseel se dekhenge, jab aap aik **blueprint** aur aik **Infrastructure-as-Code tool** ka combination chun lete hain, to yeh mushkil challenges automatic hal ho jaate hain aur computer saari pareshani khud sambhal leta hai.
+
+---
+
