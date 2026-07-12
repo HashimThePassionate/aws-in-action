@@ -900,3 +900,126 @@ Screen ke sab se upar aik lambi kaali patti hoti hai jise **Navigation Bar** keh
 Account tayyar ho gaya aur login bhi ho gaya! Agla sab se zaroori step yeh hai ke hum yeh paka karein ke cloud par practice karte huay koi ghair-zaroori cost ya unexpected bill na aaye, aur hum khud ko nuksan se kaise bachaayein.
 
 ---
+
+## Creating a budget alert to keep track of your AWS bill
+
+Shuru shuru mein AWS ka yeh use-par-pay (pay-per-use) pricing model aap ko thoda ajeeb ya naya lag sakta hai, kyunke is mein pehle se 100% andaza lagana mushkil hota hai ke mahine ke aakhir mein aap ka bill aakhir kitna aayega.
+
+* **Pareshani ki koi baat nahi:** Is kitab mein mojud zyaada tar examples bilkul **Free Tier** ke andar aati hain, jis ka matlab hai ke AWS aapse aik rupya bhi charge nahi karega. Jahan koi aisi service aayegi jo free tier mein nahi aati, us par pehle hi saaf saaf warning ka nishan laga diya jayega.
+* **Sukun se seekhne ka environment:** Aap bina kisi darr ya bill ke khauf ke bilkul sukun se AWS seekh sakein, is ke liye hum abhi aik **Budget** set karenge. Yeh budget aap ko ussi waqt aik automatic email notification bhej dega agar aap ka bill **$5** se upar nikalne lagega. Is se aap foran action le kar apna server band kar sakenge.
+
+---
+
+### Free Tier Usage Alert Configuration (Shuruati Setting)
+
+Naya budget banane se pehle, hum Free Tier ka apna aik automatic alert on karenge taake agar free limit khatam hone wali ho, to AWS pehle hi bata de. Is ke steps yeh hain:
+
+1. Sab se pehle apne AWS account mein Billing Preferences ka page open karein (Aap `[https://console.aws.amazon.com/billing/home#/preferences](https://console.aws.amazon.com/billing/home#/preferences)` par ja sakte hain).
+2. Wahan mojud aik option **Receive Free Tier Usage Alerts** ke check-box par tick (enable) karein, aur niche diye gaye khaali dabbe mein apna sahi email address likhein.
+3. Aakhir mein **Save Preferences** ka button daba dein.
+
+---
+
+#### Figure 1.25 Ka Breakdown (Creating a Free Tier usage alert to avoid unwanted costs)
+
+<div align="center">
+  <img src="./images/27.png" width="600"/>
+</div>
+
+Agar hum diye gaye **Figure 1.25** ke screenshot ko ghaur se dekhein, to yeh AWS Billing Management Console ka Preferences page hai:
+
+* **Left Menu:** Left side par preferences ki aik list hai jahan **Billing preferences** select hua hai.
+* **Cost Management Preferences:** Main screen par darmiyan mein yeh section mojud hai. Is mein **Receive Free Tier Usage Alerts** ke sath checkmark (tick) laga hua hai.
+* **Email Configuration:** Is ke thik niche **Email Address:** ka aik blank box hai jahan aap apna active email dalte hain taake jab bhi aap ki free limit (jaise 750 ghante) khatam hone ke qareeb ho, to AWS aap ko email bhej sakay.
+* **Action Button:** Sab se niche neela (blue) rang ka **Save preferences** ka button hai, jisay click karte hi yeh setting pakki ho jati hai.
+
+---
+
+Ab hum chalte hain main budget banane ki taraf jo hamare kharche par lagatar nazar rakhega aur mahine ke aakhir ka andaza (forecast) bhi lagaye ga:
+
+1. Console bar ke upar Search mein ja kar **Budgets** likhein aur AWS Budgets ki service ko open karein.
+2. Page khulne par top right par mojud **Create Budget** ke button par click karein.
+3. Aap ke samne mukhtalif types aayengi, wahan se **Cost Budget** ko select karein.
+4. Niche mojud **Next** button par click karein.
+
+---
+
+#### Figure 1.26 Ka Breakdown (Creating a cost budget to monitor incurred and forecasted costs)
+
+<div align="center">
+  <img src="./images/28.png" width="600"/>
+</div>
+
+**Figure 1.26** ke screenshot mein Budget Types chunney ka step dikhaya gaya hai:
+
+* Yahan sab se pehla option **Cost budget - Recommended** select kiya gaya hai. Is ke niche asaan zaban mein likha hai ke yeh aap ke kharche par aap ke mutabaq set kiye gaye dollar amount ke hisab se nazar rakhta hai aur limit cross hone par alerts bhejta hai.
+* Baqi options (Usage budget, Savings Plans budget, Reservation budget) ko abhi chor dena hai kyunke hamara maqsad sirf paison par control rakhna hai.
+
+---
+
+Next step mein hum is cost budget ke andar apni qeemat aur waqt (parameters) set karenge:
+
+1. **Period:** Is setting ko **Monthly** (mahine ka mahina) par set karein.
+2. **Budget Effective Date:** Is mein **Recurring Budget** ko select karein, jis ka matlab hai ke har mahine ki pehli tareek ko yeh $5 ka meter khud-ba-khud zero se dobara shuru ho jaya karega.
+3. **Start Month:** Is mein dropdown se mojudah month aur year select karein *(Jaise aaj **2026** chal raha hai, to aap 2026 ka maujuda mahina chunenge)*.
+4. **Choose how to budget:** Is ko **Fixed** par set karein taake saal ke har mahine ke liye aik hi jaisi limit rhey.
+5. **Enter your budgeted amount ($):** Is khaali dabbe mein sirf **5** type karein, jis ka matlab hai hamari hadd $5 per month hai.
+6. **Next** button par click karein.
+
+---
+
+#### Figure 1.27 Ka Breakdown (Setting your budget amount)
+
+<div align="center">
+  <img src="./images/29.png" width="600"/>
+</div>
+
+**Figure 1.27** ke screenshot mein numbers (1 se 5) ke zariye poori setting ko asaan breakdown ke sath dikhaya gaya hai:
+
+* **Label (1):** Period ka dropdown hai jahan **Monthly** select kiya gaya hai.
+* **Label (2):** Budget effective date ke andar do options hain, jahan **Recurring budget** wale gol gole (radio button) ko select kiya gaya hai.
+* **Label (3):** Start month ka option hai jahan dropdown se Month aur Year chunna hai.
+* **Label (4):** Choose how to budget ke andar do dabbay hain, jahan pehle dabbe **Fixed** par click kiya gaya hai.
+* **Label (5):** Enter your budgeted amount ($) ke samne dabbe mein **5.00** likha gaya hai jo hamari aakhri limit hai.
+
+---
+
+Budget ki qeemat tay karne ke baad, ab sab se important kaam yeh hai ke hum woh **Alerts (Thresholds)** banayein jo hamare email par notification trigger karenge. Hum do alag alag alerts lagayenge taake security double ho jaye:
+
+* **Pehla Alert (Asli Kharcha - Actual):**
+1. **Add Alert Threshold** ke button par click karein.
+2. Threshold ke dabbe mein **100%** type karein (yaani $5 ka 100% jo ke poora $5 banta hai).
+3. Trigger ke option mein **Actual** ko select karein. Is ka matlab hai ke jab sach mein aap ka kharcha $5 ko touch kar lega, tab yeh trigger hoga.
+4. Niche diye gaye Email recipients ke dabbe mein apna email address type kar dein.
+
+
+* **Doosra Alert (Andaza - Forecasted):**
+5.  Dobara niche mojud **Add Alert Threshold** ke button par click karein taake aik aur alert line khule.
+6.  Is mein bhi value ko **100%** set karein.
+7.  Lekin is baar Trigger ke option mein **Forecasted** select karein. Is ka jadu samajhna bohot zaroori hai: Agar mahine ke darmiyan mein AWS ke computer ne yeh andaza lagaya ke jis raftar se aap server chala rahe hain, us raftar se mahine ke aakhir tak bill $5 se upar nikal jayega, to yeh asli kharcha hone se **pehle hi** aap ko warning bhej dega! Yeh bohot hi safe option hai.
+8.  Is ke niche bhi apna email address type karein.
+9.  Aakhir mein **Next** par click karein.
+10. Poori settings ko aik baar achhi tarah Review (check) kar lein aur sab se niche mojud **Create Budget** par click kar dein.
+
+---
+
+#### Figure 1.28 Ka Breakdown (Defining alert thresholds)
+
+<div align="center">
+  <img src="./images/30.png" width="600"/>
+</div>
+
+**Figure 1.28** ke screenshot mein alert set karne ka tarika arrows se samjhaya gaya hai:
+
+* **Alert #1 Section:** Is mein Threshold ke dabbe mein `100`% of budgeted amount likha hai. Trigger ke dropdown mein **Forecasted** (ya dusre mein **Actual**) select karna dikhaya gaya hai.
+* **Email Recipients:** Niche aik bada text box hai jahan arrow ishara kar raha hai ke *"Type in your email address to get notified about budget alerts"*, jaise image mein aik example email `andreas@widdix.de` likha hua hai.
+* **Add Button:** Sab se niche `+ Add alert threshold` ka button hai jis se doosra alert tayyar kiya jata hai.
+
+---
+
+High Five! Bas itna sa kaam tha—ab aap ka AWS account bilkul failure-proof aur safe ho chuka hai. Ab aap is kitab ke baqi tamam chapters ke mushkil se mushkil tasks aur architectures ko bina kisi darr ke seekh sakte hain.
+
+Agar aap ghalti se koi virtual machine (EC2) ya database (RDS) chala kar band karna bhool bhi gaye, to AWS ka yeh security guard $5 ka kharcha chune se pehle hi aap ke email par shor machana shuru kar dega, aur aap foran account mein ja kar us resource ka meter rok sakenge!
+
+---
+
