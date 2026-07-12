@@ -732,3 +732,171 @@ Blueprint ka matlab hota hai **naksha ya sancha**. Yeh aap ke poore system ki ai
 
 ---
 
+## Creating an AWS account
+
+Before aap AWS ka istemaal shuru karein, aap ko aik account banana parta hai, jo asal mein aap ke saare cloud resources ke liye aik "tokri" (basket) ki tarah kaam karta hai. Agar aik se zyada logo ko is account par kaam karna ho, to aap aik hi account ke sath mukhtalif users ko jor sakte hain; lekin default taur par, aap ke account mein aik main malik hota hai jise **AWS account root user** kehte hain.
+
+Aik naya account banane ke liye aap ko in do cheezon ki zaroorat hoti hai:
+
+* **Telephone Number:** Taake verification ke zariye aap ki pehchan (identity) pakki ki ja sakay.
+* **Credit Card:** Mahine ke aakhir mein aap ke cloud bills pay karne ke liye.
+
+> **Ghar ki Baat - Purana Account Use Karne Ka Trade-off:**
+> Agar aap ke paas pehle se koi AWS account mojud hai, to aap is kitab ke mukhtalif tasks ke liye usay istemaal to kar sakte hain, lekin yaad rakhein ke ho sakta hai us par Free Tier active na ho, jis ki wajah se aap ko thode paise dene par sakte hain. Aik aur zaroori bareeki: Agar aap ka purana account **4 December 2013** se pehle ka bana hua hai, to behtar hai usay chor kar aik bilkul naya account bana lein, kyunke purane legacy accounts mein kuch aise technical maslay hotay hain jo naye features ke sath takra sakte hain.
+> Kya aik se zyada accounts bana sakte hain? Bilkul! AWS khud is baat ki hosla-afzai karta hai ke aap aik se zyada accounts banayein taake aap ke alag alag workloads (kaam) aik doosre se bilkul alag aur safe rahein.
+
+---
+
+## Signing up
+
+Sign-up ka poora tareeqakar **panch (5) asaan steps** par mabni hai:
+
+1. Login credentials faraham karna.
+2. Rabtey ki maloomat (Contact information) dena.
+3. Payment ki details enter karna.
+4. Apni identity verify karwana.
+5. Support plan ka intikhab karna.
+
+Sab se pehle apne browser mein `[https://aws.amazon.com](https://aws.amazon.com)` open karein, aur wahan mojud **Create an AWS Account** button par click karein.
+
+---
+
+### 1. PROVIDING LOGIN CREDENTIALS
+
+AWS account banane ki shuruat is baat se hoti hai ke aap apne account ka aik unique naam set karein, jo poori dunya ke saare AWS customers mein bilkul alag ho (globally unique). Is ki aik asaan misaal yeh hai ke aap naam rakhne ke liye **`aws-in-action-hashim`** jaisa pattern istemaal kar sakte hain. Account name ke sath sath aap ko aik email address aur aik password likhna hota hai, jo aap ke root user ko chalanay ke liye login bnega.
+
+* **Security Decision:** Hamari sabsay bari raye yeh hai ke password hamesha bohot mazboot aur kam az kam **20 characters** ka rakhein. Account ko ghair-zaroori logo se mehfooz rakhna bohot critical hai taake aap ka data chori na ho (data breach), data zaya na ho, ya koi hacker aap ke account par resources chala kar aap ke naam par bhaari bill na kharra kar de. *(Aaj 2026 ke modern standards ke mutabaq AWS ne root account par MFA yani Multi-Factor Authentication lagana security ke liye laazmi kar diya hai).*
+
+#### Figure 1.16 Ka Breakdown
+
+<div align="center">
+  <img src="./images/18.png" width="600"/>
+</div>
+
+Is image mein sign-up ka sab se pehle page dikhaya gaya hai:
+
+* **Email address:** Upar wale dabbe mein aap ne apna personal email address type karna hai.
+* **Password & Confirm password:** Darmiyan mein mazboot password set karna hai.
+* **AWS account name:** Sab se niche wale dabbe mein aap ne apna unique naam (jaise `aws-in-action-hashim`) likh kar orange rang ke Continue button par click karna hai.
+
+---
+
+### 2. PROVIDING CONTACT INFORMATION
+
+Is agle step mein aap se aap ki basic rabtey ki maloomat mangi jati hain.
+
+#### Figure 1.17 Ka Breakdown
+
+<div align="center">
+  <img src="./images/19.png" width="600"/>
+</div>
+
+Is screen par aap ne do cheezein ghaur se set karni hain:
+
+* Aap se pucha jayega ke aap AWS kis liye use kar rahe hain, to aap ne **"Personal - for your own projects"** wale option par check lagana hai kyunke aap abhi seekh rahe hain.
+* Is ke baad niche diye gaye khaali dabbay mein apna Full Name, phone number, aur address sahi tarike se fill kar ke agle step par barhna hai.
+
+---
+
+### 3. PROVIDING PAYMENT DETAILS
+
+Yahan aap ke samne billing aur card information enter karne ki screen aati hai. Aap ne apne credit card ya debit card ki details dalni hain.
+
+#### Figure 1.18 Ka Breakdown
+
+<div align="center">
+  <img src="./images/20.png" width="600"/>
+</div>
+
+* **Secure Verification:** Screen par aik neela (blue) dabba bana hai jo aap ko pehle se agah karta hai ke AWS aap ke card se temporary taur par **$1 USD** (ya us ke barabar aap ki local currency) ka aik chota sa transaction charge karega. Yeh sirf yeh check karne ke liye hota hai ke card asli hai ya nakli, aur 3 se 5 dino ke andar yeh paise aap ko automatic wapas mil jaate hain.
+* **Currency Option:** AWS aap ko sahulat deta hai ke aap baad mein apni billing currency badal kar USD se AUD, BRL, CAD, CHF, CNY, DKK, EUR, GBP, HKD, JPY, KRW, NOK, NZD, SEK, SGD, ya ZAR mein kar sakte hain. Agar aap badal lete hain, to mahine ke aakhir mein aap ka total USD bill automatic convert ho kar aap ki select ki hui currency ke mutabaq card se katega.
+
+---
+
+### 4. VERIFYING YOUR IDENTITY
+
+Yeh step yeh confirm karne ke liye hai ke aap koi robot nahi hain balkay aik asli insaan hain.
+
+#### Figure 1.19 Ka Breakdown
+
+<div align="center">
+  <img src="./images/21.png" width="600"/>
+</div>
+
+* Page par aap ne apna country code (jaise Pakistan ke liye +92) select karna hai aur apna mobile number likhna hai.
+* Niche diye gaye image ke characters (Security check/Captcha) ko mazeed ghaur se dekh kar enter karna hai aur **Send SMS** wale orange button par click karna hai.
+* Aap ke mobile par AWS ki taraf se aik SMS message ya call aayegi, us mein mojud verification code ko aap ne screen par type karna hai aur identity verify ho jayegi.
+
+---
+
+### 5. CHOOSING A SUPPORT PLAN
+
+Aakhri step mein aap se pucha jata hai ke aap ko kisi kism ke technical support plan ki zaroorat hai ya nahi.
+
+#### Figure 1.20 Ka Breakdown
+
+<div align="center">
+  <img src="./images/22.png" width="600"/>
+</div>
+
+Screen par aap ko teen plans nazar aayenge: **Basic**, **Developer**, aur **Business**.
+
+* Aap ne pehla option select karna hai jo ke **"Basic support - Free"** hai, kyunke yeh bilkul muft hai aur seekhne ke liye kafi hai.
+* *Design/Operational Decision:* Writer yahan aik achhi advice deta hai ke jab aap aage chal kar kisi company ka real production workload (chalti hui ahem website) AWS par chalayein, to kam az kam **Developer plan** zaroor khareedein taake agar system mein koi masla aaye, to aap un ke experts se foran mashwara kar sakein.
+
+#### Figure 1.21 Ka Breakdown
+
+<div align="center">
+  <img src="./images/23.png" width="600"/>
+</div>
+
+Saare steps khatam hotay hi screen par aik rocket bana aata hai aur barra barra likha hota hai **"Congratulations!"**. Aap ka account back-end par active ho raha hota hai jise mukammal hone mein kuch hi minto ka waqt lagta hai aur aap ko aik email bhi aa jati hai. Niche diye gaye orange button **"Go to the AWS Management Console"** par click kar ke aap pehli baar dakhil hone ke liye tayyar hain.
+
+---
+
+## Signing in
+
+Ab aap ka account ban chuka hai aur aap console mein login karne ke liye bilkul ready hain. Jaisa ke hum ne pehle parha tha, Management Console aik web interface hai jo AWS API ki taqat ko mouse clicks ke zariye aap ke samne lata hai. Sign-in karne ke liye aap ko `[https://console.aws.amazon.com](https://console.aws.amazon.com)` link par jana hoga.
+
+#### Figure 1.22 Ka Breakdown
+
+<div align="center">
+  <img src="./images/24.png" width="600"/>
+</div>
+
+Sign-in form par aap ke samne do barray options aate hain:
+
+1. **Root user:** Account ka main malik (Aap ne isay select karna hai).
+2. **IAM user:** Account ke andar banaye gaye doosre aam users.
+Aap ne **Root user** par click karna hai, apna register kiya hua email address enter karna hai, Next daba kar apna password dalna hai aur sign in kar lena hai.
+
+#### Figure 1.23 Ka Breakdown
+
+<div align="center">
+  <img src="./images/25.png" width="600"/>
+</div>
+
+Login hote hi aap ke samne console ka start page yani **Console Home** khul jata hai. Yahan aap ko aik clear dashboard milta hai jahan "Welcome to AWS", "Recently visited services" (jo haal ہی mein use ki gayi hon), aur "AWS Health" ka dabba nazar aata hai jo batata hai ke cloud mein is waqt koi masla to nahi chal raha (jaise image mein Open issues ki tadaad 0 dikhayi gayi hai).
+
+---
+
+### Figure 1.24 Ka Breakdown (AWS Management Console navigation bar)
+
+<div align="center">
+  <img src="./images/26.png" width="600"/>
+</div>
+
+Screen ke sab se upar aik lambi kaali patti hoti hai jise **Navigation Bar** kehte hain, yeh poore cloud ko control karne ka main steering wheel hai. Chalein is ke **aath (8) sections** ka bacho ki tarah asaan breakdown dekhte hain ke kis cheez se kya hota hai:
+
+1. **AWS Logo:** Is barri patti ke left par mojud logo par aap cloud mein kahin se bhi click karenge, to aap wapas isi main dashboard (Console Home) par aa jayenge.
+2. **Services:** Is menu par click karte hi AWS ki tamam 200+ services alag alag categories ke mutabaq (jaise Compute, Database) aik lambi scannable list mein samne khul jati hain.
+3. **Search Bar:** Agar aap ko kisi service ka rasta nahi mil raha, to bas yahan us ka naam type karein (jaise 'EC2' ya 'S3'), woh service minto mein samne aa jayegi.
+4. **Terminal (`>_` icon):** Is par click karne se browser ke andar hi aik choti black command screen khul jati hai jise aaj ke daur mein **AWS CloudShell** kehte hain. Is ka faida yeh hai ke aap ko apne laptop par kuch install kiye bina seedha terminal commands chalane ki sahulat mil jati hai.
+5. **Notifications (Bell icon):** Agar AWS ke data centers mein koi maintenance chal rahi ho, chuttiyon ka elaan ho, ya koi outage (kharabi) ho, to us ka alert is bell icon par aa jata hai.
+6. **Help (Question mark icon):** Kisi maslay mein phansne ki surat mein community experts, forums, ya AWS ki support team se madad lene ka rasta yahan se khulta hai.
+7. **Region (e.g., N. Virginia):** Yeh sab se important setting hai! Is par click kar ke aap dunya ka woh data center chunte hain jahan aap apna server lagana chahte hain. *Example:* Agar aap Tokyo select karenge to server Japan mein chalega, agar N. Virginia select karenge to US mein chalega. Hamesha kaam shuru karne se pehle sahi region select karna laazmi hai.
+8. **Account (Aap ka naam/ID):** Patti ke sab se aakhir mein aap ka account name hota hai, jahan se aap account ki settings badal sakte hain, security badal sakte hain, aur apna billing dashboard khol kar kharche check kar sakte hain.
+
+Account tayyar ho gaya aur login bhi ho gaya! Agla sab se zaroori step yeh hai ke hum yeh paka karein ke cloud par practice karte huay koi ghair-zaroori cost ya unexpected bill na aaye, aur hum khud ko nuksan se kaise bachaayein.
+
+---
