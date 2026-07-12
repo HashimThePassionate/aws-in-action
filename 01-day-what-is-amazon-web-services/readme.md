@@ -136,3 +136,88 @@ John AWS par apna web shop chala kar bohot khush hai. Apni company ka infrastruc
 
 ---
 
+## Running a Java EE application in your private network
+
+**Maureen** aik bari global corporation (dunya bhar mein pheli hui company) mein senior system architect hain. Un ki company ka apna jo physical data center tha, us ka rent ya contract kuch mahino mein khatam hone wala hai. Maureen chahti hain ke woh apni company ke enterprise business applications (jaise **Java Enterprise Edition [EE]** applications) ko AWS par shift kar dein, taake company ka kharcha kam ho (reduce costs) aur unhein kaam karne mein asani aur azaadi mile (gain flexibility).
+
+In applications ke do barray hissay hain: aik **Application Server** (jo coding ko chalata hai) aur aik **SQL Database** (jo saara data save karta hai).
+
+Maureen ne is poore setup ko AWS par chalane ke liye aik zabardast aur secure tareeqa apnaya:
+
+* **Virtual Network (VPC) Ki Tyari:** Unho ne AWS ke cloud mein apna aik mukammal zati aur secure virtual network design kiya.
+* **Corporate Network Se Connection (VPN):** Apne daftar ke chalte huay network (corporate network) ko cloud wale network ke sath jorne ke liye unho ne aik secure **VPN (Virtual Private Network)** connection ka istemaal kiya. Is ka faida yeh hai ke daftar ke log bina kisi rukawat ke cloud par mojud servers ko aam clients ki tarah access kar sakte hain.
+* **Application aur Database Setup:** Unho ne AWS ki virtual machines par application servers install kiye taake Java EE app chal sakay, aur sath hi data store karne ke liye aik behtareen SQL database service (jaise Oracle Database EE ya Microsoft SQL Server EE) chun li.
+
+### Security Aur Traffic Ka Control
+
+Maureen ne security ko itna tight banaya ke koi aam banda ya hacker database tak na pohnch sakay. Is ke liye unho ne do bareekiyon par kaam kiya:
+
+* **Subnets Ka Istemaal:** Unho ne apne virtual network ko chote chote hisson mein baant diya, jinhein **subnets** kehte hain. Har subnet ka security level alag rakha gaya. Yeh bilkul aisa hi hai jaise aik bank ke andar aam public ke liye alag kamra ho aur khazane (cash vault) ke liye alag sab se mehfooz kamra.
+* **Access-Control Lists (ACLs):** Har subnet ke darwaze par aik security guard bitha diya jise ACLs kehte hain. Yeh guard tay karta hai ke kaun si traffic andar aa sakti hai aur kaun si baahir ja sakti hai (ingoing and outgoing traffic). *Example:* Unho ne rule banaya ke database wale subnet ko sirf aur sirf Java EE server wale subnet ka banda touch kar sakta hai, baqi poori dunya ke liye yeh rasta band hai. Is se company ka sab se important data (mission-critical data) bilkul safe ho gaya.
+* **NAT aur Firewall:** Jo servers private subnets mein hain, unhein internet par bhejney ya internet se zaroori software updates lane ke liye unho ne **NAT (Network Address Translation)** aur firewall rules ka behtareen use kiya.
+
+---
+
+### Figure 1.4 Ka Breakdown (Running a Java EE application with enterprise networking)
+
+<div align="center">
+  <img src="./images/04.png" width="700"/>
+</div>
+
+Chalein hum **Figure 1.4** ke pooray network flow ko step-by-step aur bacho ki tarah asaan kar ke samajhte hain ke data kaise travel kar raha hai:
+
+* **Corporate Network (`10.20.0.0/16`):** Yeh Maureen ka apna zati office ya company ka data center hai.
+* **VPN Connection & VPN Gateway:** Office se AWS cloud ke andar safe rasta banane ke liye aik **VPN tunnel** bani hui hai jo AWS ke **VPN Gateway** par aakar milti hai. Is raste se office ka network seedha **JEE server** (Private Subnet) se baat karta hai.
+* **AWS Virtual Network (`10.10.0.0/16`):** Yeh AWS ke andar Maureen ka banaya hua poora secured ilaqa (VPC) hai, jise teen floor ya subnets mein divide kiya gaya hai:
+1. **Public Subnet (`10.10.0.0/24`):** Is floor par **NAT** baitha hua hai. Yeh floor **Internet Gateway** ke zariye baahir ki dunya (Internet) se seedha jura hua hai.
+2. **Private Subnet (`10.10.1.0/24`):** Is ke andar **JEE server** (Java Enterprise Edition) chal raha hai. Is server ko internet se koi seedha nahi dekh sakta, lekin agar is server ne internet par koi request bhejni ho, to yeh upar mojud **NAT** ke paas jata hai, aur NAT is ki request Internet Gateway ke zariye baahir bhejta hai.
+3. **Private Subnet (`10.10.2.0/24`):** Yeh sab se nichla aur locked floor hai jahan **SQL Database (Amazon RDS)** mojud hai. Is ka arrow sirf upar wale JEE server ke sath jura hai. Yani database tak pohnchne ka koi aur rasta dunya mein mojud nahi hai.
+
+
+
+---
+
+### Future Plans Aur Project Ki Kamyabi
+
+Maureen ne abhi shuruat ke liye VPN connection lagaya hai, lekin unho ne aage ka plan (trade-off) pehle se soch rakha hai. Woh aane wale waqt mein aik **dedicated network connection** (jise AWS Direct Connect kehte hain) lagane ka soch rahi hain.
+
+* *Design Decision:* VPN internet ke zariye chalta hai to speeds up-down ho sakti hain, lekin dedicated connection lagane se network ka kharcha (network costs) mazeed kam ho jayega aur data transfer ki speed (network throughput) bohot fast aur pakki ho jayegi.
+
+**Project Ka Result:** Maureen ke liye yeh project aik bohot bari kamyabi raha! Pehle jis enterprise application ko set karne mein **mahino (months)** lag jaate thay, ab AWS par on-demand virtual machines, databases, aur networking infrastructure minto mein milne ki wajah se woh kaam **kuch ghanton (hours)** mein mukammal ho jata hai. Aur sab se bari baat, un ki company ka infrastructure cost on-premises ke muwazne bohot kam ho gaya.
+
+---
+
+## Implementing a highly available system
+
+**Alexa** aik bohot tezi se barhne wale startup mein software engineer hain. Woh IT dunya ka aik mashhoor asool achhi tarah janti hain jise **Murphy’s Law** kehte hain: *"IT infrastructure mein jo cheez kharab ho sakti hai, woh aik na aik din zaroor kharab hogi!"*
+
+Agar system band (outage) ho jaye, to startup ka poora business tabah ho sakta hai. Is liye Alexa aik aisa system design kar rahi hain jo **Highly Available (HA)** ho, yaani agar piche koi machine jal bhi jaye, to samnay customer ko pata bhi na chale aur website chalti rahe.
+
+AWS ki khubsurti yeh hai ke is ki saari services ya to pehle se highly available hoti hain, ya unhein bohot asani se HA tarike se configure kiya ja sakta hai. Alexa ne aik aala qism ka high availability architecture taiyar kiya:
+
+* **Database Ki Replication (Copy):** Database service ko Alexa ne automatic **replication** (aik database ka data sath ke sath doosre backup database mein copy hona) aur **fail-over handling** ke sath lagaya. Is ka faida yeh hai ke agar aap ka **Primary Database instance** kisi wajah se crash ya fail ho jaye, to jo **Standby Database** (backup database) hota hai, woh automatic tarike se khud ko naya primary database bana leta hai (promote ho jata hai). Is dauran website band nahi hoti.
+* **Virtual Machines (Web Servers):** AWS par jo virtual machines (EC2 instances) hoti hain, woh khud se highly available nahi hotin (yani agar aik VM band hui to game over). Lekin Alexa ne dmaagh ladaya! Unho ne aik VM chalane ki bajaye **multiple virtual machines mukhtalif data centers (Availability Zones)** mein chala dein.
+* **Load Balancer Ka Role:** In saare web servers ke aage unho ne aik **Load Balancer** kharra kar diya. Yeh load balancer lagatar servers ki sehat check karta rehta hai (Health Checks). Agar koi aik server kharab ho jaye, to load balancer chalaki se requests ko sirf un servers par bhejta hai jo bilkul theek aur sehatmand (healthy) chal rahe hotay hain.
+
+---
+
+### Figure 1.5 Ka Breakdown (Building a highly available system on AWS)
+
+<div align="center">
+  <img src="./images/05.png" width="700"/>
+</div>
+
+Chalein hum **Figure 1.5** ke diagram ko bacho ki tarah asaan breakdown ke sath samajhte hain ke yeh "Failure-proof" system kaise kaam karta hai:
+
+* **User & Internet:** User jab bhi internet se website par aata hai, to us ki request seedhi servers par nahi jati.
+* **Load Balancer (Checkmark - Highly available by default):** Request sab se pehle is load balancer par aati hai. Is par checkmark laga hai kyunke yeh AWS ki apni zimmewari hai ke yeh kabhi band nahi hoga. Yeh traffic ko do alag alag buildings (Data centers) mein barabar baant raha hai.
+* **Data Center A aur Data Center B:** Yeh AWS ke do alag alag physical data centers (Availability Zones) hain. Agar aik building mein aag lag jaye ya bijli chali jaye, to doosri building bilkul safe rehti hai.
+* **WWW Servers (Kala Cross - Single point of failure):** Dono data centers mein aik aik virtual machine (WWW) chal rahi hai. In par cross ka nishan is liye hai kyunke aik akeli VM crash ho sakti hai. Lekin chunke Alexa ne dono jagah VMs rakhi hain, is liye agar Data Center A ki VM ghalti se band bhi ho jaye, to Load Balancer traffic ko Data Center B ki VM par bhej dega.
+* **Amazon RDS (Database Primary vs Standby):** Data Center A mein **Database (primary)** chal raha hai jo likhne parhne ka saara kaam sambhalta hai. Data Center B mein **Database (standby)** chup-chap baitha hai aur primary se saara data sath ke sath copy kar raha hai (cross arrows dikha rahe hain ke dono servers dono databases se connect ho sakte hain). Agar Data Center A mukammal doob gaya, to Data Center B ka standby database automatic active ho kar kaam shuru kar dega.
+
+
+
+---
+
+Alexa ne is behtareen planning se apne startup ko kisi bhi barrey nuksan ya outage se bacha liya hai. Lekin cloud engineering ka asool yahi hai ke aap kabhi sukoon se nahi baithte; Alexa aur un ki team hamesha agle kisi failure ke liye pehle se plan karti rehti hai aur apne systems ki mazbooti (resilience) ko lagatar behtar bana rahi hai. *(Aaj ke modern cloud era mein yeh Multi-AZ deployment har barri production application ka standard asool hai).*
+
