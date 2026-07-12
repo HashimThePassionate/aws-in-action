@@ -390,3 +390,122 @@ Jab aap AWS ka intikhab karte hain, to aap aik certified aur professional partne
 Agar aap ko abhi bhi shaq hai, to aap ko pata hona chahiye ke dunya ke sab se barray aur serious brands jaise **Expedia, Volkswagen, FINRA, Airbnb, aur Slack** apna poora karobar aur bhaari workloads AWS par hi kamyabi se chala rahe hain.
 
 ---
+
+
+## How much does it cost?
+
+AWS ka bill bilkul aik bijli ke bill (electric bill) jaisa hota hai. Is mein saari services ka bill is baat par banta hai ke aap unhein kitna aur kaise istemaal karte hain (based on use). Aap ko paise sirf un cheezon ke dene hotay hain jo waqai chal rahi hain—jaise virtual machine kitni der tak active thi, object store (S3) mein aap ne kitni storage gheri hui hai, ya aap ke network mein kitne load balancers chal rahe hain.
+
+* **Monthly Invoice:** In saari services ka hisab-kitab mahine ke mahine (monthly basis) kiya jata hai aur aap ko aik invoice bheji jati hai.
+* **Transparency:** Har aik service ki qeemat pehle se publicly sab ke liye mojud hoti hai. Agar aap koi naya setup lagane ka plan kar rahe hain aur pehle se andaza lagana chahte hain ke mahine ka kitna kharcha aayega, to aap **AWS Pricing Calculator** (`[https://calculator.aws/](https://calculator.aws/)`) ka use kar sakte hain.
+
+---
+
+### Free Tier
+
+AWS par jab aap naya sign up (account create) karte hain, to pehle **12 mahino** ke liye aap ko bohot si services bilkul muft (free) milti hain. Free Tier ka asal maqsad yeh hai ke aap bina kisi darr ya kharche ke cloud ke sath khel sakein, nayi cheezon ke experiments kar sakein, aur AWS ki services ko chalane ka practical tajurba (experience) haasil kar sakein.
+
+Chalein dekhte hain ke is Free Tier mein aap ko bacho ki tarah asaan zaban mein kya kya milta hai:
+
+* **Virtual Machines:** Linux ya Windows par chalne wali aik choti virtual machine ke **750 hours** aap ko milte hain (jo ke takreeban aik poora mahina banta hai). Is ka matlab yeh hai ke aap chahein to aik single virtual machine ko poora mahina non-stop chalayein, ya phir 750 alag alag virtual machines ko sirf aik ghante ke liye aik sath chala dein, dono suraton mein kharcha bilkul zero hoga.
+* **Load Balancers:** Aik classic ya application load balancer chalanay ke liye bhi **750 hours** (takreeban aik mahina) bilkul muft diye jaate hain.
+* **Object Store:** Data aur files store karne ke liye object store (S3) ke andar **5 GB** tak ki free storage milti hai.
+* **Relational Database:** Aik chota relational database (RDS) jis mein **20 GB** ki storage shamil hoti hai aur sath mein database ka backup rakhne ki capacity bhi muft milti hai.
+* **NoSQL Database:** NoSQL database (DynamoDB) par data store karne ke liye **25 GB** tak ki space di jati hai.
+
+**Zaroori Bareekiyan aur Rules:**
+
+* **Limit Se Agay Jana:** Agar aap ne ghalti se bhi Free Tier ki in haddon (limits) ko cross kiya, to bina kisi mazeed notice ya warning ke aap se un resources ke paise lene shuru kar diye jayenge aur mahine ke aakhir mein aap ko bill bhej diya jayega. Lekin pareshan hone ki zaroorat nahi, is kitab mein hum agay chal kar seekhenge ke kaam shuru karne se pehle hi apne kharche par nazar kaise rakhni hai aur monitor kaise karna hai.
+* **Free Forever:** Jab aap ka aik saal ka trial period khatam ho jata hai, to aap ko baqi resources ke paise dene parte hain. Lekin kuch resources **hamesha ke liye free (free forever)** hotay hain. Jaise ke NoSQL database ke pehle 25 GB hamesha free rehte hain, chahe aik saal guzre ya das saal.
+* **Kitab Ki Strategy:** Is ke ilawa mazeed details aap `[http://aws.amazon.com/free](http://aws.amazon.com/free)` par dekh sakte hain. Yeh kitab poori koshish karegi ke jahan tak ho sake Free Tier ka istemaal kare taake aap ka kharcha na ho, aur jahan koi mehangi cheez aayegi jo free tier mein nahi aati, wahan pehle hi saaf saaf bata diya jayega.
+
+---
+
+### Billing example
+
+Jaise hum ne pehle baat ki, AWS aap ko mukhtalif tareeqon se bill bhej sakta hai. Is ko asani se samajhnay ke liye teen barray hisson mein banta gaya hai:
+
+* **Based on time of use (Waqt ke mutabaq):** Aik virtual machine ka bill har second ke hisab se calculate hota hai, jabki load balancer ka bill har ghante (per hour) ke hisab se banta hai.
+* **Based on traffic (Data ke aane jaane ke mutabaq):** Traffic ko gigabytes (GB) mein ya requests ki tadaad (number of requests) ke mutabaq napa jata hai.
+* **Based on storage usage (Jagah ke mutabaq):** Yeh do tarah se hota hai—ya to allocated capacity ke mutabaq (jaise 50 GB ka memory volume le liya, ab chahe us mein data 1 GB rakho ya 50 GB, bill poore 50 GB ka aayega) ya phir real usage ke mutabaq (jaise jitna data rakha hai, sirf utne hi GBs ka bill aayega).
+
+---
+
+#### Figure 1.8 Ka Breakdown (Some services are billed based on time of use, others by throughput or consumed storage)
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+Agar hum diye gaye **Figure 1.8** ke diagram ko ghaur se dekhein, to yeh hamari purani web shop ke components par billing ke chalte huay meters ko asaan tarike se samajhata hai:
+
+* **Clock Icon (Based on time of use):** Yeh icon **Load Balancer**, **Virtual Machines (EC2)**, aur **Database (Amazon RDS)** par laga hua hai. Is ka matlab hai ke jab tak yeh teeno chal rahe hain, ghante aur seconds ke hisab se in ka meter ghumta rahega.
+* **Signpost/Arrow Icon (Based on traffic):** Yeh icon **DNS**, **Load Balancer**, aur **CDN** par mojud hai. Is ka matlab hai ke jab dunya se log website par aayenge aur requests bhejenge ya data download karenge, to us traffic ke GBs aur requests ke mutabaq bill banega.
+* **Floppy Disk Icon (Based on storage usage):** Yeh icon **Database (Amazon RDS)** aur **Object Store (S3)** par laga hai. Is ka matlab hai ke in ke andar jo files ya data mehfooz kiya gaya hai, us ke size ke mutabaq paise liye jayenge.
+
+---
+
+#### Table 1.1 Ka Breakdown (How an AWS bill changes if the number of web shop visitors increases)
+
+<div align="center">
+  <img src="./images/09.png" width="600"/>
+</div>
+
+Chalein ab writer ki di gayi real-world example ko dekhte hain. फर्ज़ karein January mein aap ki web shop kamyab rahi, aur February mein aap ne sales mazeed barhane ke liye aik marketing campaign (ads) chalayi. Khush-qismati se February mein aap ke visitors ki tadaad seedha **5 guna (fivefold)** barh gayi (100,000 se barh kar 500,000 ho gayi).
+
+Chunke AWS ka asool use-par-pay hai, to chalein dekhte hain ke January ke muwazne February ke bill mein kya tabdeeli aayi:
+
+| Service | January usage | February usage | February charge | Increase |
+| --- | --- | --- | --- | --- |
+| **Visits to website** | 100,000 | 500,000 |  |  |
+| **CDN** | 25 M requests + 25 GB traffic | 125 M requests + 125 GB traffic | $115.00 | $100.00 |
+| **Static files** | 50 GB used storage | 50 GB used storage | $1.15 | $0.00 |
+| **Load balancer** | 748 hours + 50 GB traffic | 748 hours + 250 GB traffic | $19.07 | $1.83 |
+| **Web servers** | 1 virtual machine = 748 hours | 4 virtual machines = 2,992 hours | $200.46 | $150.35 |
+| **Database (748 hours)** | Small virtual machine + 20 GB storage | Large virtual machine + 20 GB storage | $133.20 | $105.47 |
+| **DNS** | 2 M requests | 10 M requests | $4.00 | $3.20 |
+| **Total cost** |  |  | **$472.88** | **$360.85** |
+
+**Table Ki Bachon Wali Explanation Aur Design Analysis:**
+
+* **Linear Relationship:** Ghaur karein, visitors ki tadaad **5 guna** barhi (100k se 500k), lekin aap ka total monthly bill $112 se barh kar $473 hua, jo ke sirf **4.2 guna (4.2-fold)** izafa hai. AWS aap ko traffic aur kharche ke darmiyan aik seedha aur munasib taluq (linear relationship) deta hai.
+* **Static Files ($0.00 Increase):** Chunke website ka logo aur purani static images February mein bhi 50 GB hi rahin, is liye storage ka kharcha bilkul nahi barha, woh $1.15 par hi ruka raha.
+* **Web Servers & Database (High Cost Increase):** Traffic 5 guna barhne ki wajah se 1 machine crash ho sakti hai, is liye February mein background mein **4 virtual machines** chalani parin aur database ko bhi Small se **Large** karna para, jis se in ka kharcha sab se zyada barha.
+
+---
+
+### Pay-per-use opportunities
+
+AWS ka yeh pay-per-use model software ki dunya mein naye aur anokhe moqay paida karta hai:
+
+* **Project Barrier Khatam:** Kisi bhi naye idea ya startup ko shuru karne ki sabsay bari rukawat (barrier) khatam ho jati hai, kyunke aap ko shuruat mein servers khareedne ke liye bhaari paiso (upfront investment) ki bilkul zaroorat nahi hoti. Aap minto mein virtual machines shuru karein, seconds ke hisab se pay karein, aur agar project band karna ho to stop kar dein—koi nuksan nahi. Storage ke liye bhi pehle se koi pakka wada (upfront commitment) nahi karna parta.
+* **Choti vs Barri Machines Ka Architecture Decision:** Cloud ka aik bohot barra asool yeh hai ke **aik barri virtual machine** ki qeemat bilkul utni hi hoti hai jitni **do (2) choti virtual machines** ki hoti hai agar un ka size barabar ho.
+* *Trade-off Benefit:* Is se chote budget wale logo ke liye **fault tolerance** afford karna asaan ho jata hai. Aap aik barri machine chalanay ki bajaye do choti machines chala kar apna system fail-safe bana sakte hain, woh bhi bina aik rupya izafi diye.
+
+---
+
+### Comparing alternatives
+
+Dunya mein AWS akela badshah nahi hai, balkay cloud computing market mein **Microsoft Azure** aur **Google Cloud Platform (GCP)** bhi bohot barray khiladi (major players) hain.
+
+In teeno barray cloud providers mein yeh barray points bilkul **aik jaise (common)** hain:
+
+* Teeno ke paas poori dunya mein phela hua zameeni infrastructure mojud hai jo computing, networking, aur storage deta hai.
+* Teeno ke paas on-demand virtual machines (IaaS) chalane ka behtareen system hai: AWS ke paas **Amazon EC2**, Azure ke paas **Azure Virtual Machines**, aur Google ke paas **Google Compute Engine** hai.
+* Teeno ke paas unlimited distributed storage systems hain jo bina kisi hadd ke scale ho sakte hain: AWS ke paas **Amazon S3**, Azure ke paas **Azure Blob Storage**, aur Google ke paas **Google Cloud Storage** hai.
+* Teeno ka pricing model **pay-as-you-go** (jitna chalao utna do) par kaam karta hai.
+
+#### Magar in cloud providers mein aakhir Faraq kya hai?
+
+Chalein teeno ki aapas ki game ko asaan breakdown ke sath samajhte hain:
+
+* **Amazon Web Services (AWS):** AWS cloud market ka **leader** hai aur is ke paas services ka sab se bada portfolio (range) mojud hai. Agarche AWS ab enterprise (badi sarkari aur purani companies) ke sector mein kafi aage nikal chuka hai, lekin is ki jarrton ko dekh kar saaf pata chalta hai ke yeh internet ke barray barray maslon (internet-scale problems) ko hal karne ke liye ijaad hua tha. AWS zyaada tar innovative aur open-source tekhnologies par kamal ki rock-solid services banata hai, aur cloud infrastructure ki security ko lock karne ke liye bohot hi mazboot (lekin thode mushkil) tareeqay deta hai.
+* **Microsoft Azure:** Azure ka poora focus Microsoft ke apne technology stack (Windows Server, MS SQL, .NET) ko cloud par faraham karne par tha, halanki ab unho ne web-centric aur open-source tekhnologies ko bhi kafi adopt kar liya hai. Aisa lagta hai ke Microsoft poori jaan maar raha hai taake Amazon ke market share ke barabar pohnch sakay.
+* **Google Cloud Platform (GCP):** GCP ka poora jhukaav un developers par hai jo bare complex aur advanced distributed systems banana chahte hain. Google apne poore dunya ke network ko mila kar aala qism ki scalable aur fault-tolerant services deta hai (jaise Google Cloud Load Balancing). Hamari raye mein, GCP aap ke local office ke purane software ko cloud par shift karne ke bajaye **cloud-native applications** (jaise modern containers aur Kubernetes) par zyada focus karta hai.
+
+**Aakhri Faisla Kaise Karein?**
+Cloud provider chunney ka koi shortcut nahi hota. Har project aur use-case alag hota hai aur "shaitan bareekiyon mein hi chupa hota hai" (the devil is in the details). Aap ko hamesha apni background dekhni parti hai: Kya aap Microsoft technology ka heavy use karte hain? Kya aap ke paas traditional system administrators ki team hai ya aap developers se bhari hui company hain?
+
+Lekin agar sab baaton ka nichorr nikala jaye, to hamari raye mein **AWS is waqt dunya ka sab se zyada mature, behtareen aur powerful cloud platform mojud hai**.
+
+---
