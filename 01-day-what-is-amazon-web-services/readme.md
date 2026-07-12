@@ -509,3 +509,114 @@ Cloud provider chunney ka koi shortcut nahi hota. Har project aur use-case alag 
 Lekin agar sab baaton ka nichorr nikala jaye, to hamari raye mein **AWS is waqt dunya ka sab se zyada mature, behtareen aur powerful cloud platform mojud hai**.
 
 ---
+
+## Exploring AWS services
+
+Inis section mein, aap ko andaza hoga ke AWS ke paas mukhtalif services ki kitni barri range mojud hai. Hum kuch diagrams ki madad se aik **Mental Model** (zehni naksha) bhi banayein ge, taake aap ko upar upar se aik achha overview mil sakay ke yeh saari services poore AWS setup mein kis tarah aur kahan baithti hain.
+
+Chalein is mental model ke overview se shuru karte hain. Computing (calculation karne), storing (data mahfooz karne), aur networking (computers ko jorne) ka jo **Hardware** hota hai, woh AWS cloud ki sab se bunyadi neenv (foundation) hai. AWS is saare physical hardware ke upar hi apni software services ko chalata hai.
+
+---
+
+### Figure 1.9 Ka Breakdown (The AWS cloud is composed of hardware and software services accessible via an API)
+
+<div align="center">
+  <img src="./images/10.png" width="600"/>
+</div>
+
+Agar aap **Figure 1.9** ke diagram ko ghaur se dekhein, to cloud computing ki poori dunya ko teen barray hisson mein banta gaya hai:
+
+1. **Software / Hardware (Sab se niche):** Yeh cloud ki asli zameen hai, jahan physical devices mojud hain. Is mein teen barray pillars hain: **Compute** (CPU aur RAM), **Network** (tarrein aur switches), aur **Storage** (badi hard disks).
+2. **Services (Darmiyan mein):** Hardware ke thik upar saari chalne wali services aati hain. Jaise Virtual machines, queues, search engines, business applications, object store, databases (relational aur NoSQL), aur networking solutions (DNS/Virtual networks).
+3. **API (Sab se baahir):** Is poore cloud ke munh par aik hi darwaza laga hua hai jise **API** kehte hain.
+
+* **Services Ko Control Kaise Karte Hain?** Kisi bhi service ko chalane ya band karne ke liye, baahir se aik **Administrator** ko is API ke darwaze par request bhejni parti hai. Is ke teen tareeqay hotay hain:
+* **Web-based GUI (Management Console):** Aik simple website jahan mouse se click kar ke kaam hota hai.
+* **CLI (Command-Line Interface):** Black screen par short commands likh kar control karna.
+* **SDK (Software Development Kit):** Apne programming code ke andar se automatically requests bhejna.
+
+
+* **Virtual Machines Ka Khas Jadu (Low Abstraction):** Virtual machines ke paas aik special feature hota hai ke aap baahir se **SSH** (secure shell) ke zariye un ke andar dakhil ho sakte hain aur aap ko **Administrator (Root) Access** mil jati hai. Is ka matlab hai ke ab us computer par aap ki hukoomat hai, aap jo dil chahe custom software us par install kar sakte hain.
+* **NoSQL Jaisi Services (High Abstraction):** Is ke ulat, jo doosri services hain (jaise NoSQL database), woh aap ko computer ke andar janay ki ijazat nahi detin. Woh piche ka saara mushkil jhanjhat aapse chupa (hide) deti hain aur aap ko sirf aik baahir ka darwaza (API) de deti hain ke "bas data bhejtey jao, piche machine kaise chal rahi hai us se aap ka koi lena dena nahi".
+
+---
+
+### Figure 1.10 Ka Breakdown (Managing a custom application running on a virtual machine and cloud-native services)
+
+<div align="center">
+  <img src="./images/11.png" width="600"/>
+</div>
+
+**Figure 1.10** dikhata hai ke aik Administrator jab system set karta hai, to woh do alag alag rasto ka istemaal kaise karta hai:
+
+1. **Direct Control (Left Arrow):** Administrator seedha **Virtual Machine** ke andar ja kar apna aik **Custom PHP Web Application** aur web server remotely install aur configure kar raha hai.
+2. **API Control (Right Arrow):** Sath hi sath, woh AWS ki **API** par request bhej kar application ke sath juri hui baqi services ko manage kar raha hai—jaise application ke liye use hone wala **NoSQL database**, **Sending email** service, aur **Static file storage**.
+
+---
+
+### Figure 1.11 Ka Breakdown (Handling an HTTP request with a custom web application using additional AWS services)
+
+<div align="center">
+  <img src="./images/12.png" width="600"/>
+</div>
+
+Jab Administrator system kharra kar leta hai, to aam users ke website open karne par data kaise travel karta hai, yeh **Figure 1.11** mein step-by-step samjhaya gaya hai:
+
+1. **User Ki Request:** Jab **Users** browser kholte hain, to un ki **HTTP request** seedhi AWS ke andar mojud **Virtual Machine** ke paas jati hai.
+2. **App Ka Response:** Virtual machine ke andar chal raha web server aur custom PHP web application us request ko prapare karta hai.
+3. **API Se Baat-Cheet:** User ko sahi jawab dene ke liye PHP app ko doosri AWS services ki madad chahiye hoti hai. Is ke liye PHP app khud AWS ki **API** ka darwaza khatkhatata hai:
+* Woh data check karne ke liye **NoSQL Database** se query karta hai.
+* Zaroori files uthane ke liye **Static File Storage** se contact karta hai.
+* Aur user ko notification dene ke liye **Sending Email** service ka use karta hai.
+
+
+4. Yeh saara data API ke zariye minto mein process ho kar user ke samne screen par website ki surat mein aa jata hai.
+
+---
+
+### Services Ki Bharmaar Aur Categories
+
+Shuru shuru mein services ki ginti dekh kar banda darr sakta hai. Jab aap pehli baar AWS ke web interface mein login karte hain, to aap ke samne takreeban **200 se zyada services** aa jati hain, jo **25 mukhtalif categories** mein banti hui hain.
+
+In mein lagatar izafa hota rehta hai kyunke AWS poore saal naye features nikalta hai aur har saal November mein Las Vegas mein un ki aik bohot bari conference hoti hai jise **AWS re:Invent** kehte hain, jahan naye barray jadooi tools launch kiye jaate hain. *(Aaj 2026 ke daur mein AI, GenAI aur Serverless ki wajah se yeh ginti aur bhi zyada phail chuki hai).*
+
+AWS in mukhtalif categories mein services faraham karta hai:
+
+* Analytics  Application integration  AR and VR
+* AWS cost management  Blockchain  Business applications
+* Compute  Containers  Customer enablement
+* Database  Developer tools  End-user computing
+* Frontend web and mobile  Game Development  Internet of Things
+* Machine learning  Management and governance  Media services
+* Migration and transfer  Networking and content delivery  Quantum technologies
+* Robotics  Satellite  Security, identity, and compliance
+
+---
+
+### Kitab Ka Scope (Selected Must-Have Services)
+
+Zaahir si baat hai ke aik hi kitab mein in saari 200+ services ko parhana bilkul na-mumkin (impossible) hai. Is liye is kitab mein aap ke liye sirf un **khas aur sab se zyada chalne wali (must-have) services** ko chuna gaya hai, jo aap ko minto mein aik lajawab, responsive, aur failure-proof system banane, usay barhane, aur chalane mein madad dengi. Jab aap in bunyadi services ke ustad ban jayein, to aap baqi ki nice-to-have services ko khud bhi explore kar sakte hain.
+
+Is kitab mein hum in services ko poori gehrai (deep detail) ke sath parhenge:
+
+* **EC2:** Virtual machines (Khali computers jin par aap ka control hota hai).
+* **ECS and Fargate:** Containers (Docker apps) ko chalanay aur manage karne ke liye.
+* **Lambda:** Executing functions (Serverless tareeqa, jahan computer ki fikar kiye bina sirf apna code run kiya jata hai).
+* **S3:** Object store (Files, videos, aur static data rakhne ki unlimited space).
+* **Glacier:** Purane data ko saste tareeqay se archive (mahfooz) karne ke liye.
+* **EBS:** Virtual machines ke liye lagne wali hard disks (Block storage).
+* **EFS:** Network filesystem (Aik aisi shared drive jo aik sath kayi computers se connect ho sakay).
+* **RDS:** SQL databases (Table aur rows wala managed structured database).
+* **DynamoDB:** NoSQL database (Bohot hi fast aur scale hone wala unstructured database).
+* **ElastiCache:** In-memory key-value store (Data ko RAM mein rakh kar speed barhane ke liye caching tool).
+* **VPC:** Virtual network (Cloud ke andar aap ka apna secured zati network area).
+* **ELB:** Load balancers (Traffic ko servers par barabar bantne wala guard).
+* **Simple Queue Service (SQS):** Distributed queues (Messages aur tasks ko line mein lagane ke liye).
+* **CodeDeploy:** Code ko automatically bina website band kiye servers tak pohnchana.
+* **CloudWatch:** Monitoring aur logging (System ki performance par nazar rakhna aur errors pakadna).
+* **CloudFormation:** Automating your infrastructure (Poora network aur server setup sirf code ke zariye kharra karna - IaC).
+* **IAM:** Security checking (Kiski pahunch kis resource tak hogi, usay sakhti se restrict karna).
+
+Yahan teen barray topics (Continuous Delivery, Machine Learning, aur Analytics) ko shamil nahi kiya gaya kyunke un par alag se poori kitabein bhari ja sakti hain. Agar aap baad mein Machine Learning seekhna chahein, to Manning ki hi aik alag kitab mojud hai (*AI as a Service: Serverless Machine Learning with AWS*). Lekin writer ka kehna hai ke pehle is kitab ko mukammal karein, kyunke yeh aap ko woh pakki **bunyadi samajh (foundational knowledge)** de degi, jis ke baad aap cloud ki dunya ki kisi bhi advanced service ko bacho ki tarah khud hi samajh payenge.
+
+---
