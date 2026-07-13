@@ -144,3 +144,128 @@ Background mein hamara poora cloud infrastructure ek blueprint (naksha/template)
 
 
 ---
+
+Hum ne apna blogging infrastructure toh khara kar liya, ab chalain bilkul kareeb se is ka niaz-bata (inspection) karte hain ke is ke andar chal kya raha hai. Hamara yeh setup in 4 main hisson par mushtamil hai:
+
+* **Web servers:** Jo virtual machines par chal rahe hain.
+* **Load balancer:** Traffic ko sambhalne wala traffic cop.
+* **MySQL database:** Jahan sara zaroori data save hota hai.
+* **Network filesystem:** Ek shared memory ya folder jise sab use kar sakte hain.
+
+---
+
+## Virtual machines
+
+Sab se pehle, AWS Console ke upar search bar ya navigation bar ka istamal kar ke **EC2 service** ko kholain, jaisa ke **Figure 2.8** mein dikhaya gaya hai. Is ke baad, left side par majood menu se **Instances** par click karein. Aap ke samne ek list khulegi jis mein do virtual computers (machines) nazar aayengi jin ka naam `wordpress` rakha gaya hai. Jab aap un mein se kisi aik machine par click karenge, toh us ki saari andaruni details niche khul kar samne aa jayengi.
+
+**Figure 2.8 Breakdown:**
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+* Upar wala arrow ishara kar raha hai ke **Services** menu par click kar ke **EC2 service** ko khola gaya hai.
+* Left side par **Instances** ka option select karne se center mein hamari chalne wali machines ki list aa gayi hai. Niche box mein aik machine ki summary dikhayi de rahi hai.
+* Yahan center mein **Public IPv4 address** (jaise `52.71.253.42`) saaf nazar aa raha hai. Yeh woh address hai jise use kar ke yeh machine internet se connect hoti hai.
+
+Chalein ab computer ki in technical details ko bilkul bacho ki tarah aasan lafzon mein samajhte hain:
+
+* **Instance ID:** Yeh samajh lo is computer ka roll number ya unique identity card number hai, jo AWS mein kisi aur computer ka nahi ho sakta.
+* **Instance type:** Yeh batata hai ke is computer ka size kitna hai—yani is mein kitna CPU (dimagh) aur kitni Memory/RAM (yaadashat) lagi hui hai. Hamari template ne isay `t2.micro` size diya hai.
+* **IPv4 Public IP:** Yeh is computer ka internet wala ghar ka pata (address) hai. Is address ke zariye internet par koi bhi is computer tak pohanch sakta hai.
+* **AMI ID:** Hum ne padha tha ke hum **Amazon Linux OS** use kar rahe hain. Is ID par click karne se aap ko pata chal jata hai ke is operating system ka exact version konsa chal raha hai.
+
+Yahan par aik tab hota hai jise **Monitoring** kehte hain. Yeh samajh lo computer ke dil ki dharkan check karne wali ECG machine hai. Yeh tab dekhna bohot zaroori hai agar aap dekhna chahte hain ke aap ka system sahi chal raha hai ya thak raha hai. AWS yahan computer ki performance ke graph dikhata hai.
+
+> **Design Decision & Trade-off:** Agar website par achanak bohot log aa jayein aur CPU ka istamal **80% se upar** chala jaye, toh computer thak jata hai aur website slow ho jati hai. Yeh graph dekh kar hi hum faisla karte hain ke ab humein aik aur naya computer (virtual machine) barha dena chahiye taake website super-fast rahe.
+
+---
+
+## Load balancer
+
+Ab bari aati hai load balancer ko check karne ki, jo hamari traffic ko dono computers mein barabar baantta hai. Yeh bhi EC2 service ka hi ek hissa hai, is liye aap ko kisi naye page par jaane ki zaroorat nahi hai. Bas left side par majood sub-navigation menu mein thora niche scroll karein aur **Load Balancers** par click kar dein. List mein se apne load balancer ko select karein taake us ki details khul sakein.
+
+**Figure 2.9 Breakdown:**
+
+<div align="center">
+  <img src="./images/09.png" width="600"/>
+</div>
+
+* Left menu se **Load Balancers** par click kiya gaya hai aur center mein `wordp-LoadB-...` naam ka load balancer select hai.
+* Neeche arrow dikha raha hai is ka **DNS name**. Yeh AWS ki taraf se khud-ba-khud banaya gaya ek lamba sa web address hota hai. Hamara load balancer internet-facing hai, yani bahar ki dunya isi DNS name ke zariye hamari website par aati hai.
+
+Load balancer internet se aane wali har request ko pakadta hai aur hamari dono virtual machines mein se kisi aik ki taraf bhej deta hai. Lekin load balancer ko kaise pata chalta hai ke computers kahan chupe hain? Is ke liye **Target Group** ka istamal hota hai. Target group ka matlab hai un computers ki toli (group) jin par traffic bhejni hai. Isay dekhne ke liye left menu mein Load Balancers ke thora sa niche majood **Target Groups** par click karein.
+
+**Figure 2.10 Breakdown:**
+
+<div align="center">
+  <img src="./images/10.png" width="600"/>
+</div>
+
+* Left menu se **Target Groups** par click karne par center mein `wordp-LoadB-...` group ki details khul gayi hain.
+* Neeche **Targets** tab ke andar woh do virtual computers (EC2 instances) saaf dikh rahe hain jo hum ne shuru mein dekhe the.
+* Dono computers ke agay **Health status** ke niche green rang mein **healthy** likha hua hai.
+
+*System Behavior Detail:* Load balancer har thori der baad computers ka 'health check' karta hai (yani unhein ping kar ke poochta hai ke tum theek ho?). Kyunki dono ka status **healthy** hai, is liye load balancer dono par traffic bhej raha hai. Agar koi computer kharab ho jaye, toh status unhealthy ho jata hai aur load balancer wahan traffic bhejna band kar deta hai.
+
+Yahan bhi **Monitoring** tab hota hai jo production (live system) mein dekhna bohot zaroori hai. Agar achanak traffic badal jaye ya HTTP errors (jaise website par error code aana) shuru ho jayein, toh yahan se dekh kar hum kharabi ko pakad (debug kar) sakte hain.
+
+---
+
+## MySQL database
+
+Hamari website ka sab se keemti hissa is ka database hai jahan saara data save hota hai. Isay dekhne ke liye top navigation bar se **RDS (Relational Database Service)** kholain. Phir left side ke menu se **Databases** select karein. Wahan aap ko `MySQL community` engine wala database nazar aayega, jaisa ke **Figure 2.11** mein dikhaya gaya hai.
+
+**Figure 2.11 Breakdown:**
+
+<div align="center">
+  <img src="./images/11.png" width="600"/>
+</div>
+
+* Services se **RDS** khol kar left menu se **Databases** select kiya gaya hai.
+* Center mein database ka ek unique naam (DB identifier) dikh raha hai (jaise `wd1ohh...`) aur us ka Engine `MySQL Community` hai.
+
+**Figure 2.12 Breakdown:**
+
+<div align="center">
+  <img src="./images/12.png" width="600"/>
+</div>
+
+* Jab hum database par click karte hain toh us ka **Summary** page khul jata hai, jahan is ka **CPU utilization** (jaise 6.95%) dikha raha hai ke database par kitna bojh hai.
+* Neeche Configuration box mein Engine version (`8.0.27`) aur Instance class (`db.t2.micro`) likha hai. Is computer mein **1 vCPU** aur **1 GB RAM** majood hai.
+* Storage type ke agay **Magnetic** likha hua hai.
+
+*Design Decision & Cost Trade-off:* Kyunki hamare is blog par rozana sirf 1,000 log aate hain, is liye database par koi bohot bada bojh nahi hai. Paise bachane ke liye (cost-effective design) hum ne mehnge SSD disks ke bajaye saste **Magnetic disks** lagaye hain aur computer ka size bhi chota (`db.t2.micro`) rakha hai jo is traffic ke liye kaafi hai. Jab hamari company barhegi aur load zyada hoga, toh hum chapter 10 ke mutabaq mehnge database engines (jaise PostgreSQL ya Oracle) aur 96 cores CPU aur 768 GB RAM wali bhari-kamkam machines par bhi shift ho sakte hain.
+
+*WordPress Data Kahan Rakhta Hai?*
+
+1. **Database ke andar:** WordPress blog ke posts, logon ke comments, aur settings ko MySQL database ke andar tables mein save karta hai.
+2. **Database ke baahar (Disk par):** Agar koi author blog ke liye koi photo upload karta hai, ya admin naye plugins aur themes install karta hai, toh woh database mein nahi balkay computer ki storage disk par save hoti hain.
+
+---
+
+## Network filesystem
+
+Ab ek masla sochein: Hamare paas 2 alag computers (EC2) chal rahe hain. Agar aik author computer #1 par login ho kar koi nayi photo upload karta hai, toh woh photo computer #1 ki disk par save ho jayegi. Lekin jab koi user website kholega aur load balancer us ki request computer #2 par bhej dega, toh us user ko photo nazar nahi aayegi kyunki computer #2 ki disk par toh photo hai hi nahi!
+
+Is masle ko hal karne ke liye hum ne **Elastic File System (EFS)** lagaya hai. Yeh samajh lo internet par para ek aisa shared network folder hai jise hamare dono computers aik sath ek khas raste (**NFSv4.1 protocol**) ke zariye access kar sakte hain. Hum ne simplicity ke liye WordPress ki saari files (PHP, HTML, CSS, aur uploaded photos) isi shared folder (EFS) par rakh di hain taake dono computers ko har waqt har ek file milti rahe.
+
+Isay dekhne ke liye main navigation se **EFS service** kholain aur us filesystem par click karein jis ka naam `wordpress` se shuru hota hai.
+
+**Figure 2.13 Breakdown:**
+
+<div align="center">
+  <img src="./images/13.png" width="600"/>
+</div>
+
+* Upar arrow se pata chal raha hai ke **EFS service** open ki gayi hai aur left menu se **File systems** select hai.
+* Center mein hamara `wordpress-efs` nazar aa raha hai jis ka Total size `71.68 MiB` hai aur Security ke mutabaq yeh unencrypted hai.
+
+*System Behavior & Configuration Details:*
+
+* **Bursting Throughput Mode:** Is filesystem ka throughput mode **Bursting** par set hai. Is ka bacho wala matlab yeh hai ke aam tor par yeh sasta aur normal speed par chalta hai, lekin agar din mein kisi waqt achanak bohot saari files download ya upload karni parhein, toh yeh bina kisi extra kharche ke thori der ke liye apni speed ko bohot teiz (burst) kar leta hai.
+* **Mount Targets:** Virtual computers ko is shared folder se jorne ke liye raste chahiye hote hain jinhein **Mount Targets** kehte hain. Hum ne yahan fault tolerance (yani agar aik network rasta kharab bhi ho jaye toh doosra chalta rahe) ke liye **2 mount targets** banaye hain. Yeh virtual machines is network storage se connect karne ke liye ek DNS name ka istamal karti hain.
+
+Ab jab ke hum ne apne poore naye cloud ghar (infrastructure) ka kona-kona dekh liya hai, agle section mein hum is baat ka hisab lagayenge ke is saare setup ko chalane ka mahine ka kharcha kitna aata hai!
+
+---
