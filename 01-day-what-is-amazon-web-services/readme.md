@@ -70,10 +70,6 @@ Agar hum diye gaye **Figure 1.1** ke map ko ghaur se dekhein, to yeh dunya ke mu
 
 ---
 
-Ab jab hum ne zaroori alfaz samajh liye hain, to sawaal yeh paida hota hai ke aap AWS ke sath aakhir kar kya sakte hain?
-
----
-
 ## What can you do with AWS?
 
 Aap AWS par aik ya aik se zyaada services ko aapas mein jor kar har kism ki application chala sakte hain. Agla section aap ko is ki aik behtareen real-world misaal daita hai.
