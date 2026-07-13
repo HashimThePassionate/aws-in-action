@@ -443,11 +443,7 @@ Agar hum diye gaye **Figure 1.8** ke diagram ko ghaur se dekhein, to yeh hamari 
 
 #### Table 1.1 Ka Breakdown (How an AWS bill changes if the number of web shop visitors increases)
 
-<div align="center">
-  <img src="./images/09.png" width="600"/>
-</div>
-
-Chalein ab writer ki di gayi real-world example ko dekhte hain. फर्ज़ karein January mein aap ki web shop kamyab rahi, aur February mein aap ne sales mazeed barhane ke liye aik marketing campaign (ads) chalayi. Khush-qismati se February mein aap ke visitors ki tadaad seedha **5 guna (fivefold)** barh gayi (100,000 se barh kar 500,000 ho gayi).
+Chalein ab writer ki di gayi real-world example ko dekhte hain. karein January mein aap ki web shop kamyab rahi, aur February mein aap ne sales mazeed barhane ke liye aik marketing campaign (ads) chalayi. Khush-qismati se February mein aap ke visitors ki tadaad seedha **5 guna (fivefold)** barh gayi (100,000 se barh kar 500,000 ho gayi).
 
 Chunke AWS ka asool use-par-pay hai, to chalein dekhte hain ke January ke muwazne February ke bill mein kya tabdeeli aayi:
 
@@ -464,7 +460,7 @@ Chunke AWS ka asool use-par-pay hai, to chalein dekhte hain ke January ke muwazn
 
 **Table Ki Bachon Wali Explanation Aur Design Analysis:**
 
-* **Linear Relationship:** Ghaur karein, visitors ki tadaad **5 guna** barhi (100k se 500k), lekin aap ka total monthly bill $112 se barh kar $473 hua, jo ke sirf **4.2 guna (4.2-fold)** izafa hai. AWS aap ko traffic aur kharche ke darmiyan aik seedha aur munasib taluq (linear relationship) deta hai.
+* **Linear Relationship:** Ghaur karein, visitors ki tadaad **5 guna** barhi (100k se 500k), lekin aap ka total monthly bill $112 se barh kar $472 hua, jo ke sirf **4.2 guna (4.2-fold)** izafa hai. AWS aap ko traffic aur kharche ke darmiyan aik seedha aur munasib taluq (linear relationship) deta hai.
 * **Static Files ($0.00 Increase):** Chunke website ka logo aur purani static images February mein bhi 50 GB hi rahin, is liye storage ka kharcha bilkul nahi barha, woh $1.15 par hi ruka raha.
 * **Web Servers & Database (High Cost Increase):** Traffic 5 guna barhne ki wajah se 1 machine crash ho sakti hai, is liye February mein background mein **4 virtual machines** chalani parin aur database ko bhi Small se **Large** karna para, jis se in ka kharcha sab se zyada barha.
 
