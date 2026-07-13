@@ -504,9 +504,9 @@ Lekin agar sab baaton ka nichorr nikala jaye, to hamari raye mein **AWS is waqt 
 
 ## Exploring AWS services
 
-Inis section mein, aap ko andaza hoga ke AWS ke paas mukhtalif services ki kitni barri range mojud hai. Hum kuch diagrams ki madad se aik **Mental Model** (zehni naksha) bhi banayein ge, taake aap ko upar upar se aik achha overview mil sakay ke yeh saari services poore AWS setup mein kis tarah aur kahan baithti hain.
+Is section mein, aap ko andaza hoga ke AWS ke paas mukhtalif services ki kitni barri range mojud hai. Hum kuch diagrams ki madad se aik **Mental Model** (zehni naksha) bhi banayein ge, taake aap ko upar upar se aik achha overview mil sakay ke yeh saari services poore AWS setup mein kis tarah aur kahan baithti hain.
 
-Chalein is mental model ke overview se shuru karte hain. Computing (calculation karne), storing (data mahfooz karne), aur networking (computers ko jorne) ka jo **Hardware** hota hai, woh AWS cloud ki sab se bunyadi neenv (foundation) hai. AWS is saare physical hardware ke upar hi apni software services ko chalata hai.
+Chalein is mental model ke overview se shuru karte hain. Computing (calculation karne), storing (data mahfooz karne), aur networking (computers ko jorne) ka jo **Hardware** hota hai, woh AWS cloud ki sab se bunyadi (foundation) hai. AWS is saare physical hardware ke upar hi apni software services ko chalata hai.
 
 ---
 
@@ -555,7 +555,7 @@ Agar aap **Figure 1.9** ke diagram ko ghaur se dekhein, to cloud computing ki po
 Jab Administrator system kharra kar leta hai, to aam users ke website open karne par data kaise travel karta hai, yeh **Figure 1.11** mein step-by-step samjhaya gaya hai:
 
 1. **User Ki Request:** Jab **Users** browser kholte hain, to un ki **HTTP request** seedhi AWS ke andar mojud **Virtual Machine** ke paas jati hai.
-2. **App Ka Response:** Virtual machine ke andar chal raha web server aur custom PHP web application us request ko prapare karta hai.
+2. **App Ka Response:** Virtual machine ke andar chal raha web server aur custom PHP web application us request ko prepare karta hai.
 3. **API Se Baat-Cheet:** User ko sahi jawab dene ke liye PHP app ko doosri AWS services ki madad chahiye hoti hai. Is ke liye PHP app khud AWS ki **API** ka darwaza khatkhatata hai:
 * Woh data check karne ke liye **NoSQL Database** se query karta hai.
 * Zaroori files uthane ke liye **Static File Storage** se contact karta hai.
@@ -574,14 +574,17 @@ In mein lagatar izafa hota rehta hai kyunke AWS poore saal naye features nikalta
 
 AWS in mukhtalif categories mein services faraham karta hai:
 
-* Analytics  Application integration  AR and VR
-* AWS cost management  Blockchain  Business applications
-* Compute  Containers  Customer enablement
-* Database  Developer tools  End-user computing
-* Frontend web and mobile  Game Development  Internet of Things
-* Machine learning  Management and governance  Media services
-* Migration and transfer  Networking and content delivery  Quantum technologies
-* Robotics  Satellite  Security, identity, and compliance
+| Category 1 | Category 2 | Category 3 |
+| :--- | :--- | :--- |
+| Analytics | Application integration | AR and VR |
+| AWS cost management | Blockchain | Business applications |
+| Compute | Containers | Customer enablement |
+| Database | Developer tools | End-user computing |
+| Frontend web and mobile | Game Development | Internet of Things |
+| Machine learning | Management and governance | Media services |
+| Migration and transfer | Networking and content delivery | Quantum technologies |
+| Robotics | Satellite | Security, identity, and compliance |
+| Storage | | |
 
 ---
 
