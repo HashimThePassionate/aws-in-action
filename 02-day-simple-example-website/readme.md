@@ -269,3 +269,91 @@ Isay dekhne ke liye main navigation se **EFS service** kholain aur us filesystem
 Ab jab ke hum ne apne poore naye cloud ghar (infrastructure) ka kona-kona dekh liya hai, agle section mein hum is baat ka hisab lagayenge ke is saare setup ko chalane ka mahine ka kharcha kitna aata hai!
 
 ---
+
+## How much does it cost?
+
+AWS cloud ko apnane se pehle yeh janana zaroori hai ke is par mahine ka kharcha kitna aayega. Is cheez ka hisab lagane ke liye AWS humein ek tool deta hai jise **AWS Pricing Calculator** kehte hain. Hum ne is calculator ke zariye apne poore setup (load balancer, virtual machines, database, aur network filesystem) ka ek kharcha nikal kar dekha hai.
+
+Agar hum is WordPress website ko cloud par **Highly Available** tareeqe se chalayein—yani hamare system ke saare hisse kam se kam **2 alag-alag data centers (alag imaraton)** mein bate hue hon taake ek jagah kharabi aane par bhi website band na ho—toh mahine ka kharcha taqreeban **$75 (dollar)** banta hai.
+
+> **Paise Ki Fikar Na Karein:** Yeh jo lab hum is chapter mein kar rahe hain, yeh bilkul muft (Free Tier) hai. Hum ne jo $75 ka kharcha nikala hai, us mein Free Tier ke discounts shaamil nahi hain, kyunki Free Tier shuruati kuch mahino ke liye hi milta hai. Is liye agar aap naye account par 2-3 din mein yeh lab kar ke delete kar dete hain, toh aap ko kuch bhi pay nahi karna parega.
+
+---
+
+### Bill Kaise Banta Hai? (On-Demand Pricing Concept)
+
+Cloud mein pehle se paise nahi dene hote. Yeh bilkul aap ke ghar ke bijli ke meter jaisa hai—jitni bijli istemal karoge, mahine ke aakhri mein sirf utna hi bill aayega. AWS mein har cheez **On-Demand** hoti hai, jahan computers ka bill **seconds** ke mutabaq aur storage ka bill **Gigabytes (GB)** ke mutabaq banta hai.
+
+Aap ka asli bill upar niche ho sakta hai, aur is par niche di gayi 4 cheezein asar dalti hain:
+
+* **Traffic processed by the load balancer:** Load balancer se kitna web traffic guzar raha hai. Misal ke tor par, December ke mahine mein ya garmiyon ki chuttiyon (summer vacations) mein log ghumne nikal jaate hain aur blog kam parhte hain. Jab traffic kam hoga, toh load balancer ka kharcha bhi khud-ba-khud kam ho jayega.
+* **Storage needed for the database:** Database mein kitna data jama ho raha hai. Agar aap ki company blog par bohot saare naye articles aur posts likhna shuru kar de, toh database ka size barhega, jis se storage ka kharcha bhi barh jayega.
+* **Storage needed on the NFS (EFS):** Shared folder mein kitni files hain. Jab blog ke authors nayi photos upload karenge, ya admin naye plugins aur designs (themes) install karega, toh network filesystem (EFS) par jagah zyada ghiregi, jis se is ka bill barhega.
+* **Number of virtual machines needed:** Virtual computers (EC2) ka bill seconds ke hisab se banta hai. Agar din ke waqt website par achanak bohot zyada log aa jayein aur 2 computers unhein na sambhal sakein, toh humein teesra (3rd) computer chalana parega. Jitni der woh teesra computer chalega, utne zyada seconds ka bill barh jayega.
+
+**AWS Ka Sab Se Bada Faida (Design Decision & Flexibility):**
+Purane tareeqe mein agar aap koi server khareedte hain aur baad mein pata chale ke servers zyada bade hain, toh aap ke paise zaya jaate hain. Lekin AWS bohot flexible (lachkiya) hai. Agar aap ko lage ke aap ne zaroorat se zyada computers chala diye hain, toh aap foran unhein band (delete) kar sakte hain aur usi second un ka bill aana ruk jata hai.
+
+Ab jab ke hamara Proof of Concept (PoC) poora ho chuka hai aur hum ne migration ka faisla kar liya hai, toh agla qadam yeh hai ke hum is poore setup ko band (shut down) kar dein taake extra bill na aaye.
+
+---
+
+### Figure 2.14 Breakdown
+
+<div align="center">
+  <img src="./images/14.png" width="600"/>
+</div>
+
+Aap upar di gayi **Figure 2.14** mein dekh sakte hain ke yeh **Elastic File System (EFS)** ka dashboard hai:
+
+* Yahan `wordpress-efs` ki general settings dikhayi gayi hain.
+* Arrow ishara kar raha hai **Throughput mode** ke agay likhe lafz **Bursting** par. Is ka bacho wala matlab yeh hai ke aam tor par yeh sasta chalta hai aur paise bachata hai, lekin jab din mein kisi waqt achanak files ka bojh barhta hai, toh yeh thori der ke liye super-fast speed pakad leta hai.
+
+---
+
+### Figure 2.15 Breakdown
+
+<div align="center">
+  <img src="./images/15.png" width="600"/>
+</div>
+
+Aap **Figure 2.15** mein **AWS Pricing Calculator** ka screen dekh sakte hain:
+
+* Yahan project ka naam `AWS in Action: Wordpress` rakha gaya hai.
+* **Estimate Summary** ke niche `Monthly cost` taqreeban `67.98 USD` dikha raha hai aur pure saal (12 mahine) ka kharcha `815.76 USD` estimate kiya gaya hai. *(Note: Yeh calculator ka aik purana snapshot hai, actual calculations badalti rehti hain).*
+* Niche `Services` mein Amazon EFS ki **Standard Storage** ka kharcha dikhaya gaya hai, jahan agar hum mahine ka **5 GB** data rakhein toh us ka kharcha mahina sirf `1.50 USD` banta hai.
+
+---
+
+### Table 2.1 Breakdown (Exact Costing Sheet)
+
+<div align="center">
+  <img src="./images/16.png" width="600"/>
+</div>
+
+Writer ne niche di gayi table mein ek ek cheez ka poora hisab laga kar samjhaya hai ke $74.19 (ya taqreeban $75) ka bill kaise banta hai:
+
+| AWS service | Infrastructure | Pricing | Monthly cost |
+| --- | --- | --- | --- |
+| EC2 | Virtual machines | 2 * 730 hours * $0.0116 (t2.micro) | $16.94 |
+| EC2 | Storage | 2 * 8 GB * $0.10 per month | $1.60 |
+| Application Load Balancer | Load balancer | 730 hours * $0.0225 (load balancer hour) 200 GB per month | $18.03 |
+| Application Load Balancer | Outgoing traffic | 100 GB * $0.00 (first 100 GB) 100 GB * $0.09 (up to 10 TB) | $9.00 |
+| RDS | MySQL database instance (primary + standby) | 732.5 hours * $0.017 * 2 | $24.82 |
+| RDS | Storage | 5 GB * $0.115 * 2 | $2.30 |
+| EFS | Storage | 5 GB * $0.3 | $1.50 |
+| **Total** |  |  | **$74.19** |
+
+#### Table Ki Simple Aur Aasan Wazahata:
+
+1. **EC2 Virtual Machines ($16.94):** Hum 2 computers chalate hain. Mahine mein 730 ghante hote hain, aur ek chote `t2.micro` computer ka aik ghante ka kharcha $0.0116 hai. Dono ko multiply kar ke yeh kharcha nikalta hai.
+2. **EC2 Storage ($1.60):** Dono computers ke andar operating system rakhne ke liye hum 8 GB ki drive lagate hain, jis ka rate $0.10 per GB hai.
+3. **Load Balancer ($18.03):** Traffic control karne wali machine pure mahine (730 ghante) chalti hai aur 200 GB tak ka data handle karti hai. Is ka rate $0.0225 per hour hai.
+4. **Outgoing Traffic ($9.00):** Jab log hamari website kholte hain aur data cloud se nikal kar un ke mobile/laptop par jata hai, toh pehla 100 GB bilkul muft hota hai, us ke baad agay har GB ka $0.09 charge hota hai.
+5. **RDS Database Instance ($24.82):** Kyunki hum ne highly available system banana hai, is liye hum ek database primary (asli) chalate hain aur doosra standby (copy) chalate hain doosri imarat mein. Is liye yahan `* 2` kiya gaya hai taake data hamesha mehfooz rahe.
+6. **RDS Storage ($2.30):** Database ke andar data save karne ke liye hum 5 GB jagah lete hain. Yeh bhi dono data centers mein copy hoti hai, is liye isay bhi `* 2` kiya gaya hai.
+7. **EFS Storage ($1.50):** Jo hamara shared network folder hai, us mein hum ne 5 GB files rakhi hain, aur is ka rate $0.3 per GB hai.
+
+In sab ko jama (add) kar ke hamara total kharcha **$74.19** banta hai, jo purane $250 ke kharche se bohot sasta hai aur website bhi kabhi band nahi hogi!
+
+---
