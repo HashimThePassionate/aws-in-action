@@ -357,3 +357,51 @@ Writer ne niche di gayi table mein ek ek cheez ka poora hisab laga kar samjhaya 
 In sab ko jama (add) kar ke hamara total kharcha **$74.19** banta hai, jo purane $250 ke kharche se bohot sasta hai aur website bhi kabhi band nahi hogi!
 
 ---
+
+## Deleting your infrastructure
+
+Hum ne jo testing (evaluation) karni thi us se yeh saaf saabit ho gaya hai ke hamari company ke blog ko technical tareeqe se AWS par shift (migrate) karna bilkul mumkin hai. Hum ne yeh bhi hisab laga liya ke rozana 1,000 logon ka load uthane ke liye load balancer, virtual computers, aur MySQL database ke sath-sath ek network filesystem (NFS) ka mahine ka kharcha AWS par taqreeban $75 aata hai. Company ka aakhri faisla karne ke liye hamare paas yeh maloomat kaafi hain.
+
+Kyunki is testing wale setup mein hamara koi asli ya zaroori data majood nahi hai aur hamari research poori ho chuki hai, is liye ab paise bachane ke liye hum in saare resources ko khatam (delete) kar denge taake bill foran ruk jaye.
+
+Is ke liye aap dobara AWS Management Console mein **CloudFormation** service par jayein, aur wahan yeh aasan se steps follow karein:
+
+### Figure 2.16 Breakdown
+
+<div align="center">
+  <img src="./images/17.png" width="600"/>
+</div>
+
+Aap **Figure 2.16** mein dekh sakte hain ke yeh CloudFormation ke Stacks ka main page hai:
+
+1. **Step 1:** Sab se pehle list mein majood apne `wordpress` stack ke naam ke shuru mein diye gaye gol button ya check box par click kar ke usay select karein. Wahan status green rang mein `CREATE_COMPLETE` dikh raha hoga.
+2. **Step 2:** Is ke baad upar majood buttons mein se **Delete** button (jis par image mein black rang ka short circle **2** likha hai) par click kar dein.
+
+### Figure 2.17 Breakdown
+
+<div align="center">
+  <img src="./images/18.png" width="600"/>
+</div>
+
+Jaise hi aap delete dabayenge, aap ke samne aik choti si warning window khulegi jaisa ke **Figure 2.17** mein dikhaya gaya hai:
+
+* Yeh window aap se confirm kar rahi hai ke kya aap waqai is stack ko urana chahte hain? Aap ne bas bina dare right side par majood orange rang ke **Delete stack** button par click kar dena hai.
+* *System Behavior Detail:* Deletion confirm hone ke baad, AWS background mein thora sa waqt (kuch minutes) lega aur is setup se juri har aik cheez aur us par chalne wale saare components (dependencies) ko khud-ba-khud jadh se saaf (delete) kar dega.
+
+*Bacho Wala Theoretical Aspect:*
+Yeh cloud infrastructure ko chalane ka sab se smart aur behtareen tareeqa hai. Jaise hum ne aik jhatke mein poora system automatic khara kiya تھا, waise hi aik click se hum sab kuch automatic mita bhi sakte hain. Aap jab chahein apni marzi se (on demand) naya ghar (infrastructure) banayein aur jab kaam khatam ho jaye toh usay gira dein. Aap paise bhi sirf tabhi dete hain jab woh computers cloud mein chal rahe hon.
+
+---
+
+## Summary
+
+Chalein ab is poore chapter ke main concepts ko bilkul simple points mein dohra lete hain taake aap ke liye revise karna super-easy ho:
+
+* **Poori Automation:** WordPress ya kisi bhi aur application ke liye cloud ka poora dhancha (infrastructure) khara karna 100% automatic kiya ja sakta hai.
+* **Muft Tool (CloudFormation):** AWS CloudFormation aik aisa automatic tool hai jo AWS humein bilkul free deta hai. Is ke zariye hum apne poore cloud system ko aik file (blueprint) ke zariye asani se control aur manage kar sakte hain.
+* **On-Demand Setup:** Kisi bhi web application ka system aap jab chahein, apni zaroorat ke mutabaq (on-demand) foran khara kar sakte hain. Is ke liye pehle se koi contract ya commitment nahi karni parti ke aap isay kitne mahine ya saal tak chalayenge.
+* **Usage Ke Mutabaq Bill:** Cloud mein bill sirf aap ke istemal par banta hai. Jaise agar aap koi virtual machine (EC2) chalate hain, toh us ka bill ghanton ke hisab se nahi balkay aik aik **second** ke mutabaq laya jata hai.
+* **System Ke Tukde:** WordPress ko cloud par kamyabi se chalane ke liye bohot saare components mil kar kaam karte hain, jaise virtual computers (EC2), traffic distribution ke liye load balancers, data ke liye databases (RDS), aur files ke liye network filesystems (EFS).
+* **Single-Click Deletion:** Automation ki taqat ki wajah se aap is poore bhari-kamkam setup ko sirf **aik click** se mukammal tor par delete kar ke apna bill foran zero kar sakte hain.
+
+---
