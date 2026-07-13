@@ -691,9 +691,13 @@ SDK ka matlab hota hai **Software Development Kit**. Agar aap hath se click nahi
 
 AWS dunya ki in tamam mashhoor programming languages aur platforms ke liye bani-banayi SDKs faraham karta hai:
 
-* JavaScript  Python  PHP
-* .NET  Ruby  Java
-* Go  Node.js  C++
+| Column 1 | Column 2 | Column 3 |
+| :--- | :--- | :--- |
+| JavaScript | Python | PHP |
+| .NET | Ruby | Java |
+| Go | Node.js | C++ |
+
+
 * **Application Integration:** SDKs ka asal istemaal tab hota hai jab aap koi software ya app bana rahe hotay hain aur aap us app ke andar AWS ki services ko fit (integrate) karna chahte hain. *Example:* Agar aap aik web app bana rahe hain aur aap chahte hain ke jab koi user sign-up kare, to aap ki app khud-ba-khud piche AWS ke NoSQL database mein data save kar de ya user ke mobile par aik push-notification bhej de, to yahan aap SDK ka code likhenge.
 * *Zaroori Rule:* AWS ki kuch khaas services jaise ke distributed queues (SQS) aur topics, unhein use karne ke liye SDK ka istemaal bilkul laazmi (must) hota hai.
 
@@ -724,6 +728,16 @@ Blueprint ka matlab hota hai **naksha ya sancha**. Yeh aap ke poore system ki ai
 * **Complex Environments:** Agar aap ko bohot barray ya complex (mushkil) cloud networks ko sambhalna ho, to hath se kaam karne ki bajaye hamesha blueprints ka istemaal karein. Yeh cloud ki configuration ko automatic karne mein sab se zyada madadgar sabit hotay hain.
 * **Asli Challenge (Nuksan):** Aap CLI scripts ya SDKs ka use kar ke apna custom code likh kar bhi infrastructure ko automatic kharra to kar sakte hain. Lekin agar aap khud script likhenge, to system ki saari aapas ki dependencies ko khud hal karna, versions ke badalne par code ko update rakhna, aur codes mein aane wale errors ko khud handle karna—yeh sab aap ka sar-dard ban jayega.
 * **Behtareen Solution:** Jaisa ke hum aage chal kar Chapter 4 mein tafseel se dekhenge, jab aap aik **blueprint** aur aik **Infrastructure-as-Code tool** ka combination chun lete hain, to yeh mushkil challenges automatic hal ho jaate hain aur computer saari pareshani khud sambhal leta hai.
+
+### Comparisons
+
+| Method | Kya Hai? | Best Use Case | Asaan Nazar (Pros/Cons) |
+| --- | --- | --- | --- |
+| **Manual Clicks** | AWS Console (Website) | Learning, Testing, Quick changes | Easy hai, lekin ghalti ke chances zyada hain. |
+| **CLI** | Terminal Commands | Automation, Quick Tasks | Fast hai, lekin mushkil tasks ke liye messy ho jata hai. |
+| **SDKs** | Programming Code | App development, Complex automation | Bohat power hai, lekin coding ana zaroori hai. |
+| **IaC** | Code files (Terraform) | Infrastructure Setup, Scale | Sab se best (Professional), har baar perfect result deta hai. |
+
 
 ---
 
