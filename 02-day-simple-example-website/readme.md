@@ -1,5 +1,44 @@
 # A Simple Example : Wordpress in 15 minutes
 
+<details>
+<summary><strong>Table of Contents</strong></summary>
+
+- [Ek Real-World Example Se Samajhte Hain](#ek-real-world-example-se-samajhte-hain)
+- [Creating your infrastructure](#creating-your-infrastructure)
+  - [Figure 2.1 Breakdown](#figure-21-breakdown)
+  - [CloudFormation Ke Zariye Automation](#cloudformation-ke-zariye-automation)
+  - [Figure 2.2 Breakdown](#figure-22-breakdown)
+  - [Figure 2.3 Breakdown](#figure-23-breakdown)
+  - [Figure 2.4 Breakdown](#figure-24-breakdown)
+- [Additional CloudFormation stack options](#additional-cloudformation-stack-options)
+  - [Figure 2.5 Breakdown](#figure-25-breakdown)
+  - [Figure 2.6 Breakdown](#figure-26-breakdown)
+  - [Figure 2.7 Breakdown](#figure-27-breakdown)
+- [Automation references](#automation-references)
+- [Virtual machines](#virtual-machines)
+  - [Figure 2.8 Breakdown](#figure-28-breakdown)
+- [Load balancer](#load-balancer)
+  - [Figure 2.9 Breakdown](#figure-29-breakdown)
+  - [Figure 2.10 Breakdown](#figure-210-breakdown)
+- [MySQL database](#mysql-database)
+  - [Figure 2.11 Breakdown](#figure-211-breakdown)
+  - [Figure 2.12 Breakdown](#figure-212-breakdown)
+- [Network filesystem](#network-filesystem)
+  - [Figure 2.13 Breakdown](#figure-213-breakdown)
+  - [Figure 2.14 Breakdown](#figure-214-breakdown)
+- [How much does it cost?](#how-much-does-it-cost)
+  - [Bill Kaise Banta Hai? (On-Demand Pricing Concept)](#bill-kaise-banta-hai-on-demand-pricing-concept)
+  - [Figure 2.15 Breakdown](#figure-215-breakdown)
+  - [Table 2.1 Breakdown (Exact Costing Sheet)](#table-21-breakdown-exact-costing-sheet)
+    - [Table Ki Simple Aur Aasan Wazahata:](#table-ki-simple-aur-aasan-wazahata)
+- [Deleting your infrastructure](#deleting-your-infrastructure)
+  - [Figure 2.16 Breakdown](#figure-216-breakdown)
+  - [Figure 2.17 Breakdown](#figure-217-breakdown)
+- [Summary](#summary)
+
+</details>
+
+
 Socho hum ek game khel rahe hain jahan hum ek website ko internet par chalana chahte hain. Is chapter mein hum seekhenge ke aik aam website (jaise WordPress blog) ko sirf 15 minutes mein AWS cloud par kaise shift (migrate) karte hain aur wahan is ka ek naya dhancha (infrastructure) khara karte hain.
 
 Puri book mein hum isi WordPress ki misaal ko bar-bar dekhnge taake mushkil cheezein aaram se samajh aa jayein. Jaise database ke concepts ko hum chapter 10 mein deeply parhain ge aur auto-scaling (yani users zyada hon toh machines ka khud-ba-khud barh jana) ko chapter 17 mein seekhenge.
@@ -17,6 +56,7 @@ Company chahti hai ke naye engineers par acha impression pare, is liye website k
 3. Aakhri faisla karke infrastructure ko delete kar denge.
 
 WordPress chalne ke liye **PHP** language use karta hai, data store karne ke liye **MySQL database** chahiye hota hai, aur images/files ke liye storage disk chahiye hoti hai. Pages serve karne ke liye **Apache** web server kaam karta hai. Ab hum in requirements ko AWS ke tools ke sath jorain ge.
+
 
 ---
 
