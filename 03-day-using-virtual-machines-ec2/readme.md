@@ -733,3 +733,186 @@ Kuch hi seconds mein machine ka status *Shutting down* aur phir *Terminated* ho 
 
 ---
 
+## Changing the size of a virtual machine
+
+Cloud computing ka sab se bada aur dilchasp faida yehi hai ke aap kisi bhi waqt apni virtual machine ka size chota ya bada kar sakte hain. Is capability ko technical zaban mein **Vertical Scaling (Scale Up / Scale Down)** kehte hain.
+
+### Vertical Scaling Kya Hoti Hai? (Bacho Wali Example)
+
+Iski misal bilkul aisi hai ke shuru mein aap ne ek choti dukan (t2.micro) kholi kyunke aap ke paas customer kam the. Lekin jaise hi dukan par customer ka rush (workload) barh gaya, aap ne dukan ko bara kar ke ek bada mall (m5.large) bana diya taake zyada logon ko handle kiya ja sake. Cloud par hum CPU aur RAM ke sath bilkul yahi karte hain! Agar computing power kam paray toh machine bari kar do (Scale Up), aur agar kharcha bachana ho toh dukan phir choti kar do (Scale Down).
+
+Chaliye, pehle hum ek choti virtual machine launch karte hain:
+
+1. AWS Management Console mein **EC2 Dashboard** par jayein: `[https://console.aws.amazon.com/ec2/](https://console.aws.amazon.com/ec2/)`.
+2. Orange rang ka **Launch Instances** button click karein.
+3. Virtual machine ka naam **`growingup`** rakhein.
+4. Operating system ke liye **Amazon Linux 2 AMI** select karein (2026 standards ke mutabaq aap modern **Amazon Linux 2023** bhi chun sakte hain).
+5. Instance type mein **`t2.micro`** select karein (jo ke free tier ke liye bilkul muft hai).
+6. Connection settings mein **Proceed without a Key Pair** select karein.
+7. Network aur Storage settings ko default par hi choren (yani 8 GB SSD disk).
+8. **Advanced Details** ke andar ja kar **IAM instance profile** ke dropdown se hamara banaya hua secure badge **`ec2-ssm-core`** select karein.
+9. Sab se niche ja kar **Launch instance** par click kar dein.
+
+Ab aap ke paas AWS ki sab se choti aur sasti virtual machines mein se ek (`t2.micro`) chal rahi hai.
+
+---
+
+### Machine Ki Power Ko Check Karna (Linux Commands Deep Explanation)
+
+Aap ke DevOps engineer banne ke safar aur Linux administration ko behtareen tareeqe se seekhne ke liye system ki specifications ko check karna aana bohot zaroori hai.
+
+Session Manager ke zariye terminal se connect karein aur niche di gayi do technical commands run karein:
+
+#### Command 1: `cat /proc/cpuinfo`
+
+Linux operating system mein `/proc` ek aisi virtual (pseudo) directory hoti hai jo hard disk par real space nahi leti, balkey direct Linux Kernel se system hardware ka live data utha kar dikhati hai. Is command ke zariye hum CPU ki information dekhte hain.
+
+```bash
+$ cat /proc/cpuinfo
+processor   : 0
+vendor_id   : GenuineIntel
+cpu family  : 6
+model       : 63
+model name  : Intel(R) Xeon(R) CPU E5-2676 v3 @ 2.40GHz
+stepping    : 2
+microcode   : 0x46
+cpu MHz     : 2399.915
+cache size  : 30720 KB
+...
+```
+
+**Output Breakdown:**
+
+* **`processor : 0`**: Iska matlab hai hamari machine ke paas sirf **1 CPU Core** hai (Linux mein counting 0 se shuru hoti hai).
+* **`vendor_id : GenuineIntel`**: Yeh processor Intel company ne banaya hai.
+* **`model name : Intel(R) Xeon(R) CPU E5-2676 v3 @ 2.40GHz`**: Yeh AWS data center ke physical server ka core model aur uski speed (2.40 Gigahertz) batata hai.
+* **`cpu MHz : 2399.915`**: Processor ki live running frequency/speed.
+
+#### Command 2: `free -m`
+
+Yeh command hamari virtual machine ki RAM (Memory) ki details Megabytes (`-m`) mein dikhati hai taake hum dekh sakein ke kitni memory khali hai aur kitni use ho rahi hai.
+
+```bash
+$ free -m
+              total   used   free   shared   buff/cache   available
+Mem:            965     93    379        0          492         739
+Swap:             0      0      0
+```
+
+**Output Breakdown (Table of Memory):**
+
+| Column Name | Value (MB) | ELI5 Description (Bacho ki tarah asaan) |
+| --- | --- | --- |
+| **total** | `965` | Machine ke paas total takreeban **1 GB** (965 MB) RAM hai. |
+| **used** | `93` | Abhi is waqt system sirf 93 MB RAM use kar raha hai. |
+| **free** | `379` | Bilkul khali RAM jo abhi kisi bhi kaam mein nahi hai. |
+| **buff/cache** | `492` | Linux system chalte waqt files ko tezi se load karne ke liye RAM ka ek hissa temporary cache mein rakh leta hai. |
+| **available** | `739` | **Sab se ahem column!** Iska matlab hai agar aap koi naya software run karenge toh usay total 739 MB RAM mil sakti hai bina system ko slow kiye. |
+| **Swap** | `0` | Virtual disk memory jo RAM khatam hone par storage ko use karti hai, wo abhi disabled (0) hai. |
+
+---
+
+### Machine Ka Size Kaise Barhein? (The Stop/Start Design Trade-Off)
+
+Agar aap ki application ka load barh jaye, use zyada CPU ya RAM chahiye, toh hum machine ka size barha sakte hain. Lekin yahan ek nihayat hi ahem technical asool (trade-off) yaad rakhein: **Chalti gari ka engine tabdeel nahi kiya ja sakta!**
+
+* **The Design Decision:** AWS par jab machine chal rahi hoti hai, toh wo physical hardware ke ek specific slot ke sath bandhi hoti hai. Instance type badalne ke liye humein machine ko **Stop** karna parta hai.
+* **The Trade-Off:** Is ka matlab hai ke machine ko resize karte waqt thodi der ke liye **Downtime** (system ka band hona) hoga. Lekin iska faida yeh hai ke aap ka storage database aur files (jo EBS disk par hain) mukammal tor par mehfooz rehte hain aur naye server par asani se mount ho jate hain.
+
+Machine ko stop karne ke steps:
+
+1. EC2 Console par jayein aur **Instances** select karein.
+2. Apni machine `growingup` par click karein.
+3. **Instance State** dropdown par click kar ke **Stop Instance** select karein aur tab tak wait karein jab tak status "Stopped" na ho jaye.
+
+> ⚠️ **Cost Warning:** Machine ka size barha kar `m5.large` ya is se upar karne par AWS aap se hourly charges leta hai (yeh free tier mein nahi aati). Is liye kaam khatam hote hi isay terminate karna mat bhooliye ga!
+
+---
+
+### Instance Type Change Karna (Figure 3.20 Breakdown)
+
+<div align="center">
+  <img src="./images/23.png" width="600"/>
+</div>
+
+Jab machine mukammal tor par stop ho jaye, toh hum naya engine (size) choose karenge:
+
+1. Machine select rakhin, **Actions** button par click karein, aur **Instance Settings** par jayein.
+2. Wahan **Change Instance Type** par click karein.
+
+#### Figure 3.20 Ka Console Breakdown:
+
+* **Figure 3.20** mein humein "Change instance type" ka dialogue box nazar aa raha hai.
+* Is mein hamari machine ki ID (`i-0e1839ff9466a9c5e`) aur uska current type (`t2.micro`) likha hua hai.
+* Hum ne dropdown menu par click kar ke **`m5.large`** select karna hai aur orange rang ke **Apply** button par click kar dena hai.
+
+#### 2026 Modern Standard Update:
+
+* Book mein `m5.large` use karne ka kaha gaya hai. Lekin 2026 mein m5 family purani ho chuki hai.
+* Aaj ke dor mein is se kahin sasti aur behtareen option **`m6i.large`** (Intel Based) ya **`m7i.large`** hai. Agar aap AWS Graviton (ARM processor) use karna chahein, toh aap **`m6g.large`** ya **`m7g.large`** select kar sakte hain jo ke nihayat hi tez aur cost-effective hain!
+
+Apply karne ke baad, machine ko select karein aur **Instance State** se **Start Instance** par click kar ke on kar lein.
+
+---
+
+### Naye Size Ko Verify Karna
+
+Ab jab machine bade engine ke sath on ho chuki hai, toh dobara Session Manager se terminal connect karein aur unhi dono commands ko run kar ke dekhein ke kya farq aaya hai:
+
+```bash
+$ cat /proc/cpuinfo
+processor       : 0
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 85
+model name      : Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz
+stepping        : 7
+microcode       : 0x500320a
+cpu MHz         : 3117.531
+cache size      : 36608 KB
+...
+
+processor       : 1
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 85
+model name      : Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz
+stepping        : 7
+microcode       : 0x500320a
+
+cpu MHz        : 3100.884
+cache size     : 36608 KB
+...
+```
+
+**New Output Analysis:**
+
+* Ab aap ke terminal par ek ke badle do CPU cores ki list dikh rahi hogi: **`processor : 0`** aur **`processor : 1`**! Yani CPU power double ho chuki hai.
+* Model name bhi update ho kar heavy server grade chip ban chuka hai: **`Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz`**.
+
+```bash
+$ free -m
+              total   used   free   shared   buff/cache   available
+Mem:           7737    108   7427        0          202        7406
+Swap:             0      0      0
+```
+
+**New Output Analysis:**
+
+* **`total (7737 MB)`**: Hamari RAM ab **1 GB** se barh kar takreeban **8 GB** (7737 Megabytes) ho chuki hai!
+* **`free (7427 MB)`**: System ke paas ab pehle se 20 guna zyada khali memory moojood hai. Hamari application ab bina ruke aur fast tareeqe se heavy tasks perform kar sakegi.
+
+---
+
+## Cleaning up
+
+Kyunke `m5.large` (ya 2026 ke modern equivalent) instances par hourly charges lagte hain, is liye testing mukammal hone ke baad system ko mita dena hi ek behtareen DevOps rule hai taake fazool bills na banin.
+
+1. AWS Console par **EC2 Instances** ki list mein jayein.
+2. Apni machine **`growingup`** ke checkbox ko select karein.
+3. Top menu mein **Instance State** par click kar ke **Terminate Instance** select karein.
+4. Warning pop-up par **Terminate** daba kar confirm kar dein.
+
+Kuch hi der mein machine completely delete ho jayegi aur aap ke billing charges foran ruk jayenge. Aap ne kamyabi se EC2 instances par vertical scaling ka poora concept step-by-step seekh liya hai!
+
+----
