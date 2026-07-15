@@ -1220,6 +1220,311 @@ AWS ne **February 1, 2024** se apni billing policy mukammal tor par tabdeel kar 
 * **Cost:** Takreeban **$0.005 per hour** (jo ke mahine ka lag bhag **$3.60 per IP** banta hai).
 * **DevOps Best Practice:** Is liye, apna practical test mukammal karne ke baad Elastic IP ko sirf disassociate hi nahi karna, balkey use hamesha ke liye **Release** (delete) kar dena hai taake aap ke account par fazool charges na lagte rahein. (Hum clean-up agle section mein seekhenge).
 
+---
 
+## Adding an additional network interface to a virtual machine
+
+Abhi tak hum ne seekha ke ek virtual machine (EC2) ko kaise chalate hain aur us ke sath ek pakka IP address (Elastic IP) kaise jorhte hain. Lekin kya aap ko pata hai ke aap apni virtual machine ke network cards ko bhi customize kar sakte hain?
+
+AWS par hum ek virtual machine ke sath ek se zyada virtual network cards attach kar sakte hain. AWS ki zaban mein in network cards ko **Elastic Network Interface (ENI)** kaha jata hai.
+
+### Elastic Network Interface (ENI) Kya Hai? (Bacho Wali Example)
+
+Iski sab se asaan misal ek **Dual-SIM Mobile Phone** jaisi hai:
+
+* Aap ke paas ek hi mobile phone (Virtual Machine) hai.
+* Lekin aap us mein do alag-alag SIM cards (Network Interfaces) daal dete hain.
+* **SIM 1 (eth0):** Aap ka personal number hai jise aap family ke liye use karte hain.
+* **SIM 2 (eth1):** Aap ka business number hai jise aap customers ke liye use karte hain.
+* Dono SIMs ke apne alag-alag phone numbers (IP addresses) hote hain, lekin mobile phone ek hi hota hai.
+
+#### Multiple Network Interfaces Ke Real-World Use Cases:
+
+1. **Legacy Clients Aur SSL/TLS Certificates (Bina SNI Ke):**
+Pehle zamane mein agar aap ne ek hi server par do alag websites chalani hoti thin aur dono par SSL (HTTPS) lagana hota tha, toh har website ke liye ek alag IP address zaroori hota تھا (kyunke purane browsers Server Name Indication yani SNI support nahi karte the). Do interfaces se humein do alag IPs milte hain aur hum bina kisi security error ke dono chala sakte hain.
+2. **Management Network Ko Application Network Se Alag Karna (Security Boundary):**
+
+<div align="center">
+  <img src="./images/28.png" width="600"/>
+</div>
+
+* **Figure 3.25** ko agar aap dekhein, toh yahan ek virtual machine ko do alag-alag subnets (networks) ke sath jorha gaya hai:
+* **Subnet 1 (Public):** Is interface ke zariye aam internet users aap ki application ya website tak pohochty hain.
+* **Subnet 2 (Private/Management):** Is dusre interface ke zariye sirf aap ke system administrators ya internal monitoring tools secure tareeqe se machine se connect hote hain. Is tarah aam users aur admin network bilkul alag rehte hain.
+3. **Network and Security Appliances:**
+Bohot saare security hardwares (jaise Firewalls, Load Balancers, ya Intrusion Detection Systems) ko chalne ke liye multiple network interfaces chahiye hote hain taake wo ek taraf se traffic lein (inspect karein) aur dusri taraf se aage bhejein.
+
+---
+
+### Step-by-Step: Creating and Attaching the 2nd Interface (Figures Breakdown)
+
+Chaliye, ab hum practical kaam shuru karte hain aur apni Sydney wali machine ke liye ek dusra network card banate hain.
+
+#### 1. Creating the Network Interface (Figure 3.26 Breakdown)
+
+<div align="center">
+  <img src="./images/29.png" width="600"/>
+</div>
+
+* **Figure 3.26** ke mutabaq, apne EC2 Dashboard ke left menu se **Network & Security** section mein jayein aur **Network Interfaces** par click karein.
+* Top right par moojood **Create network interface** button par click karein. Aap ke samne ek form khul jayega:
+* **Description:** Is mein likhin **`2nd interface`** taake aap ko baad mein pehchanna asaan ho.
+* **Subnet:** Yahan aap ne wahi subnet choose karna hai jo aap ki Sydney machine ka primary interface use kar raha hai (step 2 mein jo subnet ID aap ne note ki thi).
+* **Private IPv4 address:** Isay **Auto-assign** par set rehne dein taake AWS khud se ek khali private IP address chun le.
+* **Security groups:** Yahan hamara banaya hua firewall **`launch-wizard-1`** select karein.
+* Sab se niche ja kar **Create network interface** par click kar dein.
+
+
+
+#### 2. Attaching the Interface to the VM (Figure 3.27 Breakdown)
+
+<div align="center">
+  <img src="./images/30.png" width="600"/>
+</div>
+
+* Jab aap ka naya interface ban jaye aur uska status **Available** ho jaye, toh use select karein.
+* **Actions** menu par click kar ke **Attach** select karein.
+* **Figure 3.27** ke mutabaq ek chota dialog box khulega:
+* Dropdown par click kar ke apni Sydney machine ki **Instance ID** (`i-0c5b91f6d61f2d187`) select karein.
+* **Attach** button par click kar dein. Ab aap ki machine ke sath do network cards lag chuke hain!
+
+
+
+---
+
+### Associating an Elastic IP to the 2nd Interface (Figure 3.28 Breakdown)
+
+<div align="center">
+  <img src="./images/31.png" width="600"/>
+</div>
+
+Ab hum ek naya Elastic IP address allocate karenge aur use is dusre network card (`2nd interface`) ke sath jorhein ge taake humein doosra public IP mil sake.
+
+* Elastic IPs menu mein ja kar ek naya public IP allocate karein (jaise hum ne pichle section mein kiya tha).
+* Naye allocated IP ko select karein, **Actions** par jayein, aur **Associate Elastic IP address** par click karein.
+* **Figure 3.28** ke mutabaq is baar details dhyan se set karni hain:
+* **Resource type:** Is baar hum ne "Instance" ke bajaye **`Network interface`** select karna hai. (Kyunke machine ke paas do interfaces hain, agar hum instance select karte toh AWS confuse ho jata ke kis card par IP lagana hai).
+* **Network interface:** Dropdown se apna banaya hua **`2nd interface`** (jis ki ID `eni-...` se shuru hoti hai) select karein.
+* **Private IP address:** Is interface ke sath jo private IP auto-assign hua tha, dropdown se use select kar lein.
+* **Associate** button par click kar dein.
+
+
+
+Ab aap ki single virtual machine poori duniya se **do mukhtalif Public IP addresses** ke zariye connect ho sakti hai!
+
+---
+
+### Analyzing Network Configuration with Commands (2026 Modern Standard)
+
+Ab hum apni Sydney wali machine ke terminal (Session Manager) mein wapas chalte hain aur check karte hain ke kya operating system ko pata chal chuka hai ke us ke sath do network cards lag chuke hain?
+
+#### Command: `ifconfig`
+
+* **ifconfig** (Interface Configuration) Linux ki ek classic networking command hai jo system ke tamam network cards aur un ke IP addresses dikhati hai.
+
+```bash
+$ ifconfig
+eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 9001
+        inet 172.31.33.219  netmask 255.255.240.0  broadcast 172.31.47.255
+        inet6 fe80::495:5fff:fea6:abde  prefixlen 64  scopeid 0x20<link>
+        ether 06:95:5f:a6:ab:de  txqueuelen 1000  (Ethernet)
+        RX packets 68382  bytes 80442006 (76.7 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 35228  bytes 4219870 (4.0 MiB)
+        TX errors 0  dropped 0  overruns 0  carrier 0  collisions 0
+
+--> The primary network interface uses the private IP address 172.31.33.219.
+
+eth1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 9001
+        inet 172.31.47.158  netmask 255.255.240.0  broadcast 172.31.47.255
+        inet6 fe80::4a2:8fff:feaa:bbba  prefixlen 64  scopeid 0x20<link>
+        ether 06:a2:8f:aa:bb:ba  txqueuelen 1000  (Ethernet)
+        RX packets 22  bytes 1641 (1.6 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 33  bytes 2971 (2.9 KiB)
+        TX errors 0  dropped 0  overruns 0  carrier 0  collisions 0
+
+--> The secondary network interface uses the private IP address 172.31.47.158.
+```
+
+#### Output Breakdown:
+
+Terminal par chalne wali command ka output humein do alag network interfaces dikha raha hai:
+
+* **`eth0` (Primary Network Interface):**
+```text
+eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 9001
+      inet 172.31.33.219  netmask 255.255.240.0  broadcast 172.31.47.255
+```
+
+
+* Yeh hamari machine ka pehla/asal network card hai.
+* Iska private IP address **`172.31.33.219`** hai.
+
+
+* **`eth1` (Secondary Network Interface):**
+```text
+eth1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 9001
+      inet 172.31.47.158  netmask 255.255.240.0  broadcast 172.31.47.255
+```
+
+
+* Yeh hamara abhi lagaya hua dusra network card (`2nd interface`) hai.
+* Iska private IP address **`172.31.47.158`** hai.
+
+
+> ⚠️ **Nihayat Ahem 2026 Technical Update (`ifconfig` vs `ip a`):**
+> Aaj ke modern operating systems (jaise **Amazon Linux 2023**) mein purani tool `net-tools` (jis mein `ifconfig` aata tha) default installed nahi hoti. Modern Linux system administrators ab modern **`ip`** routing utility command use karte hain.
+> Hum aap ko highly recommend karenge ke aap `ifconfig` ke badle yeh modern command yaad rakhein:
+> ```bash
+> ip address show  # (Ya asani ke liye sirf 'ip a')
+> ```
+> 
+> 
+> Iska output bhi bilkul isi tarah `eth0` aur `eth1` ke under un ke respective private IPs (`172.31.33.219` aur `172.31.47.158`) ko saaf saaf dikhata hai.
+
+---
+
+### Serving Two Different Websites (Virtual Hosts Setup)
+
+Ab ata hai sab se mazedaar architectural concept!
+
+### Virtual Machine Ko Apne Public IP Ka Kyun Nahi Pata? (The NAT Concept)
+
+Agar aap ne dhyan diya ho, toh `ifconfig` ya `ip a` ke output mein kahin bhi hamara **Public Elastic IP** (`13.236.254.54` ya `3.105.248.200`) likha nazar nahi aata.
+
+* **Concept:** AWS background mein **NAT (Network Address Translation)** use karta hai. Jab bahar se koi user aap ke Public IP par aata hai, toh AWS ka internet gateway use convert kar ke automatic aap ke private IP (`eth0` ya `eth1`) par bhej deta hai.
+* **Solution:** Operating system sirf private IP ko samajhta hai. Is liye agar hum ne do alag-alag websites chalani hain, toh humein Apache web server ko yeh batana hoga ke agar request `eth0` ke private IP par aaye toh **Website A** dikhao, aur agar request `eth1` ke private IP par aaye toh **Website B** dikhao!
+
+```bash
+$ sudo -s
+$ mkdir /var/www/html/a
+$ wget -P /var/www/html/a \
+  https://raw.githubusercontent.com/AWSinAction/code3/main/chapter03/a/index.html
+
+$ mkdir /var/www/html/b
+$ wget -P /var/www/html/b \
+  https://raw.githubusercontent.com/AWSinAction/code3/main/chapter03/b/index.html
+```
+
+#### Step 1: Websites Ke Liye Folders Aur Files Bananna
+
+Sab se pehle root user banne ke liye terminal mein type karein:
+
+```bash
+sudo -s
+```
+
+*(Yeh command aap ko system ka administrator `root` bana deti hai taake aap system configuration files ko edit kar sakein).*
+
+Ab do alag websites ke liye folders banayein aur book ke code repository se simple HTML templates (files) download karein:
+
+```bash
+# Website A setup
+mkdir /var/www/html/a
+wget -P /var/www/html/a https://raw.githubusercontent.com/AWSinAction/code3/main/chapter03/a/index.html
+
+# Website B setup
+mkdir /var/www/html/b
+wget -P /var/www/html/b https://raw.githubusercontent.com/AWSinAction/code3/main/chapter03/b/index.html
+
+```
+
+* **Code Explanation:**
+* `mkdir /var/www/html/a`: Apache ke web directory mein "a" naam ka naya folder banana.
+* `wget -P /...`: Web se file download karne ka tool. `-P` switch batata hai ke downloaded `index.html` file ko direct kis folder ke andar save karna hai.
+
+
+
+---
+
+#### Step 2: Website A Ka Virtual Host Configure Karna
+
+Hum Apache ko batayenge ke `eth0` wale private IP ko website "a" ke sath map karein. Is ke liye hum `/etc/httpd/conf.d/` folder mein ek configuration file banayein ge:
+
+```bash
+nano /etc/httpd/conf.d/a.conf
+```
+
+*(Yeh command terminal ke andar nano editor mein `a.conf` file open kar degi).*
+
+Ab is file ke andar niche diya gaya code paste karein. **Yaad rakhin ke `172.31.x.x` ki jagah aap ne apni machine ka `eth0` wala private IP address likhna hai** (jaise hamari example mein `172.31.33.219` hai):
+
+```apache
+<VirtualHost 172.31.33.219:80>
+    DocumentRoot /var/www/html/a
+</VirtualHost>
+```
+
+* **Code Explanation:**
+* `<VirtualHost IP:Port>`: Yeh directive Apache ko batata hai ke agar is specific IP address aur Port 80 (HTTP) par koi request aaye, toh usay handle karo.
+* `DocumentRoot`: Yeh batata hai ke is website ki files kis folder (directory) ke andar pari hain.
+
+
+
+*File ko save karne ke liye terminal par **CTRL + X** dabayein, phir **y** likhin aur **Enter** daba dein.*
+
+---
+
+#### Step 3: Website B Ka Virtual Host Configure Karna
+
+Bilkul isi tarah hum `eth1` wale private IP ko website "b" ke sath map karenge:
+
+```bash
+nano /etc/httpd/conf.d/b.conf
+```
+
+Is file ke andar niche diya gaya code paste karein. **Yahan aap ne `eth1` wala private IP address likhna hai** (jaise hamari example mein `172.31.47.158` hai):
+
+```apache
+<VirtualHost 172.31.47.158:80>
+    DocumentRoot /var/www/html/b
+</VirtualHost>
+```
+
+*File ko save karne ke liye **CTRL + X**, phir **y** aur **Enter** dabayein.*
+
+---
+
+#### Step 4: Web Server Restart Aur Testing
+
+Tamam configurations ko system mein apply karne ke liye Apache web server ko restart karna zaroori hai:
+
+```bash
+systemctl restart httpd
+```
+
+Ab test karne ka waqt aa gaya hai!
+
+1. Apne browser mein pehla **Elastic IP** (jo `eth0` se jura hai) open karein: `http://[Elastic_IP_1]`. Aap ko screen par likha nazar aayega: **"Hello A!"**.
+2. Ab browser mein dusra **Elastic IP** (jo `eth1` se jura hai) open karein: `http://[Elastic_IP_2]`. Aap ko screen par likha nazar aayega: **"Hello B!"**.
+
+**Kamyabi!** Aap ne kamyabi se ek hi virtual machine par do mukhtalif network cards use kar ke do alag-alag websites ko un ke respective public IPs ke zariye serve kar diya hai. Yeh ek nihayat hi advance aur shandar networking setup hai.
+
+---
+
+> ⚠️ **Ahem Note:** Chunke hum ne Sydney region par switch kiya tha, apna kaam mukammal karne ke baad hum wapas main region **US East (N. Virginia)** par switch karenge. Is ke liye console ke top right corner se region selector par click kar ke **US East (N. Virginia)** select kar lein.
+
+---
+
+## Cleaning up
+
+Kyunke hum ne is chapter mein makhsoos aur costly resources (jaise do Elastic IPs aur additional Network Interface) banaye hain, in par lagne wale faaltu charges se bachne ke liye poore setup ko mita dena hi hamari sab se behtareen safe practice hai. Niche diye gaye steps ke mutabaq cleanup mukammal karein:
+
+1. **Terminate VM:** Sydney region mein wapas jayein, apni virtual machine `sydney` ko select kar ke **Terminate** kar dein. Jab tak machine mukammal tor par terminate (deleted) na ho jaye, tab tak wait karein.
+2. **Delete 2nd Network Interface:**
+* **Network Interfaces** menu mein jayein.
+* Apne banaye hue **`2nd interface`** ko select karein.
+* Kyunke machine delete ho chuki hai, yeh interface ab **Available** state mein hoga. Isay select kar ke **Actions** se **Delete** kar dein.
+
+
+3. **Release Elastic IPs (Nihayat Ahem 2026 Billing Rule):**
+* **Elastic IPs** menu mein jayein.
+* Dono public IP addresses ko select karein.
+* **Actions** par click karein aur **Release Elastic IP addresses** select kar ke confirm kar dein.
+* *(Yaad rakhin, 2026 ke rules ke mutabaq in ko release karna sab se zaroori hai, warna in ka bill banta rahega).*
+
+
+4. **Delete Security Group:** **Security Groups** menu mein jayein, `launch-wizard-1` ko select kar ke use delete kar dein.
 
 ---
