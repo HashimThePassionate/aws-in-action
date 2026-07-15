@@ -1,4 +1,40 @@
-# Using virtual machines: EC2
+# Using virtual machines: Elastic Compute Cloud EC2
+
+<details>
+<summary>Table of Contents</summary>
+
+Jump straight to any part of the chapter.
+
+- [Overview](#not-all-examples-are-covered-by-free-tier)
+- [Virtual machines](#exploring-a-virtual-machine)
+- [Launch flow](#launching-a-virtual-machine)
+- [Networking and firewall](#defining-network-and-firewall-settings)
+- [Storage](#attaching-storage)
+- [Advanced details](#setting-advanced-details)
+- [IAM role creation](#creating-iam-role)
+- [Launch instance](#launching-the-ec2-instance)
+- [Connect to the VM](#connecting-to-your-virtual-machine)
+- [SSH and SCP](#ssh-and-scp)
+- [Manual software install](#installing-and-running-software-manually)
+- [Monitoring and debugging](#monitoring-and-debugging-a-virtual-machine)
+- [System logs](#showing-logs-from-a-virtual-machine)
+- [CloudWatch metrics](#monitoring-the-load-of-a-virtual-machine)
+- [Shutdown and cleanup](#shutting-down-a-virtual-machine)
+- [Cleanup after shutdown](#cleaning-up)
+- [Resize the VM](#changing-the-size-of-a-virtual-machine)
+- [Cleanup after resizing](#cleaning-up-1)
+- [Launch in another region](#starting-a-virtual-machine-in-another-data-center)
+- [Elastic IPs](#allocating-a-public-ip-address)
+- [Multiple network interfaces](#adding-an-additional-network-interface-to-a-virtual-machine)
+- [Cleanup after networking](#cleaning-up-2)
+- [Cost optimization](#optimizing-costs-for-virtual-machines)
+- [Savings Plans](#commit-to-usage-get-a-discount)
+- [Capacity Reservations](#capacity-reservations)
+- [Spot Instances](#taking-advantage-of-spare-compute-capacity)
+- [Final cleanup](#cleaning-up-3)
+- [Summary](#summary)
+
+</details>
 
 Aap apne haath mein pakde hue smartphone ya apne bag mein rakhe laptop ki taqat ko dekh kar heraan hote honge ke yeh kitne saare kaam asani se kar lete hain. Lekin, agar aap ka task aisa hai jise bohot zyada **massive computing power** chahiye, ya bohot zyada **network traffic** handle karni hai, ya phir use bina ruke **24/7** chalte rehna hai, to aap ke laptop ya mobile ki bas ho jayegi! Aise kamo ke liye ek **Virtual Machine (VM)** sab se behtareen solution hai.
 
@@ -158,7 +194,7 @@ Writer ne April 2022 ke rates bataye the, lekin neeche hum ne **2026 ke modern s
 
 | Instance Type | Virtual CPUs (vCPUs) | Memory (RAM) | Description / Core Behavior | Typical Use Case | 2026 Est. Monthly Cost (On-Demand Linux) |
 | --- | --- | --- | --- | --- | --- |
-| **t3.nano** (Replacing t2.nano) | 2 vCPUs | 0.5 GiB | Cheap aur burstable performance. 2 vCPUs ke sath aati hai jo t2 se behtar performance deti hai. | Chote testing environments, low-traffic web apps. | ~$3.80 |
+| **t3.nano** (Replacing t2.nano) | 2 vCPUs | 0.5 GiB 512 MiB | Cheap aur burstable performance. 2 vCPUs ke sath aati hai jo t2 se behtar performance deti hai. | Chote testing environments, low-traffic web apps. | ~$3.80 |
 | **m6i.large** / **m7i.large** | 2 vCPUs | 8 GiB | Balanced ratio. CPU aur RAM ka behtareen tawazun. (m7i features modern Intel Xeon processors). | Medium databases, backend APIs, enterprise apps. | ~$65 - $70 |
 | **r6i.large** / **r7i.large** | 2 vCPUs | 16 GiB | Memory-optimized. CPU ke muqable RAM bohot zyada hoti hai. | In-memory caches (Redis/Memcached), heavy database servers. | ~$85 - $90 |
 
@@ -245,7 +281,7 @@ Hum aage chal kar AWS ka modern tareeqa seekhenge (jaise **AWS Systems Manager S
 
 Ab hum apni virtual machine ke liye rasta aur deewar (Network aur Firewall) tayar karne lage hain. AWS par network ko hum **VPC (Virtual Private Cloud)** kehte hain aur firewall ko **Security Group** kehte hain.
 
-### Security Group aur Firewall Kya Hai? (Bacho Wali Example)
+### Security Group aur Firewall Kya Hai?
 
 Iski misal aise samajhein ke aap ne ek naya ghar (EC2 Instance) banaya hai. Is ghar ke bahar ek chowkidar (Security Group/Firewall) betha hai.
 
@@ -306,7 +342,7 @@ Yeh bilkul aap ke laptop ki **C: Drive** ki tarah hai. Jab bhi computer on hota 
 
 Ab hum setup ke aakhri aur nihayat hi ahem hisse par pahuche hain jise **Advanced details** kehte hain. Yahan hum ne ek cheez set karni hai jise **IAM Role** kaha jata hai.
 
-### IAM Role Kya Hota Hai? (Bacho Wali Example)
+### IAM Role Kya Hota Hai?
 
 Imagine karein ke AWS ek bohot bada secure campus hai. Aap ki EC2 machine us campus mein ek worker hai.
 
@@ -737,7 +773,7 @@ Kuch hi seconds mein machine ka status *Shutting down* aur phir *Terminated* ho 
 
 Cloud computing ka sab se bada aur dilchasp faida yehi hai ke aap kisi bhi waqt apni virtual machine ka size chota ya bada kar sakte hain. Is capability ko technical zaban mein **Vertical Scaling (Scale Up / Scale Down)** kehte hain.
 
-### Vertical Scaling Kya Hoti Hai? (Bacho Wali Example)
+### Vertical Scaling Kya Hoti Hai?
 
 Iski misal bilkul aisi hai ke shuru mein aap ne ek choti dukan (t2.micro) kholi kyunke aap ke paas customer kam the. Lekin jaise hi dukan par customer ka rush (workload) barh gaya, aap ne dukan ko bara kar ke ek bada mall (m5.large) bana diya taake zyada logon ko handle kiya ja sake. Cloud par hum CPU aur RAM ke sath bilkul yahi karte hain! Agar computing power kam paray toh machine bari kar do (Scale Up), aur agar kharcha bachana ho toh dukan phir choti kar do (Scale Down).
 
@@ -946,7 +982,7 @@ AWS Console par kam karne ka region badalna nihayat hi asaan hai:
 
 * **Figure 3.21** ko agar aap dekhein, toh AWS Management Console ke top navigation bar mein right side par aap ko region ka naam likha nazar aayega (jaise pehle *N. Virginia* likha tha).
 * Is dropdown menu par click karein. Aap ke samne poori duniya ke regions ki list aa jayegi.
-* Is list mein se **Asia Pacific (Sydney) `ap-southeast-2**` par click kar dein, jaisa ke Figure 3.21 mein orange arrow ke zariye dikhaya gaya hai.
+* Is list mein se **Asia Pacific (Sydney) `ap-southeast-2`** par click kar dein, jaisa ke Figure 3.21 mein orange arrow ke zariye dikhaya gaya hai.
 * Click karte hi aap ka dashboard Sydney region par switch ho jayega, aur ab aap jo bhi machine banayenge wo physical tor par Australia ke data center mein banegi!
 
 ---
@@ -1123,7 +1159,7 @@ Abhi tak is book mein hum ne jitni bhi virtual machines launch ki hain, un ke sa
 
 Agar aap koi serious application ya website chalana chahte hain, toh badalne wala IP address bilkul kaam nahi karega. Is masle ko hal karne ke liye AWS ek service deta hai jise **Elastic IP (EIP)** kaha jata hai. Elastic IP aap ko ek **fixed (static/permanent) public IP address** allocate karne ki sahulat deta hai jo kabhi nahi badalta jab tak aap khud use delete na karein.
 
-### Elastic IP Kyun Zaroori Hai? (Bacho Wali Example)
+### Elastic IP Kyun Zaroori Hai?
 
 Imagine karein ke aap ne ek biryani ki dukan kholi hai.
 
@@ -1228,7 +1264,7 @@ Abhi tak hum ne seekha ke ek virtual machine (EC2) ko kaise chalate hain aur us 
 
 AWS par hum ek virtual machine ke sath ek se zyada virtual network cards attach kar sakte hain. AWS ki zaban mein in network cards ko **Elastic Network Interface (ENI)** kaha jata hai.
 
-### Elastic Network Interface (ENI) Kya Hai? (Bacho Wali Example)
+### Elastic Network Interface (ENI) Kya Hai?
 
 Iski sab se asaan misal ek **Dual-SIM Mobile Phone** jaisi hai:
 
@@ -1531,13 +1567,11 @@ Kyunke hum ne is chapter mein makhsoos aur costly resources (jaise do Elastic IP
 
 ## Optimizing costs for virtual machines
 
-Cloud infrastructure ko design aur manage karte waqt cost-optimization har DevOps engineer ki pehli aur sab se ahem priority hoti hai. Muhammad Hashim, jab hum bade-scale systems par kaam karte hain, toh fazool kharche ko rokna aur budget ko customize karna hamari zimmedari hoti hai.
-
-Chaliye ab is book ke agle hisse ko bilkul asaan, step-by-step, aur modern 2026 ke standards ke mutabaq Roman Urdu mein samajhte hain.
+Cloud infrastructure ko design aur manage karte waqt cost-optimization har DevOps engineer ki pehli aur sab se ahem priority hoti hai. jab hum bade-scale systems par kaam karte hain, toh fazool kharche ko rokna aur budget ko customize karna hamari zimmedari hoti hai.
 
 Aam tor par jab aap cloud par virtual machines (EC2) launch karte hain, toh aap **On-Demand Instances** ka istemal karte hain. Yeh aap ko behtareen flexibility (azadi) deti hain: aap jab chahein machine ko start karein, jab chahein stop ya terminate karein, aur aap ko sirf un seconds ya ghanton ka paisa dena hota hai jitni der machine chali hai.
 
-### On-Demand Pricing (Bacho Wali Example)
+### On-Demand Pricing
 
 Iski misal bilkul ek **Rental Taxi** jaisi hai. Aap taxi mein bethe, dukan tak gaye, aur utar gaye. Aap ne sirf us safar ka rent diya. Aap par koi pabandi nahi hai ke aap ne kal bhi isi taxi mein jana hai ya nahi.
 
@@ -1576,7 +1610,7 @@ AWS par virtual machines ka billing system bohot hi bariki se kaam karta hai. Wi
 
 Agar aap ko pehle se pata hai ke aap ka server agle ek ya teen saal tak lagatar chalne wala hai, toh on-demand rates dena bewakoofi hai. Aise moqay par hum **Savings Plans** khareedte hain.
 
-### Savings Plans Kya Hain? (Bacho Wali Example)
+### Savings Plans Kya Hain?
 
 Imagine karein ke aap roz metro train mein safar karte hain aur roz ek single ticket ($1) lete hain.
 
@@ -1630,7 +1664,7 @@ $$\text{Total Upfront Payment} = 24 \text{ hours} \times 365 \text{ days} \times
 
 Aksar log **Savings Plans** aur **Capacity Reservations** ko ek hi cheez samajhte hain, jo ke bilkul galat hai. In dono ke darmeyan farq ko samajhna ek DevOps engineer ke liye nihayat zaroori hai.
 
-### Capacity Reservation Kya Hai? (Bacho Wali Example)
+### Capacity Reservation Kya Hai?
 
 Imagine karein ke aap ne kisi bade VIP event mein jana hai aur aap chahte hain ke aap ki gari ke liye parking spot pehle se reserved ho:
 
