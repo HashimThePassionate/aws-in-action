@@ -395,3 +395,201 @@ Ab bina kisi hichkichahat ke, niche diye gaye orange button **"Launch instance"*
 AWS background mein physical server par aap ke liye space allocate karega, OS install karega, storage attach karega, aur mushkil se 1-2 minutes mein aap ki virtual machine chalne ke liye bilkul tayar ho jayegi. Aap ne kamyabi se apna pehla cloud server launch kar diya hai!
 
 ---
+
+
+## Connecting to your virtual machine
+
+Ab jab hamari virtual machine chal rahi hai, toh us se kaam lene ke liye humein us mein **login** karna hoga. Login karne ke baad, hum apne real-world use case yani **LinkChecker** ko install aur run karenge taake broken links dhoond sakein.
+
+Yeh exercise toh ek example hai, lekin ek baar jab aap ko virtual machine ki administrator (root) access mil jati hai, toh aap ke paas system ka poora control hota hai. Aap apni marzi ka operating system configure kar sakte hain aur koi bhi application install kar sakte hain.
+
+### AWS Systems Manager Session Manager: Ek Bilkul Naya Tareeqa (ELI5 Explanation)
+
+Pehle ke zamane mein server se connect karne ke liye humein ghar ka darwaza (Port 22) kholna parta tha aur ek chabi (SSH Key Pair) chahiye hoti thi. Lekin AWS Systems Manager Session Manager is se bilkul alag aur behtareen tareeqe se kaam karta hai.
+
+Iski asaan misal **"Outbound Walkie-Talkie"** jaisi hai:
+
+* Purane tareeqe (SSH) mein aap bahar se server ke andar ghusne ki koshish karte hain. Is ke liye server par **Port 22 (SSH)** ka khula hona zaroori hai. Agar darwaza khula hai, toh hackers bhi us par hamla kar sakte hain.
+* Session Manager (SSM) mein hum server ka darwaza bahar se bilkul band rakhte hain (koi port khuli nahi hoti). Lekin server ke andar ek chota sa worker betha hota hai jise **SSM Agent** kehte hain.
+* Yeh SSM Agent khud andar se AWS Systems Manager ke sath ek secure connection (tunnel) banata hai. Jab aap connect hote hain, toh aap AWS Console ke zariye us agent se baat karte hain. Darwaza andar se khulta hai, bahar se koi rasta nahi hota!
+
+#### Session Manager Ke Faide:
+
+* **No upfront Key Pairs:** Aap ko pehle se koi SSH `.pem` ya `.ppk` key file sambhal kar rakhne ki zaroori nahi hai. AWS temporary keys ke zariye connection handle karta hai.
+* **No Inbound Ports Needed:** Aap ko Firewall (Security Group) mein Port 22 kholne ki bilkul zaroorat nahi parti. Is se aap ka attack surface (wo raste jahan se hacker hamla kar sakein) na hone ke barabar reh jata hai.
+
+#### Session Manager Ki Sharaat (Requirements):
+
+* **OS Support:** Yeh Amazon Linux 2, CentOS, Oracle Linux, Red Hat Enterprise Linux, SUSE Linux, macOS, aur Windows Server par kaam karta hai.
+* **SSM Agent:** Yeh agent system mein install hona chahiye. Amazon Linux 2 (aur modern AL2023), macOS (>10.14), Ubuntu (>16.04), aur Windows Server par yeh pehle se install aata hai.
+* **IAM Role:** Aap ke instance par wo IAM role (`ec2-ssm-core`) laga hona chahiye jo hum ne pichle step mein banaya tha.
+
+---
+
+### Step-by-Step Connection Guide (Figures Ka Breakdown)
+
+Hum ne pichle section mein jo machine launch ki thi, wo in tamam sharaat ko poora karti hai. Ab us se connect karne ke liye niche diye gaye steps follow karein:
+
+#### 1. Figure 3.14 Ka Breakdown: EC2 Dashboard Par Instance Dhoondna
+
+<div align="center">
+  <img src="./images/17.png" width="600"/>
+</div>
+
+Agar aap **Figure 3.14** ko dekhein:
+
+* EC2 dashboard ke left menu se **Instances** par click karein.
+* Aap ke samne chalne wale servers ki list aa jayegi. Yahan hamari machine **"mymachine"** nazar aa rahi hogi.
+* **Instance State:** Check karein ke iska status green color mein **Running** ho chuka ho (is mein 1-2 minutes lag sakte hain).
+* **Details Section:** Niche details tab mein aap ko machine ki public/private IP addresses aur doosri ahem networking details nazar aayengi.
+* Machine ke naam ke sath bane checkbox ko select karein aur top right corner par maujood **Connect** button par click karein.
+
+#### 2. Figure 3.15 Ka Breakdown: Connection Method Select Karna
+
+<div align="center">
+  <img src="./images/18.png" width="600"/>
+</div>
+
+Jab aap Connect par click karenge, toh ek naya page khulega jaisa **Figure 3.15** mein dikhaya gaya hai:
+
+* Yahan aap ko connect karne ke mukhtalif tabs nazar ayenge (EC2 Instance Connect, Session Manager, SSH client, EC2 Serial Console).
+* Hum ne **Session Manager** wale tab par click karna hai.
+* Niche diye gaye orange rang ke **Connect** button par click kar dein.
+
+#### 3. Figure 3.16 Ka Breakdown: Browser Ke Andar Terminal
+
+<div align="center">
+  <img src="./images/19.png" width="600"/>
+</div>
+
+* Orange button dabane ke thode hi seconds baad, aap ke browser ke andar ek kali screen (Terminal/Shell) khul jayegi, jaisa **Figure 3.16** mein dikhaya gaya hai.
+* **Admin Login:** Yeh terminal aap ko direct system ke admin (`ssm-user`) ke tor par login karwa deta hai.
+* Aap screen par direct command likhna shuru kar sakte hain. Kaam khatam hone par aap top right par maujood **Terminate** button dabakar session band kar sakte hain.
+
+---
+
+## SSH and SCP
+
+Browser ke zariye direct terminal access milna bohot hi shandar sahulat hai. Lekin baaz auqat, ek DevOps engineer ke tor par aap chahenge ke aap apne local computer ke terminal (jaise VS Code, Terminal, ya Putty) se direct connection banayein.
+
+Khaas tor par tab jab aap ko **SCP (Secure Copy Protocol)** ke zariye apne local computer se koi file server par transfer karni ho ya server se koi file download karni ho.
+
+* **SSM Tunneling (Modern Way):** 2026 ke standards ke mutabaq, aap ko SSH aur SCP chalane ke liye bhi Port 22 kholne ki zaroorat nahi hai. Aap apne local computer par **AWS CLI** aur **Session Manager Plugin** install kar ke SSM tunnel ke zariye direct SSH/SCP chala sakte hain. Yeh intehai secure aur professional tareeqa hai.
+
+---
+
+## Installing and running software manually
+
+Ab hum apne asli maqsad ki taraf aate hain. Hamari virtual machine launch ho chuki hai aur hum terminal mein enter ho chuke hain. Humein **LinkChecker** tool install karna hai jise chalne ke liye **Python** environment chahiye.
+
+> ⚠️ **Nihayat Ahem 2026 Technical Update (Amazon Linux 2 vs Amazon Linux 2023):**
+> Book mein **Amazon Linux 2 (AL2)** ke commands diye gaye hain jo `amazon-linux-extras` tool use karte hain.
+> Agar aap aaj ke modern standard operating system **Amazon Linux 2023 (AL2023)** par hain, toh wahan `amazon-linux-extras` ka tool khatam kar diya gaya hai. AL2023 mein package manager `yum` se upgrade ho kar `dnf` ban chuka hai aur Python 3 pehle se install aata hai ya direct standard repository se mil jata hai.
+> Neeche hum ne **dono operating systems** (Book ka AL2 aur Modern AL2023) ke mutabaq codes likh diye hain taake aap ka practical kabhi fail na ho!
+
+### Step 1: Install Python
+
+#### Book Method (For Amazon Linux 2):
+
+AL2 mein extra packages install karne ke liye `amazon-linux-extras` library ka use kiya jata hai. Python 3.8 install karne ke liye yeh command run karein:
+
+```bash
+sudo amazon-linux-extras install python3.8 -y
+```
+
+* **Code Explanation:**
+* `sudo`: SuperUser Do (Yani administrator ki taqat se command chalana taake software install ho sake).
+* `amazon-linux-extras`: Amazon ka ek tool jo curated (test shuda) software packages provide karta hai.
+* `-y`: Jab installation ke doran system aap se pooche ke *"Kya aap waqai install karna chahte hain (y/n)?"*, toh yeh option usay pehle hi "Yes" bol deta hai taake process ruke nahi.
+
+
+
+#### Modern Method (For Amazon Linux 2023 / 2026 Standard):
+
+Agar aap modern AL2023 use kar rahe hain, toh simply standard package manager `dnf` ke zariye Python install karein:
+
+```bash
+sudo dnf install python3 -y
+```
+
+---
+
+### Step 2: Install LinkChecker
+
+Python install hone ke baad, hum Python ke package manager (`pip3`) ke zariye **LinkChecker** install karenge:
+
+```bash
+pip3 install linkchecker
+```
+
+* **Code Explanation:**
+* `pip3`: Python ka official package manager hai jo online repository se python libraries aur tools dhoond kar download karta hai.
+* `install linkchecker`: Yeh package manager ko batata hai ke "LinkChecker" naam ka tool download aur install karo.
+* **Note:** Hum ne is command ke sath `sudo` use nahi kiya. Iska matlab hai ke yeh tool sirf hamare current user ke local folder (`~/.local/bin/`) mein install hoga, system-wide nahi. Yeh security ke lihaz se behtar practice hai.
+
+
+
+---
+
+### Step 3: Run LinkChecker to Scan a Website
+
+Ab hamara tool bilkul tayar hai. Hum kisi bhi website ko scan kar sakte hain. Example ke tor par hum apni website par isay run karte hain:
+
+```bash
+~/.local/bin/linkchecker -r 2 https://cloudonaut.io
+```
+
+* **Code Explanation:**
+* `~/.local/bin/linkchecker`: Yeh hamare local user ke bin folder mein mojood linkchecker tool ka mukammal rasta (path) hai.
+* `-r 2`: Yeh recursion level hai. Iska matlab hai ke crawler website ke main page par jayega (Level 1) aur phir un pages par moojood links ke andar mazeed 1 step gehrayi tak jayega (Level 2). Agar hum recursion level set na karein, toh yeh poore internet par nikal jayega aur kabhi rukh nahi payega!
+* `[https://cloudonaut.io](https://cloudonaut.io)`: Yeh target website ka URL hai jise hum check karna chahte hain. (Aap yahan apni marzi ki website ka link de sakte hain).
+
+
+
+#### Output Ka Breakdown (Line by Line Analysis):
+
+Jab tool run hota hai, toh terminal par is tarah ka output aata hai:
+
+* **Error Example:**
+```text
+URL          `/images/2022/02/terminal.png'
+Name         `Connect to your EC2 instance using SSH the modern way'
+Parent URL   https://cloudonaut.io, line 379, col 1165
+Real URL     https://cloudonaut.io/images/2022/02/terminal.png
+Check time   2.959 seconds
+Size         0B
+Result       Error: 404 Not Found
+
+10 threads active, 5 links queued, 72 links in 87 URLs checked
+1 thread active, 0 links queued, 86 links in 87 URLs checked
+```
+
+
+* **Line 1 & 2:** Kis file/image ya text par toota hua link laga hua hai aur us ka naam kya hai.
+* **Line 3 & 4:** Kis parent page par yeh link mojood hai (taake aap asani se use dhoond sakein) aur us link ka asli URL kya hai.
+* **Line 7 (`Result Error: 404 Not Found`):** Sab se ahem line! Yeh batati hai ke target page internet par mojood nahi hai, yani link toota hua hai.
+
+
+* **Overall Statistics (Aakhri Summary):**
+```text
+Statistics:
+Downloaded: 66.01KB.
+Content types: 26 image, 29 text, 0 video, 0 audio, 3 application, ...
+URL lengths: min=21, max=160, avg=56.
+
+That's it. 87 links in 87 URLs checked. 0 warnings found. 1 error found.
+Stopped checking at 2022-04-04 09:02:55+000 (22 seconds)
+```
+
+
+* **Downloaded:** Tool ne total kitna data scan kiya.
+* **Content types:** Scanner ko kitne images aur text pages mile.
+* **Summary:** Total **87 URLs** check huay, jin mein se **0 warnings** aur **1 error** (broken link) mila. Poora process mukammal hone mein **22 seconds** lagay.
+
+
+
+Website ke pages jitne zyada honge, crawler ko scan karne mein utna hi zyada waqt lagega. Lekin aakhir mein yeh aap ko tamam tootay hue links ki saaf list de dega taake aap unhein website par ja kar asani se theek kar sakein.
+
+---
+
+
