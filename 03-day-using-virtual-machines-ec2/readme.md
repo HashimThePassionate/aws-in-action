@@ -916,3 +916,202 @@ Kyunke `m5.large` (ya 2026 ke modern equivalent) instances par hourly charges la
 Kuch hi der mein machine completely delete ho jayegi aur aap ke billing charges foran ruk jayenge. Aap ne kamyabi se EC2 instances par vertical scaling ka poora concept step-by-step seekh liya hai!
 
 ----
+
+## Starting a virtual machine in another data center
+
+AWS ke paas poori duniya mein alag-alag maqamat (locations) par bohot bade-bade data centers moojood hain. Jab aap cloud par apna infrastructure (servers, databases wagera) khara karne lagte hain, toh aap ko yeh faisla karna hota hai ke aap kis **Region** (mulk ya shehar) ko chunein.
+
+### Region Chunne Ke 4 Sunehri Asool (Bacho Ki Tarah Asaan Explanation)
+
+Iski misal hum ek online pizza delivery shop se lete hain:
+
+1. **Latency (Deri ya Lag):** Agar aap Lahore mein bethe hain, toh aap us pizza shop se order karenge jo aap ke ghar ke kareeb ho taake pizza garam aur jaldi pahuche. Cloud mein bhi bilkul aisa hi hota hai. Hamari virtual machine us region mein honi chahiye jo hamare users ke sab se zaroori aur kareeb ho. Agar hamare users Australia mein hain, toh Sydney region behtareen hai.
+2. **Compliance (Qanoon aur Rules):** Har mulk ke apne rules hote hain. Kuch mulkon ka qanoon kehta hai ke un ke shehriyon (citizens) ka data us mulk ki boundary se bahar nahi jana chahiye. Agar aap Europe ka data process kar rahe hain, toh aap ko data Europe ke hi kisi region (jaise Frankfurt ya Ireland) mein rakhna hoga.
+3. **Service Availability (Services Ki Moojoodgi):** AWS har naya feature ya service sab se pehle saare regions mein launch nahi karta. Humein check karna parta hai ke jo tool hum use karna chahte hain, kya wo us specific region mein available hai ya nahi. Is ke liye hum AWS ki region tables (`[https://awsservices.info](https://awsservices.info)`) check karte hain.
+4. **Costs (Kharcha):** Alag-alag mulkon mein zameen, bijli (electricity), aur taxes ke rates alag hote hain. Is liye ek hi EC2 instance us-east-1 (N. Virginia) mein sasta ho sakta hai aur Sydney (ap-southeast-2) mein thoda mehanga. Humein budget ke mutabaq sab se cost-effective region chunna hota hai.
+
+#### Real-World Example:
+
+Farz karein aap ki company ke customers pehle sirf America (US) mein the, is liye aap ke saare servers **N. Virginia (us-east-1)** mein chal rahe hain. Ab aap ke paas Australia se bhi customers aane shuru ho gaye hain. Australia ke log shikayat kar rahe hain ke jab wo aap ki website kholte hain, toh page load hone mein bohot zyada time lagta hai (high latency).
+
+Is masle ka sab se behtareen hal kya hai? Hum Australia ke logon ko khush karne ke liye un ke apne shehar **Sydney** ke data center mein ek naya server (VM) launch karenge!
+
+#### Region Badalne Ka Tarika (Figure 3.21 Breakdown)
+
+<div align="center">
+  <img src="./images/24.png" width="600"/>
+</div>
+
+AWS Console par kam karne ka region badalna nihayat hi asaan hai:
+
+* **Figure 3.21** ko agar aap dekhein, toh AWS Management Console ke top navigation bar mein right side par aap ko region ka naam likha nazar aayega (jaise pehle *N. Virginia* likha tha).
+* Is dropdown menu par click karein. Aap ke samne poori duniya ke regions ki list aa jayegi.
+* Is list mein se **Asia Pacific (Sydney) `ap-southeast-2**` par click kar dein, jaisa ke Figure 3.21 mein orange arrow ke zariye dikhaya gaya hai.
+* Click karte hi aap ka dashboard Sydney region par switch ho jayega, aur ab aap jo bhi machine banayenge wo physical tor par Australia ke data center mein banegi!
+
+---
+
+### AWS Regions Table
+
+Niche di gayi table mein AWS ke regions aur un ke technical codes (IDs) diye gaye hain.
+
+| AWS Regions (Left) | AWS Regions (Right) |
+| --- | --- |
+| US East, N. Virginia (us-east-1) | US East, Ohio (us-east-2) |
+| US West, N. California (us-west-1) | US West, Oregon (us-west-2) |
+| Africa, Cape Town (af-south-1) | Asia Pacific, Hong Kong (ap-east-1) |
+| Asia Pacific, Jakarta (ap-southeast-3) | Asia Pacific, Mumbai (ap-south-1) |
+| Asia Pacific, Osaka (ap-northeast-3) | Asia Pacific, Seoul (ap-northeast-2) |
+| Asia Pacific, Singapore (ap-southeast-1) | Asia Pacific, Sydney (ap-southeast-2) |
+| Asia Pacific, Tokyo (ap-northeast-1) | Canada, Central (ca-central-1) |
+| Europe, Frankfurt (eu-central-1) | Europe, Ireland (eu-west-1) |
+| Europe, London (eu-west-2) | Europe, Milan (eu-south-1) |
+| Europe, Paris (eu-west-3) | Europe, Stockholm (eu-north-1) |
+| Middle East, Bahrain (me-south-1) | South America, São Paulo (sa-east-1) |
+
+#### 2026 Modern AWS Regions Update:
+
+AWS ne apne network ko mazeed barha diya hai. Aaj ke dor (2026) mein is table ke ilawa mazeed naye regions bhi moojood hain jo bohot ahem hain, jaise:
+
+* **Middle East, UAE (me-central-1)** aur **Israel, Tel Aviv (il-central-1)**.
+* **Asia Pacific, Hyderabad (ap-south-2)** aur **Melbourne (ap-southeast-4)**.
+* **Europe, Zurich (eu-central-2)** aur **Spain (eu-south-2)**.
+
+### Architectural Concept: Regional Independence & Global Services
+
+* **Regional Independence:** AWS ke tamam regions aapas mein mukammal tor par azad (independent) hote hain. Ek region ka data khud-ba-khud doosre region mein transfer nahi hota jab tak aap khud koi cross-region replication ya transfer setup na karein.
+* **Availability Zones (AZs):** Ek region aam tor par **3 ya is se zyada** physical data centers ka collection hota hai. In alag-alag data centers ko hum **Availability Zones** kehte hain. Yeh aapas mein intehai high-speed fiber cables se munsalik hote hain taake agar ek data center mein koi disaster (jaise zalzala ya aag) aa jaye, toh aap ki website bina ruke doosre data center se chalti rahe.
+* **Global Services:** AWS ki kuch khas services aisi hain jo kisi ek region mein nahi hotin, balkey pure global network par bethi hoti hain. Jaise **IAM** (Identity and Access Management - jahan hum ne `ec2-ssm-core` role banaya tha), **Route 53** (DNS), aur **CloudFront** (CDN) wagera.
+
+---
+
+### Step-by-Step Guide to Launching the Instance in Sydney
+
+Ab hum Sydney region ke andar apni virtual machine launch karenge:
+
+1. Sydney region par switch karne ke baad, **EC2 Console** par jayein https://console.aws.amazon.com/ec2/
+2. **Launch Instances** button par click karein.
+3. Machine ka naam **`sydney`** likhein.
+4. OS image mein **Amazon Linux 2 AMI** (ya modern standard ke mutabaq **Amazon Linux 2023**) choose karein.
+5. Instance type mein **`t2.micro`** (ya modern equivalent **`t3.micro`**) select karein.
+6. Key Pair section mein **Proceed without a Key Pair** select karein.
+7. **Firewall / Network Settings (Ahem Configuration Change):**
+* Is baar hum ne firewall rule mein **`Allow HTTP Traffic from the Internet`** (Port 80) wale checkbox ko tick mark (allow) karna hai.
+* **Kyun?** Kyunke is baar hum is server par ek Web Server (Apache) chalane ja rahe hain. Hum chahte hain ke poori duniya se log hamari website ko browser mein open kar sakein. HTTP (Port 80) web traffic ke liye standard rasta hai. SSH (Port 22) abhi bhi mukammal tor par block rahega!
+
+
+8. Storage ko default (8 GB SSD) par hi choren.
+9. **Advanced Details** mein ja kar **IAM instance profile** ke dropdown se apna banaya hua role **`ec2-ssm-core`** select karein.
+10. Orange button **Launch instance** par click kar dein!
+
+Mubarak ho! Aap ki virtual machine ab Sydney ke data center mein chal rahi hai. Ab Session Manager ke zariye terminal connect karein taake hum is par Apache Web Server install kar sakein.
+
+---
+
+### Web Server Installation Commands (AL2 vs AL2023 - 2026 Modern Standard)
+
+#### Step 1: Install Apache Web Server (`httpd`)
+
+Amazon Linux par Apache web server ke software package ko **`httpd`** (HTTP Daemon) kaha jata hai.
+
+* **Book Method (Amazon Linux 2):**
+```bash
+sudo yum install httpd -y
+```
+
+
+* **Modern Method (Amazon Linux 2023 / 2026 Standard):**
+```bash
+sudo dnf install httpd -y
+```
+
+
+* **Code Explanation:**
+* `sudo`: Admin rights ke sath run karna taake software system folders mein install ho sake.
+* `yum` / `dnf`: Red Hat based Linux distributions ke package managers jo internet se Apache ko download aur install karenge.
+* `install httpd`: Apache web server package ko install karne ka hukum.
+* `-y`: Automatic "Yes" confirm karna installation prompts ke liye.
+
+
+
+#### Step 2: Start and Enable Apache Service
+
+Software install karne ke baad, humein us ki background service (daemon) ko start karna hota hai aur use boot time par auto-start ke liye register karna hota hai:
+
+```bash
+sudo systemctl start httpd
+sudo systemctl enable httpd
+```
+
+* **Code Explanation:**
+* `systemctl`: Linux ka core system manager (Systemd) control tool hai jo services (background processes) ko manage karta hai.
+* `start httpd`: Apache web server ko foran abhi isi waqt chala do.
+* `enable httpd`: Is service ko "enable" kar do taake agar future mein hamara server kabhi reboot ya restart ho, toh Apache khud-ba-khud piche se on ho jaye, humein khud manally start na karna pare.
+
+
+
+---
+
+### Public IP Maloom Karna (IMDSv1 vs IMDSv2 - Ahem 2026 Update)
+
+Apni website ko browser mein kholne ke liye humein apni EC2 machine ka Public IP address chahiye.
+
+* Ek rasta toh yeh hai ke aap AWS Console par machine par click karein aur niche details se Public IP copy kar lein.
+* Doosra rasta yeh hai ke aap direct Linux terminal ke andar se hi AWS ke **Instance Metadata Service (IMDS)** ko call kar ke IP address pooch lein.
+
+AWS har EC2 machine ke andar ek special, local IP address chalata hai jise **`169.254.169.254`** kehte hain (isay Link-Local Address kaha jata hai). Is IP par request bhej kar machine khud apne bare mein details (jaise instance ID, IP, region) jaan sakti hai.
+
+#### Book Method (IMDSv1 - Older Standard):
+
+```bash
+curl http://169.254.169.254/latest/meta-data/public-ipv4
+```
+
+> ⚠️ **Nihayat Ahem 2026 Security Update (IMDSv1 vs IMDSv2):**
+> Purane IMDSv1 mein koi bhi process ya hacker (SSRF vulnerability ke zariye) bina kisi security check ke direct metadata nikal sakta tha. Is liye, **2026 ke modern standards mein AWS ne IMDSv1 ko default tor par disable kar diya hai** aur ab hamari machines par secure **IMDSv2** chal raha hota hai.
+> IMDSv2 mein request bhejne ke liye pehle ek temporary **Token** lena parta hai, phir us token ko header mein bhej kar data milta hai.
+
+#### Modern 2026 Method (IMDSv2 - Token Based Security Standard):
+
+Modern systems par metadata se IP nikalne ke liye aap ko yeh behtareen script run karni chahiye:
+
+```bash
+# Pehle metadata token lein jo 6 ghante (21600 seconds) ke liye valid ho
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+# Ab is token ko use kar ke IP address nikalen
+curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4
+
+```
+
+* **Code Explanation:**
+* `curl -s -X PUT ...`: chupchap (silent mode `-s`) metadata engine par ek PUT request bhej kar secure token lena.
+* `-H "X-aws-ec2-metadata-token: $TOKEN"`: Naye security rule ke mutabaq token ko envelope (header) par laga kar request bhejna taake metadata server ijazat de sake.
+
+
+
+Yeh command aap ke samne screen par aap ka public IP address (jaise `52.54.202.9`) print kar degi.
+
+---
+
+### Website Ko Browser Mein Check Karna
+
+Ab apne computer ya mobile par naya browser tab kholin aur URL bar mein likhin:
+
+```text
+http://[Aap_Ka_Public_IP]
+```
+
+*(Yad rakhin ke `http://` use karna hai, `https://` nahi, kyunke hum ne abhi tak SSL certificate install nahi kiya).*
+
+Jaise hi aap enter karenge, aap ke samne Apache ka official **Demo/Test Welcome Page** aa jayega. Iska matlab hai ke aap ki website Sydney ke physical data center se poori duniya ke liye live chal rahi hai!
+
+### Trade-Off Warning: The Dynamic Public IP Problem
+
+Abhi hum ne jo Public IP use kiya hai, wo **Dynamic** hai.
+
+* **Design Issue:** Agar aap is machine ko kisi din **Stop** karenge aur phir **Start** karenge, toh AWS isay back-end par ek naya physical host aur ek **bilkul naya, mukhtalif Public IP address** de dega.
+* **Problem:** Agar aap ne kisi customer ko apna IP address diya hua hai, ya DNS mein domain name map kiya hua hai, toh un ka connection toot jayega kyunke IP badal chuka hoga.
+* **Solution:** Is masle ko hal karne ke liye hum agle section mein seekhenge ke kaise hum server ke sath ek bilkul paka aur pakiza (static/fixed) IP address jod sakte hain jise AWS ki zaban mein **Elastic IP (EIP)** kehte hain.
+
+---
