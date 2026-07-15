@@ -593,3 +593,143 @@ Website ke pages jitne zyada honge, crawler ko scan karne mein utna hi zyada waq
 ---
 
 
+## Monitoring and debugging a virtual machine
+
+Jab aap cloud par koi virtual machine (VM) chalate hain aur us par apni application run karte hain, toh hamesha sab kuch perfect nahi chalta. Kabhi koi application crash ho jati hai, toh kabhi server slow ho jata hai. Ek DevOps engineer ke tor par aap ka sab se ahem kaam yeh dhoondna hota hai ke *"Galti kahan hui?"*
+
+Is galti (error) ko dhoondne aur system ki sehat ka andaza lagane ke liye AWS humein **Monitoring** (dekh-bhaal) aur **Debugging** (galtiyan dhoondne) ke behtareen tools deta hai. In mein se sab se asaan aur pehla tareeqa yeh hai ke hum virtual machine ke **System Logs** (diary/history) ko check karein.
+
+---
+
+## Showing logs from a virtual machine
+
+Imagine karein ke aap ka computer on nahi ho raha aur screen bilkul kaali hai. Aap ko kaise pata chalega ke andar hardware ya operating system mein kya kharabi hai? Agar aap physical server par kaam kar rahe hote, toh aap monitor screen par chalne wali boot lines ko dekhte. AWS console par hum bina kisi SSH connection ke yeh sab dekh sakte hain.
+
+### System Logs Dekhne Ka Step-by-Step Tareeqa (Figure 3.17 Reference)
+
+<div align="center">
+  <img src="./images/20.png" width="600"/>
+</div>
+
+Virtual machine ke system logs dekhne ke liye niche diye gaye steps ko follow karein:
+
+1. AWS Management Console par ja kar **EC2 Dashboard** kholin: `[https://console.aws.amazon.com/ec2/](https://console.aws.amazon.com/ec2/)`.
+2. Left side par navigation options se **Instances** par click kar ke chalne wale servers ki list kholin.
+3. Apni chalne wali machine par click kar ke use select karein.
+4. Top right par **Actions** menu par click karein, phir **Monitor and troubleshoot** par jayein, aur wahan **Get system log** par click kar dein.
+5. Aap ke samne ek screen khul jayegi jahan virtual machine ke chalne ke tamam logs nazar aayenge, bilkul waise hi jaise **Figure 3.17** mein dikhaya gaya hai.
+
+#### Figure 3.17 Ka Detailed Breakdown (Logs Ki Explanation)
+
+* **The Boot Output:** Figure 3.17 mein humein ek kaali screen par safaid text nazar aa raha hai. Yeh operating system ke boot hone ke messages hain (jaise `cloud-init` ka chalna, system services ka start hona, aur SSH host key fingerprints ka generate hona).
+* **Copy and Download Buttons:** Is screen ke top right corner par **Copy log** aur **Download** ke buttons hote hain. Agar aap ke system mein koi bada masla aa raha hai, toh aap in logs ko download kar ke apne computer par aaram se analyze kar sakte hain ya kisi expert ko bhej sakte hain.
+
+#### Troubleshooting Ki Real-World Strategy:
+
+Agar operating system start hote hi kisi error par ruk jata hai, toh wo error aap ko in logs ke aakhir mein saaf nazar aa jayega.
+
+* Agar aap ko error samajh na aaye, toh aap is operating system (AMI) ko banane wali company se raabta kar sakte hain, AWS Support ko ticket bhej sakte hain, ya phir AWS ki official community **AWS re:Post** (`[https://repost.aws](https://repost.aws)`) par apna sawal post kar sakte hain.
+* **Ahem Note:** Jab aap virtual machine ko launch karte hain, toh system logs ko is console viewer mein load hone mein **kuch minutes** lagte hain, is liye sabar se kaam lena zaroori hai!
+
+---
+
+## Monitoring the load of a virtual machine
+
+Logs dekhne ke baad doosra ahem sawal yeh hota hai ke: *"Kya hamari virtual machine par load bohot zyada hai? Kya CPU ya Network apni aakhri limit tak pahuch chuke hain?"*
+
+AWS is sawaal ka jawab dene ke liye automatic metrics collect karta hai jise hum **Amazon CloudWatch** kehte hain.
+
+### VM Ki Load Metrics Dekhne Ka Tareeqa (Figure 3.18 Reference)
+
+<div align="center">
+  <img src="./images/21.png" width="600"/>
+</div>
+
+1. Apne **EC2 Console** par jayein aur **Instances** ki list kholin.
+2. Apni chalne wali machine par click karein.
+3. Niche diye gaye panel mein se **Monitoring** tab par click karein.
+4. Yahan aap ko CPU, Network, aur Disk ke graphs nazar aayenge. **Figure 3.18** ke mutabaq, agar aap **Network in (Bytes)** wale graph par jana chahte hain, toh us ke kone mein bane teen dots (...) par click karein aur **Enlarge** (bada) kar lein.
+
+#### Figure 3.18 Ka Grafical Breakdown (The CloudWatch Metric)
+
+* **The Graph:** Figure 3.18 mein hum ek graph dekh rahe hain jo graph par aane wali traffic (Bytes) ko waqt ke hisab se dikha raha hai. Shuru mein jab system start hua toh network traffic ka ek bada spike (uncha graph) aaya, jo baad mein kam ho kar normal line par aa gaya.
+* **Time Range Selector:** Aap graph ke upar se waqt select kar sakte hain (jaise *1h, 3h, 12h, 1d, 3d, 1w*) taake aap dekh sakein ke pichle kuch ghanton ya dino mein machine par kitna load tha.
+
+### Sab Se Ahem Concept: Memory (RAM) Ka Missing Hona (The Outside-In Rule)
+
+> ⚠️ **Bacho Ki Tarah Asaan Explanation (The Inspector Analogy):**
+> Imagine karein ke AWS ek bahar khara inspector hai jo aap ke ghar (Virtual Machine) ko bahar se dekh raha hai.
+> * Inspector dekh sakta hai ke ghar se kitna dhuan nikal raha hai (CPU Usage).
+> * Inspector dekh sakta hai ke ghar ke andar kitne log ja rahe hain aur kitne bahar aa rahe hain (Network In/Out).
+> * Inspector dekh sakta hai ke ghar ke bahar kitna kachra phenka ja raha hai (Disk Read/Write).
+> * **Lekin:** Inspector ghar ki deewaron ke par nahi dekh sakta! Use yeh nahi pata ke ghar ke andar ke cupboards (RAM/Memory) kitne bhare hue hain.
+> 
+> 
+> Bilkul isi tarah, kyunke hypervisor machine ko bahar se monitor karta hai, is liye AWS ke paas default mein **Memory (RAM) usage** ki koi metric nahi hoti!
+> If you need RAM metrics, aap ko virtual machine ke andar ek chota sa software (CloudWatch Agent) install karna parta hai jo andar se RAM ka data collect kar ke AWS CloudWatch ko bhejta hai.
+
+#### Basic vs. Detailed Monitoring (2026 Price & Standard Update):
+
+* **Basic Monitoring (Default & Free):** Yeh default mein har machine par on hoti hai. Is mein aap ke graphs har **5 minutes** baad naye data ke sath update hote hain. Iska koi kharcha nahi hota.
+* **Detailed Monitoring (Paid):** Agar aap ko har **1 minute** ka bariki se data chahiye (jo production systems ke liye zaroori hota hai), toh aap isay enable kar sakte hain, lekin is ke alag se paise lagte hain.
+
+---
+
+## Shutting down a virtual machine
+
+AWS par chalne wali har cheez ke paise lagte hain. Agar aap ne apni virtual machine ko chala kar chor diya, toh mahine ke aakhir mein aap ko ek bada shock lag sakta hai! Is liye jab kaam khatam ho jaye, toh machine ko band karna ya mita dena sab se behtareen DevOps practice hai.
+
+AWS par virtual machine ki life-cycle (zindagi) ko chalane ke liye 4 mukhtalif actions hote hain:
+
+1. **Start:** Agar aap ki machine pehle se **Stopped** state mein hai, toh aap isay dobara chalane ke liye "Start" karte hain. (Nayi machine banani ho toh "Launch" karte hain).
+2. **Stop (Remote control se TV band karna):**
+* Jab aap machine ko stop karte hain, toh computer shutdown ho jata hai.
+* **Cost Control:** Sasti parne wali state! Jab machine stop hoti hai, toh aap se CPU aur RAM ka koi paisa nahi liya jata.
+* **Storage Charges:** Lekin yaad rakhein! Jo storage (EBS disk/8 GB SSD) machine ke sath juri hui hai, wo data ko safe rakhne ke liye cloud par maujood rehti hai. Is liye storage ka bohot chota sa kharcha chalta rehta hai.
+* **Different Host:** Jab aap stopped machine ko dobara start karenge, toh AWS background mein use kisi doosre physical computer (different host) par chala sakta hai, lekin aap ka data hard drive mein bilkul salamat rahega.
+
+
+3. **Reboot:** Computer ko restart karna. Machine usi physical host par rehti hai, data salamat rehta hai, aur system bas jaldi se band ho kar dobara on ho jata hai.
+4. **Terminate (Machine ko dustbin mein phenk dena):**
+* Terminate ka matlab hai machine ko hamesha ke liye delete kar dena.
+* Ek baar machine terminate ho jaye, toh aap isay dobara kabhi start nahi kar sakte.
+* Is ke sath attach tamam storage (EBS disks) aur public/private IP addresses bhi mita diye jate hain.
+* **No more charges:** Is state mein aate hi aap ka har qism ka kharcha (CPU, RAM, aur Storage) mukammal tor par khatam ho jata hai.
+
+
+
+### Stopping vs. Terminating Ka Flowchart (Figure 3.19 Reference)
+
+**Figure 3.19** humein in dono states ke darmeyan sab se bada farq samajhata hai:
+
+<div align="center">
+  <img src="./images/22.png" width="600"/>
+</div>
+
+* Upay wale flowchart mein aap dekh sakte hain ke running machine ko stop kar ke dobara start karna bilkul safe aur mumkin hai.
+* Niche wale flowchart mein dikhaya gaya hai ke running machine ko jab hum terminate (delete) kar dete hain, toh us par ek bada **forbid/cross symbol** lag jata hai. Yani ab yeh machine hamesha ke liye khatam ho chuki hai.
+
+#### Real-World Examples (Kahan kya use karna hai?):
+
+* **Scenario A (Proof of Concept):** Aap ne sirf testing ke liye ek chota sa system banaya, check kiya ke code chal raha hai ya nahi. Kaam khatam hone par aap isay **Terminate** kar dein taake bilkul kharcha na ho.
+* **Scenario B (Daily Development Work):** Aap ek testing server par kaam kar rahe hain. Aap raat ko 6 baje office se ghar chale jate hain aur subah 9 baje wapas aate hain. Raat ke 15 ghante server fazool chalega. Behtareen strategy yeh hai ke shaam ko server ko **Stop** kar dein aur subah aa kar **Start** kar lein. Is se aap ki company ke bohot saare paise bachenge!
+* **Scenario C (Canceled Client):** Kisi client ka contract khatam ho gaya. Aap ne un ke database ka backup le kar save kar liya, aur ab un ke servers ko **Terminate** kar ke free kar diya.
+
+---
+
+## Cleaning up
+
+Hum ne is chapter ke shuru mein jo **"mymachine"** naam ka EC2 server launch kiya tha, ab hamara us par practical kaam mukammal ho chuka hai. Free tier ke paise bachane aur account ko saaf rakhne ke liye ab hum isay **Terminate** karenge.
+
+### Step-by-Step Cleanup Process:
+
+1. Apne browser mein **EC2 Console** par jayein: `[https://console.aws.amazon.com/ec2/](https://console.aws.amazon.com/ec2/)`.
+2. Left navigation panel se **Instances** select karein taake saare servers ki list samne aa jaye.
+3. Hamari machine **`mymachine`** ke row par click kar ke use select karein.
+4. Top menu mein **Instance state** wale dropdown button par click karein aur wahan se **Terminate instance** select kar lein.
+5. Ek warning message aayega, us par **Terminate** click kar ke confirm kar dein.
+
+Kuch hi seconds mein machine ka status *Shutting down* aur phir *Terminated* ho jayega. Mubarak ho! Aap ne AWS EC2 par virtual machine launch karne, configure karne, run karne, debug karne, aur safely cleanup karne ka poora lifecycle behtareen tareeqe se seekh liya hai.
+
+---
+
