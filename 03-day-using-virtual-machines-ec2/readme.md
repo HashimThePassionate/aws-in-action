@@ -1115,3 +1115,111 @@ Abhi hum ne jo Public IP use kiya hai, wo **Dynamic** hai.
 * **Solution:** Is masle ko hal karne ke liye hum agle section mein seekhenge ke kaise hum server ke sath ek bilkul paka aur pakiza (static/fixed) IP address jod sakte hain jise AWS ki zaban mein **Elastic IP (EIP)** kehte hain.
 
 ---
+
+
+## Allocating a public IP address
+
+Abhi tak is book mein hum ne jitni bhi virtual machines launch ki hain, un ke sath ek public IP address khud-ba-khud attach ho jata tha. Lekin is mein ek bohot bada masla (trade-off) hai: **jab bhi aap machine ko stop kar ke dobara start karte hain, toh uska public IP address badal jata hai.**
+
+Agar aap koi serious application ya website chalana chahte hain, toh badalne wala IP address bilkul kaam nahi karega. Is masle ko hal karne ke liye AWS ek service deta hai jise **Elastic IP (EIP)** kaha jata hai. Elastic IP aap ko ek **fixed (static/permanent) public IP address** allocate karne ki sahulat deta hai jo kabhi nahi badalta jab tak aap khud use delete na karein.
+
+### Elastic IP Kyun Zaroori Hai? (Bacho Wali Example)
+
+Imagine karein ke aap ne ek biryani ki dukan kholi hai.
+
+* Agar aap har doosre din apni dukan ka address badal dein, toh customers aap ko dhoond dhoond kar thak jayenge aur kisi aur dukan par chale jayenge.
+* **Elastic IP** bilkul us permanent address ya dukan ki tarah hai jo ek hi jagah rehti hai.
+* Agar clients ka firewall sirf makhsoos IP addresses ko ijazat deta hai, ya aap DNS records (website name mapping) ko bar bar update karne ke jhanjhat se bachna chahte hain (kyunke DNS update hone mein baaz auqat ghante lag jate hain), toh Elastic IP aap ka sab se behtareen dost hai.
+
+---
+
+### Step-by-Step Guide to Allocate and Associate Elastic IP
+
+Chaliye, hum ne pichle section mein Sydney region mein jo machine launch ki thi, us ke sath ek paka (static) IP address jorhte (associate) hain. Is ke liye niche diye gaye steps ko follow karein:
+
+#### Step 1: Elastic IPs Menu Mein Jana (Figure 3.22 Breakdown)
+
+<div align="center">
+  <img src="./images/25.png" width="600"/>
+</div>
+
+* **Figure 3.22** ke mutabaq, apne AWS Management Console mein **EC2 Dashboard** par jayein.
+* Left side par scroll kar ke **Network & Security** section ke andar **Elastic IPs** par click karein.
+* Yahan aap ko un tamam static IPs ki list nazar aayegi jo aap ne pehle se allocate kiye honge (abhi yeh list khali hogi).
+* Naya IP address lene ke liye top right corner par moojood orange rang ke **Allocate Elastic IP address** button par click karein.
+
+#### Step 2: Amazon Ke Pool Se IP Address Lena (Figure 3.23 Breakdown)
+
+<div align="center">
+  <img src="./images/26.png" width="600"/>
+</div>
+
+* **Figure 3.23** ke mutabaq ek naya page open hoga jahan aap se poocha jayega ke aap IP address kahan se lana chahte hain.
+* Hum ne **Amazon's pool of IPv4 addresses** wale option ko select karna hai. Iska matlab hai ke AWS apne bade se IP bank (pool) mein se humein ek khali IP address nikal kar de dega.
+* Niche scroll karein aur orange rang ke **Allocate** button par click kar dein.
+* Click karte hi aap ke account ko ek permanent IP address (jaise `13.236.254.54`) mil jayega.
+
+#### Step 3: IP Address Ko Virtual Machine Se Jodhna (Figure 3.24 Breakdown)
+
+<div align="center">
+  <img src="./images/27.png" width="600"/>
+</div>
+
+Ab hum ne is naye permanent IP ko apni Sydney wali machine se connect karna hai:
+
+* Jo IP abhi allocate hua hai, use list mein se select (tick) karein.
+* Top right par **Actions** button par click kar ke **Associate Elastic IP address** select karein.
+* **Figure 3.24** ke mutabaq aap ke samne configuration page khul jayega:
+* **Resource type:** Is mein **Instance** select karein (kyunke hum isay EC2 virtual machine se jorhna chahte hain).
+* **Instance:** Dropdown par click karein aur apni chalne wali Sydney machine (jaise ID: `i-0c5b91f6d61f2d187` ya naam `sydney`) ko select kar lein.
+* **Private IP address:** Dropdown se machine ka private IP select kar lein.
+* Sab se niche moojood orange rang ke **Associate** button par click kar dein.
+
+
+
+**Hurray!** Aap ka kaam ho gaya. Ab aap ki Sydney wali machine is naye Elastic IP address ke zariye poori duniya ke liye live ho chuki hai.
+
+Apne browser mein naya tab kholin, is naye Elastic IP ko URL bar mein dalin, aur enter dabayein. Aap ke samne wahi Apache ka default test page khul jayega jo pichle section mein khula tha. Lekin is baar faida yeh hai ke agar aap machine ko **Stop** kar ke **Start** bhi karenge, toh yeh web page isi exact IP par chalta rahega!
+
+---
+
+### Zero-Downtime Server Replacement (Real-World DevOps Scenario)
+
+Elastic IP ka sab se bada aur jaadui faida tab nazar aata hai jab humein bina kisi interruption (downtime) ke chalte hue server ko naye upgraded server se tabdeel (replace) karna ho.
+
+Imagine karein ke aap ka **Server A** chal raha hai aur us ke sath aap ka Elastic IP jura hua hai. Ab aap ne server ke operating system ko patch/upgrade karna hai, ya naya code deploy karna hai. Agar aap isi server ko band karenge toh customers gussa ho jayenge.
+
+```
+[ Step 1 ]  Launch Server B (Naya server start karein aur setup complete karein)
+             
+[ Step 2 ]  Disconnect (Disassociate) Elastic IP from Server A
+                                |
+                                v
+[ Step 3 ]  Connect (Associate) Elastic IP to Server B (Direct flow of traffic!)
+
+```
+
+**DevOps Style Implementation:**
+
+1. Background mein ek naya **Server B** launch karein jo bilkul Server A jaisa ho lekin updated ho.
+2. Server B ke andar apni application, dependency, aur sara code install kar ke start kar dein aur verify kar lein ke sab theek chal raha hai.
+3. Ab Elastic IP Console par jayein, us IP ko Server A se **Disassociate** (alag) karein, aur foran Server B ke sath **Associate** (connect) kar dein.
+4. **The Result:** Kuch hi milliseconds ke andar, poori duniya se aane wali traffic bina kisi DNS delay ke khud-ba-khud Server B ki taraf mudh (route) jayegi! Kisi bhi customer ko pata bhi nahi chalega ke piche se poora computer badal diya gaya hai.
+
+Multiple public IPs ko ek hi VM ke sath jodhne ke liye hum multiple virtual network interfaces (**ENIs - Elastic Network Interfaces**) ka istemal karte hain, jise hum agle section mein mazeed detail se parhenge. Yeh tab kaam aata hai jab hum ek hi server par alag-alag websites ko un ke zati fixed IPs par chalana chahein.
+
+---
+
+### ⚠️ Ahem Warning aur 2026 ke Modern Billing Updates
+
+Internet par IPv4 addresses ki bohot zyada kami (scarcity) ho chuki hai, isi liye AWS in ka bohot ehtiyat se istemal chahta hai.
+
+* **Book Rule (Old Idle Charge Rule):** Pehle AWS ka rule hota تھا ke jab tak Elastic IP aap ki chalne wali machine ke sath connect hai, tab tak wo bilkul **Free** hai. Lekin agar aap ne IP allocate kar liya aur use kisi machine ke sath connect nahi kiya (yani use khali/idle chor diya), toh AWS aap se penalty ke tor par hourly charges leta tha taake log faaltu IPs jama kar ke block na karein.
+* **Modern 2026 AWS Standard Rule (Nihayat Ahem Update):**
+AWS ne **February 1, 2024** se apni billing policy mukammal tor par tabdeel kar di hai jo 2026 mein bhi barqarar hai. **Ab har ek public IPv4 address par charge lagta hai, chahe wo machine ke sath jura ho ya khali pada ho!**
+* **Cost:** Takreeban **$0.005 per hour** (jo ke mahine ka lag bhag **$3.60 per IP** banta hai).
+* **DevOps Best Practice:** Is liye, apna practical test mukammal karne ke baad Elastic IP ko sirf disassociate hi nahi karna, balkey use hamesha ke liye **Release** (delete) kar dena hai taake aap ke account par fazool charges na lagte rahein. (Hum clean-up agle section mein seekhenge).
+
+
+
+---
