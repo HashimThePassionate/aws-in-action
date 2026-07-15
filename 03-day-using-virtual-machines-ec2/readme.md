@@ -1528,3 +1528,293 @@ Kyunke hum ne is chapter mein makhsoos aur costly resources (jaise do Elastic IP
 4. **Delete Security Group:** **Security Groups** menu mein jayein, `launch-wizard-1` ko select kar ke use delete kar dein.
 
 ---
+
+## Optimizing costs for virtual machines
+
+Cloud infrastructure ko design aur manage karte waqt cost-optimization har DevOps engineer ki pehli aur sab se ahem priority hoti hai. Muhammad Hashim, jab hum bade-scale systems par kaam karte hain, toh fazool kharche ko rokna aur budget ko customize karna hamari zimmedari hoti hai.
+
+Chaliye ab is book ke agle hisse ko bilkul asaan, step-by-step, aur modern 2026 ke standards ke mutabaq Roman Urdu mein samajhte hain.
+
+Aam tor par jab aap cloud par virtual machines (EC2) launch karte hain, toh aap **On-Demand Instances** ka istemal karte hain. Yeh aap ko behtareen flexibility (azadi) deti hain: aap jab chahein machine ko start karein, jab chahein stop ya terminate karein, aur aap ko sirf un seconds ya ghanton ka paisa dena hota hai jitni der machine chali hai.
+
+### On-Demand Pricing (Bacho Wali Example)
+
+Iski misal bilkul ek **Rental Taxi** jaisi hai. Aap taxi mein bethe, dukan tak gaye, aur utar gaye. Aap ne sirf us safar ka rent diya. Aap par koi pabandi nahi hai ke aap ne kal bhi isi taxi mein jana hai ya nahi.
+
+Lekin agar aap ka server 24/7 chalna hai, toh rental taxi har roz chalana bohot mehanga paray ga. Is kharche ko kam karne ke liye AWS humein do behtareen options deta hai:
+
+1. **Savings Plans** (Commitment-based discount)
+2. **Spot Instances** (Spare capacity utilization)
+
+In dono options ke darmeyan farq ko samajhne ke liye pehle hum writer ki di gayi **Table 3.2** ko asaan kar ke samajhte hain.
+
+#### Table 3.2: Differences between on-demand instances, Savings Plans, and Spot Instances
+
+| Category   | On-demand instances                                      | Savings Plans                                             | Spot Instances                                                |
+|------------|-----------------------------------------------------------|------------------------------------------------------------|----------------------------------------------------------------|
+| **Price**      | High                                                      | Medium                                                     | Low                                                            |
+| **Flexibility**| High                                                      | Low                                                        | Medium                                                         |
+| **Reliability**| High                                                      | High                                                       | Low                                                            |
+| **Scenarios**  | Dynamic workloads (e.g., for a news site) or proof of concept | Predictable and static workloads (e.g., for a business application) | Batch workloads (e.g., for data analytics, media encoding, etc.) |
+
+---
+
+### Billing unit: Seconds
+
+AWS par virtual machines ka billing system bohot hi bariki se kaam karta hai. Windows aur Linux (jaise Amazon Linux, Ubuntu, ya Red Hat) ke aksar EC2 instances ki billing **per-second** ke hisab se hoti hai.
+
+#### Iska Core Rule (The 60-Second Rule):
+
+* **Minimum Charge:** Har naye launch hone wale instance ka minimum charge **60 seconds** hota hai.
+* **Scenario A:** Agar aap ne ek naya server launch kiya aur use sirf **30 seconds** baad hi terminate (delete) kar diya, toh aap ko poore **60 seconds** ka bill dena hoga.
+* **Scenario B:** Agar aap ne server ko **61 seconds** chala kar band kiya, toh aap ko exactly **61 seconds** ka hi bill aayega, ek bhi extra second ka paisa nahi liya jayega.
+* **Niche Workloads:** Kuch specific operating systems ya marketplace ke softwares abhi bhi hourly (per hour) par bill hote hain, jahan agar aap ne 5 minute bhi machine chalayi toh pure 1 ghante ka bill dena parta hai.
+
+---
+
+## Commit to usage, get a discount
+
+Agar aap ko pehle se pata hai ke aap ka server agle ek ya teen saal tak lagatar chalne wala hai, toh on-demand rates dena bewakoofi hai. Aise moqay par hum **Savings Plans** khareedte hain.
+
+### Savings Plans Kya Hain? (Bacho Wali Example)
+
+Imagine karein ke aap roz metro train mein safar karte hain aur roz ek single ticket ($1) lete hain.
+
+* Agar aap metro walon ke paas jayein aur kahein ke *"Mein agle 1 saal tak roz safar karunga, mein aap se commit karta hoon"*
+* Toh wo aap ko ek **Monthly/Yearly Pass** bana kar de dete hain, jis se aap ki roz ki ticket ka kharcha $1 se kam ho kar sirf $0.60 reh jata hai.
+* **Savings Plans** bilkul isi tarah ka commitment pass hain.
+
+AWS humein EC2 ke liye do qism ke Savings Plans deta hai:
+
+* **1. Compute Savings Plans (Sab se flexible):**
+* Yeh discount sirf EC2 virtual machines par hi nahi lagta, balkey agar aap future mein container services (**Fargate**) ya serverless (**Lambda**) par shift ho jayein, toh wahan bhi chal jata hai.
+* Yeh aap ko azadi deta hai ke aap kisi bhi waqt instance family (C family se M family) ya region (Virginia se Ireland) badal sakein.
+
+
+* **2. EC2 Instance Savings Plans (Sab se zyada discount):**
+* Yeh plan sirf aur sirf EC2 instances par apply hota hai (Fargate ya Lambda par nahi chalega).
+* Is mein aap ko region aur instance family ko lock karna parta hai, lekin is ke badle mein aap ko Compute Savings Plan se **kahin zyada discount** milta hai.
+
+
+
+#### Savings Plan Kaise Khareeda Jata Hai? (Writer's Example Breakdown)
+
+Jab aap Savings Plan khareedte hain, toh aap ko yeh details set karni hoti hain:
+
+* **Term:** Commitment ka duration (1 saal ya 3 saal).
+* **Hourly commitment:** Aap har ghante kitne paise kharch karne ka wadah karte hain (e.g., $1 per hour).
+* **Payment option:**
+* *All Upfront:* Saare paise shuru mein hi de dein (sab se zyada discount).
+* *Partial Upfront:* Adhe paise shuru mein, baqi har mahine.
+* *No Upfront:* Shuru mein zero payment, bas har mahine commitment ke mutabaq bill aayega (sab se kam discount).
+
+
+
+#### Pure Mathematical Calculation:
+
+Chaliye writer ki mathematical example ko breakdown karte hain:
+
+* Agar aap **$1 per hour** ka commitment karte hain **1 saal** ke liye, aur payment option select karte hain **All Upfront** (yani saare paise pehle hi de dete hain):
+
+$$\text{Total Upfront Payment} = 24 \text{ hours} \times 365 \text{ days} \times \$1 = \$8,760.00$$
+
+
+* **Compute Savings Plan ke sath:** Aap ko us-east-1 mein chalne wale `m5.large` instance par **31% discount** milega.
+* **EC2 Instance Savings Plan ke sath:** Kyunke aap ne family (m5) aur region (us-east-1) ko lock kar diya hai, is liye aap ko isi machine par **42% discount** milega!
+
+> ⚠️ **Design Warning:** Savings Plan sirf ek billing optimization tool hai. Isay khareedne se chalte hue servers par koi physical asar nahi hota aur na hi unhein restart karna parta hai. AWS ka billing engine khud-ba-khud chalne wale on-demand instances par yeh discount apply kar deta hai. Lekin yaad rakhein, agar aap ne commitment kar li, toh **paisa har haal mein dena hoga**, chahe aap ka server chal raha ho ya band pada ho!
+
+---
+
+## Capacity Reservations
+
+Aksar log **Savings Plans** aur **Capacity Reservations** ko ek hi cheez samajhte hain, jo ke bilkul galat hai. In dono ke darmeyan farq ko samajhna ek DevOps engineer ke liye nihayat zaroori hai.
+
+### Capacity Reservation Kya Hai? (Bacho Wali Example)
+
+Imagine karein ke aap ne kisi bade VIP event mein jana hai aur aap chahte hain ke aap ki gari ke liye parking spot pehle se reserved ho:
+
+* **Savings Plans:** Yeh parking spot ka discount coupon hai. Spot milega ya nahi, yeh iski guarantee nahi deta, bas chalne par discount deta hai.
+* **Capacity Reservation:** Yeh parking slot ke upar aap ki gari ka number plate lagana hai. Wo space sirf aap ki hai. Chahe aap apni gari wahan park karein ya na karein, wo space kisi aur ko nahi di jayegi. Aur kyunke wo space reserved hai, aap ko **har ghante ka rent dena hoga**, chahe parking slot khali hi kyun na pada ho!
+
+#### Hamein Iski Zaroorat Kyun Parti Hai? (The Infrastructure Challenge)
+
+On-demand instances ke sath baaz auqat (rare cases mein) aisa ho jata hai ke jab aap achanak koi naya server launch karne lagte hain, toh AWS ke paas us data center mein physical hardware khali nahi hota (AWS gives "Insufficent Capacity Error").
+
+* Yeh tab ho sakta hai jab koi rare/specialized instance type ho, ya peak hours chal rahe hon (jaise Black Friday ya FIFA World Cup match ke doran traffic spike), ya kisi bad disaster ke waqt jab hazaron customers achanak apne crash servers ko replace kar rahe hon.
+* **The Solution:** Agar aap ki application aisi hai jiska har haal mein chalna zaroori hai (mission-critical), toh aap **EC2 Capacity Reservation** use karte hain. Aap AWS ko normal on-demand fee (jaise `m5.large` ke liye $0.096 per hour) dete rehte hain, aur AWS guarantee deta hai ke jab bhi aap command chalayenge, aap ki machine bina kisi delay ke foran launch ho jayegi.
+
+---
+
+## Taking advantage of spare compute capacity
+
+AWS ke data centers poori duniya mein hazaron physical servers par mushtamil hain. AWS ko hamesha aane wali demand ke liye pehle se extra hardware ready rakhna hota hai. Jo hardware khali pada hota hai, usay **Spare Capacity** kehte hain.
+
+Kyunke khali hardware se AWS ko koi kamai nahi ho rahi hoti, is liye AWS is khali space ko bohot hi saste daam par bech deta hai. In sasti virtual machines ko hum **Spot Instances** kehte hain.
+
+### Spot Instance Kya Hai? (Standby Ticket Wali Example)
+
+Iski misal **Standby Airplane Ticket** jaisi hai:
+
+* Airplanes ki ticket aam tor par mehangi hoti hai. Lekin agar flight urne mein sirf 10 minutes baqi hon aur plane mein kuch seats khali hon, toh airline un khali seats ko 90% discount par bech deti hai.
+* **The Catch:** Lekin agar koi full-price dene wala passenger achanak aa jaye, toh airline aap ko seat se utha degi.
+* Spot instances mein bhi bilkul aisa hi hota hai. Aap ko **90% tak ka discount** mil jata hai (jaise writer ne bataya ke `m5.large` ka on-demand price $0.096/hour tha, jabke spot price sirf **$0.039/hour** tha - yani seedha 60% se zyada ki bachat!).
+* **The Interruption:** Lekin jaise hi kisi on-demand user ko us hardware ki zaroorat paregi, AWS aap ki machine ko **sirf 2-minute ka notice** de kar terminate (delete) kar dega!
+
+#### Spot Instances Kahan Istemal Hote Hain? (Stateless Workloads)
+
+Aap sochenge ke aisi machine par kaun apna kaam chalaye jo kabhi bhi band ho sakti hai? Ek behtareen DevOps architecture hamesha **stateless aur fault-tolerant** design kiya jata hai:
+
+* **Virus Scanning / Batch Jobs:** S3 bucket mein padi files ko scan karna. Agar server chalte chalte delete ho jaye, toh naya server aakar queue se dobara file utha kar scan kar lega (koi data loss nahi hoga).
+* **Media Transcoding:** Badi video files ko convert karna. Agar job fail ho jaye, toh orchestrator use dobara restart kar deta hai.
+* **Fault-Tolerant Web Apps:** Agar aap ke load balancer ke piche 10 servers chal rahe hain, aur un mein se 3 spot instances hain. Agar wo delete bhi ho jayein, toh baqi ke 7 on-demand servers website ka load sambhal lenge.
+* **Test/Dev Environments:** Office testing servers jahan thodi der ke outage se koi farq nahi parta lekin kharcha bohot bach jata hai.
+
+---
+
+### Step-by-Step Spot Instance Launch Guide (Figures Breakdown)
+
+Chaliye, ab hum console par ja kar apna pehla **Spot Instance** launch karte hain.
+
+*Yaad rahe ke hum ne pichle section mein Sydney region select kiya tha, abhi ke liye hum wahi reh kar Spot Request banayenge.*
+
+#### 1. Figure 3.29 Ka Breakdown: Spot Request Creation
+
+<div align="center">
+  <img src="./images/33.png" width="600"/>
+</div>
+
+* **EC2 Dashboard** par jayein aur left menu se **Spot Requests** select karein.
+* Orange button **Request Spot Instances** par click karein.
+* **Figure 3.29** ke mutabaq:
+* Launch parameters mein **`Manually configure launch parameters`** select karein (taake hum apni marzi ka OS aur IAM role set kar sakein).
+* AMI mein **Amazon Linux 2** (ya modern standard **AL2023**) select karein.
+* Key pair ko **(optional)** ya *Proceed without a key pair* par chor dein.
+* *Additional launch parameters* ko expand kar ke **IAM instance profile** mein hamara badge **`ec2-ssm-core`** select karein taake hum Session Manager se connect ho sakein.
+
+
+
+#### 2. Figure 3.30 Ka Breakdown: Target Capacity Settings
+
+<div align="center">
+  <img src="./images/34.png" width="600"/>
+</div>
+
+* Niche scroll kar ke **Target capacity** wale section par aayein.
+* **Figure 3.30** ke mutabaq:
+* **Total target capacity:** Is mein **`1`** likhin (testing ke liye humein sirf ek hi spot machine chahiye).
+* Baqi options (jaise *Maintain target capacity*) ko default unchecked hi rehne dein.
+
+
+
+#### 3. Figure 3.31 Ka Breakdown: Instance Type Selection
+
+<div align="center">
+  <img src="./images/35.png" width="600"/>
+</div>
+
+* **Figure 3.31** ke mutabaq:
+* **Manually select instance types** par click karein.
+* Pehle se add hue saare bade instance types ko list se select kar ke **Delete** kar dein (taake koi mehangi machine launch na ho jaye).
+* **Add Instance Types** par click kar ke sirf **`t2.micro`** (ya modern standard `t3.micro`) ko select karein.
+
+
+
+#### 4. Figure 3.32 Ka Breakdown: Allocation Strategy
+
+<div align="center">
+  <img src="./images/36.png" width="600"/>
+</div>
+
+* **Figure 3.32** ke mutabaq:
+* Allocation strategy mein **`Capacity optimized`** select karein.
+* **Kyun?** Yeh strategy AWS ko batati hai ke *"Mujhe us hardware pool se machine do jahan sab se zyada spare capacity khali pari hai"*. Is se hamari machine ke terminate hone ke chances bohot kam ho jate hain.
+* Sab se niche ja kar orange **Launch** button par click kar dein.
+
+
+
+#### 5. Figure 3.33 Ka Breakdown: Fulfilled Spot Requests
+
+<div align="center">
+  <img src="./images/37.png" width="600"/>
+</div>
+
+* Launch karte hi aap ke samne Spot Requests ki list aa jayegi.
+* **Figure 3.33** ke mutabaq, jab aap ki request ka status **active** aur status **`fulfilled`** ho jaye, toh iska matlab hai ke AWS ne kamyabi se aap ke liye spot machine dhond kar launch kar di hai!
+* Ab aap left menu se **Instances** mein ja kar apni is spot machine ko dekh sakte hain.
+
+---
+
+### Interruption Check Commands (IMDSv1 vs IMDSv2 - 2026 Modern Standard)
+
+Spot instance chalte waqt, AWS hamari machine ko delete karne se exactly **2 minutes pehle** ek notification generate karta hai. Hum is notification ko machine ke andar chalne wale **Metadata Service** ke zariye monitor kar sakte hain.
+
+#### Book Method (IMDSv1 - Older Standard):
+
+```bash
+curl http://169.254.169.254/latest/meta-data/spot/instance-action
+```
+
+> ⚠️ **Nihayat Ahem 2026 Security Update (IMDSv2 Token Standard):**
+> 2026 ke modern standards mein secure IMDSv2 default chal raha hota hai. Agar aap direct purani curl command chalayenge, toh aap ko `401 Unauthorized` error mil sakta hai. IMDSv2 ke zariye spot interruption check karne ka sahi aur modern tareeqa yeh hai:
+
+```bash
+# Step 1: Secure Session Token generate karein
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+
+# Step 2: Token use kar ke spot instance-action check karein
+curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/spot/instance-action
+
+```
+
+#### Output Messages Ka Line-by-Line Analysis:
+
+* **Case 1: No Interruption (Sab safe hai ✅)**
+Agar is command ko chalane par aap ko **`404 - Not Found`** error milti hai, toh yeh ek bohot hi **khush-ayend (good) sign** hai! Iska matlab hai ke AWS ko abhi is hardware ki zaroorat nahi hai aur aap ki machine bilkul mehfooz tarike se chalti rahegi.
+* **Case 2: Interruption Warning (Danger Zone ⚠️)**
+Agar output mein niche diya gaya JSON response aata hai:
+```json
+{
+  "action": "stop", 
+  "time": "2026-07-14T12:12:00Z"
+}
+
+```
+
+
+* **`"action": "stop"` (ya `"terminate"`):** Yeh batata hai ke AWS aap ke server ke sath kya karne laga hai.
+* **`"time": "2026-07-14T12:12:00Z"`:** Yeh exact wo time batata hai jab server band ho jayega. Yeh warning thik **2 minutes pehle** aati hai.
+* **DevOps Best Practice:** Hum is metadata URL par har 5 seconds baad ek script (cron job) chalate hain. Jaise hi warning milti hai, hamara script automatic apna saara zaroori data backup karta hai, active users ko dusre server par transfer karta hai, aur safely graceful shutdown kar leta hai.
+
+
+
+---
+
+## Cleaning up
+
+Spot instances aur fleets ko completely saaf karne ka tareeqa aam instances se thoda alag hota hai, kyunke agar aap sirf instance delete karenge, toh spot fleet request piche se ek naya server dobara khara kar degi! Is liye humein pehle **Spot Request** ko cancel karna hota hai:
+
+1. EC2 Dashboard par ja kar left side se **Spot Requests** par click karein.
+2. Apni banayi hui fleet request ko select karein.
+3. Top right par **Actions** button par click kar ke **Cancel request** select karein.
+4. **Nihayat Ahem Step:** Khulne wale window mein **`Terminate instances`** ke checkbox ko lazmi select (tick) karein. Is se spot request cancel hone ke sath sath chalne wali virtual machine bhi khud-ba-khud delete ho jayegi.
+5. **Confirm** par click kar dein.
+
+*(Sydney region mein banaye gaye dono Elastic IPs aur doosre resources hum ne pichle section mein hi safely clean-up kar liye the).*
+
+---
+
+## Summary
+
+Aap ne is teesre chapter mein cloud computing aur virtual infrastructure ki bohot saari barikiyaan seekh li hain:
+
+* **OS Choice:** AWS par virtual machine launch karte waqt aap ke paas operating systems ki mukammal range hoti hai (Amazon Linux, Red Hat, Ubuntu, Windows).
+* **Easy Resizing (Vertical Scaling):** Machine ka size (vCPU/RAM) badalna nihayat asaan hai: chalte hue server ko stop karein, instance type tabdeel karein, aur naye heavy engine ke sath start kar lein.
+* **Logs & Metrics:** System debugging ke liye hum console se directly **System Logs** nikal sakte hain aur graphs dekhne ke liye **CloudWatch Metrics** ka use karte hain.
+* **Global Locations:** AWS ke data centers poori duniya mein hain. Sydney ya Virginia mein server chalane ka step-by-step tareeqa bilkul ek jaisa hai.
+* **Region Selection Criteria:** Hamesha data center chunte waqt network latency, legal compliance (qanooni rules), costs (qemat), aur services ki availability ko zehan mein rakhein.
+* **Static Routing (Elastic IP):** Elastic IP address allocate aur associate karne se aap ka public IP address fix ho jata hai, jis se aap piche se machine ko bina IP badle change kar sakte hain.
+* **Cost Optimization (Savings Plans):** Agar aap 1 ya 3 saal ke liye bare workloads chalane ka commit karte hain, toh Savings Plans ke zariye aap ko bohot bara discount milta hai.
+* **Spare Capacity (Spot Instances):** AWS ke khali physical hardware pool (Spot) ka faida utha kar aap 90% tak ke saste rates par stateless aur fault-tolerant tasks chala sakte hain, bas 2-minute ke warning notice ko handle karna aana chahiye.
+
+---
