@@ -1222,3 +1222,182 @@ Agar hamare paas koi virtual machine chal rahi hai aur hum uski settings badalna
 Isi liye, ab hum is **Imperative World** (jahan hum har step khud likhte hain) ko chhor kar **Declarative World** (jahan hum sirf aakhri state likhte hain aur AWS khud sab kuch manage karta hai) ki taraf barhenge, jo ke **AWS CloudFormation** aur modern Infrastructure as Code (IaC) ka bunyadi concept hai!
 
 ---
+
+
+## Infrastructure as Code
+
+**Infrastructure as Code (IaC)** ka matlab hai ek high-level programming language ya code file (jaise JSON ya YAML) ka istemal kar ke apne poore computer network aur servers ko control aur setup karna.
+
+* **Infrastructure Kya Hota Hai?** Infrastructure ka matlab hai AWS ka koi bhi resource, jaise network ki settings (network topology), load balancer (traffic manage karne wala), DNS entry (website ka naam), ya storage buckets.
+* **Software Development Se Seekh:** Software development mein hamare paas kaam ko behtar banane ke liye behtareen tools hote hain, jaise automated tests (jo code check karte hain), code repositories (jahan code save hota hai jaise GitHub), aur build servers.
+* **IaC Ka Faida:** Agar hamara infrastructure bhi code ki shakal mein likha hoga, toh hum software development wale saare ache tools (tests, version control, automation) apne infrastructure par bhi apply kar sakenge, jis se galti ki gunjaish bilkul khatam ho jayegi aur system ki quality bohot barh jayegi.
+
+> **WARNING (Ek Zaroori Farq):** **Infrastructure as Code (IaC)** aur **Infrastructure as a Service (IaaS)** ko aapas mein mix mat kijiyega!
+> * **IaaS** ka matlab hai internet par virtual machines, storage, aur networks ko rent (kiraye) par lena jahan aap jitna use karte hain sirf us ka pay karte hain (pay-per-use model).
+> * **IaC** us kiraye par liye gaye infrastructure ko code ke zariye automatic chalane aur setup karne ka tarika hai.
+
+---
+
+## Inventing an infrastructure language: JIML
+
+Infrastructure as Code ke gehre concepts ko aasaani se samajhne ke liye, hum khud se ek farzi (imaginary) language ijad karte hain jiska naam hum rakhte hain **JSON Infrastructure Markup Language (JIML)**.
+
+### Figure 4.12 Ka Breakdown (Blueprint Se Asli Setup Tak):
+
+<div align="center">
+  <img src="./images/12.png" width="600"/>
+</div>
+
+Agar aap **Figure 4.12** ko ghaur se dekhein, toh yeh humein dikhata hai ke hamara IaC tool kis tarah kaam karega:
+
+* **Left Side (The Blueprint):** Yahan hamari likhi hui code file hai (JIML code) jo ke ek text file hai. Is mein hum ne likha hai ke humein kya kya chahiye.
+* **The Translator (IaC Tool):** Darmiyan mein hamara IaC tool baitha hai jo is file ko parhta hai aur usay real-world running running setup mein convert karta hai.
+* **Right Side (The Running Infrastructure):** Tool ki madad se hamara poora physical ya virtual setup AWS par khara ho jata hai, jis mein niche likhe tamam components aapas mein miley hote hain:
+* **DNS:** Website ka domains handle karne ke liye.
+* **CDN (Content Delivery Network):** Website ko users ke liye tez banane ke liye.
+* **Load Balancer (LB):** Aane wale users ke load ko divide karne ke liye.
+* **Static Files Storage (Bucket):** Tasveerein aur static files save karne ke liye.
+* **Virtual Machines (VMs):** Hamare application servers.
+* **Database (Amazon RDS):** Jahan data save hoga.
+
+
+
+JIML ko likhne ke liye hum **JSON** ka syntax use karenge taake brackets ya spelling ki galti na ho. Is language mein jab bhi hum kisi resource ke aage dollar sign **`$`** lagayenge, toh iska matlab hoga ke hum us resource ki ID ka reference (ishara) de rahe hain.
+
+### Listing 4.8 Infrastructure
+
+Niche hum ne exact wahi JSON template likha hai jo hamare poore system ka naksha (blueprint) hai:
+
+```json
+{
+  "region": "us-east-1",
+  "resources": [{
+    "type": "loadbalancer",
+    "id": "LB",
+    "config": {
+      "virtualmachines": 2,
+      "virtualmachine": {
+        "cpu": 2,
+        "ram": 4,
+        "os": "ubuntu"
+      }
+    },
+    "waitFor": "$DB"
+  },
+  {
+    "type": "cdn",
+    "id": "CDN",
+    "config": {
+      "defaultSource": "$LB",
+      "sources": [{
+        "path": "/static/*",
+        "source": "$BUCKET"
+      }]
+    }
+  },
+  {
+    "type": "database",
+    "id": "DB",
+    "config": {
+      "password": "****",
+      "engine": "MySQL"
+    }
+  },
+  {
+    "type": "dns",
+    "config": {
+      "from": "www.mydomain.com",
+      "to": "$CDN"
+    }
+  },
+  {
+    "type": "bucket",
+    "id": "BUCKET"
+  }]
+}
+```
+
+#### JSON Ki Step-by-Step Aasaan Detail:
+
+* `"region": "us-east-1"`: Yeh batata hai ke hamara poora system AWS ke America (N. Virginia) wale data center mein banega.
+* `"resources"`: Is array list ke andar hum ne apne saare khilaune (components) rakh diye hain jo humein chahiye:
+1. **Load Balancer (`LB`):** Is ki configuration mein likha hai ke is ke piche 2 virtual machines chalanian hain jo Ubuntu operating system par chalengi, jin mein 2 CPU aur 4 GB RAM hogi. Sab se zaroori baat yahan `"waitFor": "$DB"` likha hai, jiska matlab hai ke load balancer tab tak nahi ban sakta jab tak hamara database (`DB`) ban kar tayyar na ho jaye.
+2. **CDN (`CDN`):** Yeh content delivery network hai. Is ka main source `$LB` (Load Balancer) hai, aur static files (`/static/*`) uthane ke liye yeh `$BUCKET` ka use karega.
+3. **Database (`DB`):** Yeh database MySQL engine par chalega aur iska password set kiya gaya hai.
+4. **DNS:** Yeh internet par hamari website `[www.mydomain.com](https://www.mydomain.com)` ko `$CDN` ke sath jor dega.
+5. **Bucket (`BUCKET`):** Yeh files store karne ke liye ek khali dabba (storage bucket) banayega.
+
+
+
+---
+
+## How can we turn this JSON into AWS API calls?
+
+Hum is raw JSON text file ko AWS ke chalte hue system mein kaise badlein? Hum direct servers ko order nahi bhej sakte, is ke liye hamare JIML tool ko **chaar ahem steps** karne parenge:
+
+1. **Parse the JSON input:** Sab se pehle tool is JSON file ko parh kar computer ki memory mein load karega taake computer har ek line ka matlab samajh sake.
+2. **Create a dependency graph:** Tool yeh dekhega ke kaun sa component kis par depend karta hai (kis ke bina kaam nahi chal sakta) aur un ko aapas mein lino ke zariye jor kar ek naksha (graph) banayega.
+3. **Traverse the dependency graph:** Tool is nakshe ko niche se upar (leaf nodes se root tak) parhega aur kaam karne ki ek sahi line-by-line sequence (linear flow) banayega.
+4. **Translate into AWS API calls:** Aakhir mein, tool un commands ko real AWS API calls mein badal kar internet ke zariye AWS ko bhej dega.
+
+> **Bachon Wali Misal (The House Analogy):**
+> Farz karein aap ne ghar banana hai. Aap ghar ki chhat (DNS) tab tak nahi dal sakte jab tak deewarein (Load Balancer/CDN) na khari hon, aur deewarein tab tak nahi ban sakti jab tak bundeadi khambay aur zameen ki tayyari (Database/VMs) na ho jaye.
+> IaC tool bilkul isi tarah dhyan rakhta hai ke pehle foundation bane, phir deewarein, aur aakhir mein chhat!
+
+### Figure 4.13 Ka Breakdown (Dependency Graph):
+
+<div align="center">
+  <img src="./images/13.png" width="600"/>
+</div>
+
+Agar aap **Figure 4.13** ko dekhein, toh left side par hamara JIML code hai aur right side par tool ka banaya hua **Dependency Graph** hai. Tool ne automatic sab ka number aur order set kar diya hai:
+
+* **Nodes at the bottom (No Dependencies):** Sab se niche **DB (1)**, **VM (2)**, aur **Bucket (3)** hain. In ke niche koi aur component nahi hai, is liye yeh sab se pehle bina kisi ka wait kiye banaye ja sakte hain.
+* **Load Balancer (4):** Yeh beech mein khara hai kyunke yeh tab banega jab niche wale **DB** aur **VMs** ban kar ready ho jayenge.
+* **CDN (5):** Yeh tab banega jab usay peeche se **LB (4)** aur **Bucket (3)** milenge.
+* **DNS (6):** Yeh sab se top par khara hai kyunke isay chalne ke liye **CDN (5)** ka active hona zaroori hai.
+
+Is nakshe ko niche se upar aur left se right parhte hue, JIML tool commands ki ek seedhi list tayyar karega.
+
+---
+
+### Listing 4.9 Linear flow of commands in pseudo language
+
+Niche di gayi list hamare tool ki banayi hui seedhi instructions (commands) hain jo bilkul sahi order mein chalengi:
+
+```text
+$DB = database create {"password": "****", "engine": "MySQL"}
+$VM1 = virtualmachine create {"cpu": 2, "ram": 4, "os": "ubuntu"}
+$VM2 = virtualmachine create {"cpu": 2, "ram": 4, "os": "ubuntu"}
+$BUCKET = bucket create {}
+
+await [$DB, $VM1, $VM2]
+$LB = loadbalancer create {"virtualmachines": [$VM1, $VM2]}
+
+await [$LB, $BUCKET]
+$CDN = cdn create {...}
+
+await $CDN
+$DNS = dns create {...}
+
+await $DNS
+```
+
+#### Pseudo Language Ki Step-by-Step Detail:
+
+* `$DB = database create ...` aur `$VM1`, `$VM2`, `$BUCKET`: Tool sab se pehle database, dono virtual machines, aur storage bucket banane ki request bhej dega kyunke in ka koi dependency wait nahi hai.
+* `await [$DB, $VM1, $VM2]`: Yahan system ruk jayega! Yeh tab tak aage nahi barhega jab tak database aur dono machines poori tarah ban kar active nahi ho jatein.
+* `$LB = loadbalancer create ...`: Jaise hi wait khatam hoga, load balancer banaya jayega aur usay bataya jayega ke us ne traffic ko `$VM1` aur `$VM2` par bhejni hai.
+* `await [$LB, $BUCKET]`: Ab dobara system wait karega jab tak load balancer aur bucket active nahi ho jate.
+* `$CDN = cdn create {...}`: Dono ke ready hote hi CDN network create kiya jayega.
+* `await $CDN`: CDN ke fully ready hone ka wait hoga.
+* `$DNS = dns create {...}`: Aur aakhir mein DNS entry create ho kar domain map ho jayegi.
+
+### Modern 2026 Perspective (Real-World IaC):
+
+Aaj ke daur (2026) mein hum apna koi farzi tool ya pseudocode interpreter nahi likhte. AWS par is kaam ke liye hum do zaroori aur behtareen options use karte hain:
+
+1. **AWS CloudFormation:** Yeh AWS ki apni service hai jo JSON ya YAML templates ko parhti hai, automatic aisa hi dependency graph (DAG - Directed Acyclic Graph) banati hai, aur sahi order mein resources deploy karti hai.
+2. **AWS CDK (Cloud Development Kit) & Terraform:** Aaj kal hum raw JSON likhne ke bajaye modern programming languages (jaise **Python 3.11+** ya **TypeScript**) mein code likhte hain. Hum classes aur objects banate hain, aur background mein yeh tools automatic CloudFormation templates generate kar ke hamara poora system khara kar dete hain.
+
+---
