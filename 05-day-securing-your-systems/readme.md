@@ -375,3 +375,348 @@ Jab aap is poori CloudFormation template ko deploy karte hain aur AWS Systems Ma
 > Jab aap is section ka practical mukammal kar lein, toh AWS CloudFormation par ja kar apne banaye hue `ec2-os-update` stack ko **Delete** karna mat bhooliyega. Agar aap resources ko chalta chor denge, toh unke chalne ka kharcha (charges) aapke account par par sakta hai.
 
 ---
+
+## Securing your AWS account
+
+AWS account ki security aap ke cloud infrastructure ki buniyaad hai. Agar koi badmaash ya attacker aapke AWS account ka access haasil kar leta hai, toh woh aapka keemti data chura sakta hai, aapke kharche par heavy resources chala kar aapko hazaron dollars ka bill bhej sakta hai, ya phir aapka saara data ek jhatke mein delete kar sakta hai.
+
+> 🧺 **Bachon Wali Example:**
+> Apne AWS account ka tasawwur ek bari tokri (basket) ki tarah karein. Jaise aap **Figure 5.4** mein dekh sakte hain, is tokri ke andar aapke saare toys (ya cloud resources) jaise EC2 instances, CloudFormation stacks, aur IAM users ek sath pare hote hain.
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+* **Figure 5.4 Ka Breakdown:** Is tasweer mein saaf dikhaya gaya hai ke jab aap **Management Console** (web browser) ke zariye aate hain, toh aap direct account ke main malik yani **Root User** ke roop mein dakhil hote hain. Jabki **Terminal (CLI)** ke zariye kaam karte waqt aapne `mycli` naam ka ek chota user banaya hua hai.
+* **The Root User Threat:** Har nayi tokri (AWS account) ke sath ek **Root User** automatic milta hai jiske paas bina kisi rok-tok ke har cheez ka full control hota hai. Ab tak hum isi se login kar rahe hain, lekin asal professional dunya mein aisa karna khatarnak hai. Is section mein hum ek extra user banayenge taake root user ko hamesha ke liye locked aur safe rakha ja sake, aur har bande ko uske kaam ke mutabaq limited access diya jaye.
+
+#### Attacker Aapke Account Mein Kaise Ghus Sakta Hai? (Authentication Path)
+
+Kisi bhi chor ko aapke account ke andar aane ke liye teen raste milte hain:
+
+1. **Root User ke zariye:** Iske liye attacker ko aapka main email aur password chahiye.
+2. **IAM User ke zariye:** Iske liye usay user ka password ya phir CLI wali **Access Keys** (Access Key ID + Secret Access Key) chahiye hotin hain.
+3. **AWS Resource (jaise EC2 instance) ban kar:** Agar attacker aapki chalne wali machine (EC2) ke andar ghus jaye, toh woh wahan bethi **Instance Metadata Service (IMDS)** se baatchit kar ke temporary keys chura sakta hai.
+
+In chor-raston ko band karne ke liye hamara sab se pehla qadam **Multifactor Authentication (MFA)** on karna hai, jo password ke upar ek extra security ka tala laga deta hai.
+
+---
+
+## Securing your AWS account’s root user
+
+Root user aapke account ka sab se bada darwaza hai, isliye is par MFA lagana sab se zyada zaroori hai. MFA active hone ke baad, agar kisi chor ko aapka password pata chal bhi jaye, toh bhi woh tab tak login nahi kar sakega jab tak uske paas aapke phone mein aane wala temporary token (OTP) na ho.
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+* **Figure 5.5 Ka Breakdown:** Agar aap **Figure 5.5** ki tasweer ko dekhein, toh yeh AWS IAM console ka **Your Security Credentials** wala page dikha rahi hai. Tasweer mein numbered tags (1, 2, 4, 5) ke zariye unhi steps ko highlight kiya gaya hai jo niche diye gaye hain taake aapko dhoodhne mein aasani ho.
+
+#### Root User Par MFA On Karne Ke Steps:
+
+1. Management Console mein top right (upar seedhe haath) par apne **Name** par click karein.
+2. Drop-down menu mein se **Security Credentials** ko select karein.
+3. Apne smartphone par ek free MFA app install karein jo TOTP (Time-based One-Time Password) standard ko support karti ho (jaise **Google Authenticator** ya Microsoft Authenticator).
+4. Page par niche aa kar **Multi-Factor Authentication (MFA)** ke section ko expand (kholein).
+5. **Activate MFA** ke blue button par click karein.
+6. **Virtual MFA Device** ka option select karein aur next step par chalein.
+7. Ab samne aane wale QR code ko apne mobile ki app se scan karein aur lagatar do temporary codes enter kar ke setup mukammal karein.
+
+> ⚠️ **Professional Security Tip:** Agar aap apne mobile ko hi virtual MFA bana rahe hain, toh us mobile ke andar kabhi bhi root user ka password save mat karein aur na hi us mobile se AWS console chalayein. Token aur password dono alag alag jagah hone chahiye. Zyada high security ke liye aap hardware tokens jaise **YubiKeys** ka use bhi kar sakte hain.
+
+---
+
+## AWS Identity and Access Management (IAM)
+
+<div align="center">
+  <img src="./images/06.png" width="600"/>
+</div>
+
+* **Figure 5.6 Ka Breakdown:** **Figure 5.6** mein IAM ka poora dhaanchan dikhaya gaya hai. Yeh service AWS ke dimgah ki tarah kaam karti hai. Jab bhi aap ya aapka koi server **AWS API** ko koi request bhejta hai (jaise: *Mera ek naya server chalao*), toh beech mein betha IAM do cheezein check karta hai: Pehla **Authentication** (Kya aap sach mein wahi hain jo dawwa kar rahe hain?) aur doosra **Authorization** (Kya aapko yeh kaam karne ki ijazat hai?).
+
+IAM ke andar char buniyadi components (pors) hote hain jinhein samajhna laazmi hai:
+
+* **IAM User:** Yeh aam taur par zinda insano (jaise aap ya aapke developers) ya AWS se bahar chalne wale automatic softwares ke liye banta hai.
+* **IAM Group:** Yeh users ka ek majmua (collection) hota hai jinhein hum ek jaisi permissions dena chahte hain.
+* **IAM Role:** Yeh kisi insan ke liye nahi hota, balkay AWS ke apne resources (jaise ek EC2 instance) ko temporary power dene ke liye banta hai.
+* **IAM Identity Policy:** Yeh ek simple document hota hai jisme saaf-saaf likha hota hai ke kis cheez ki ijazat hai aur kis ki nahi.
+
+Let's look at the exact differences in **Table 5.1**:
+
+#### Table 5.1 Differences among an AWS account root user, IAM user, and IAM role
+
+| Feature | AWS account root user | IAM user | IAM role |
+| --- | --- | --- | --- |
+| **Can have a password** (needed to log in to the AWS Management Console) | Always | Yes | No |
+| **Can have access keys** (needed to send requests to the AWS API (e.g., for CLI or SDK)) | Yes (not recommended) | Yes | No |
+| **Can belong to a group** | No | Yes | No |
+| **Can be associated with an EC2 instance, ECS container, Lambda function** | No | No | Yes |
+
+> 🔑 **Golden Rule:** AWS mein paidaishi taur par (by default) kisi bhi user ya role ke paas koi taqat nahi hoti, woh kuch nahi kar sakte. Jab tak aap unke sath ek **Identity Policy** attach nahi karenge, unka access zero rahega.
+
+---
+
+## Defining permissions with an IAM identity policy
+
+Identity policy ko hum **JSON** format mein likhte hain. Iske andar ek ya ek se zyada **Statements** hoti hain jo kisi kaam ko ya toh **Allow** (ijazat) kartin hain ya **Deny** (rokna). Agar hum kisi jagah `*` (wildcard) lagate hain, toh iska matlab hota hai "Sub Kuch".
+
+> 💡 **Identity vs. Resource Policies (Farq):**
+> * **Identity Policies:** Yeh hamesha kisi User, Group, ya Role ke upar chipkayi jati hain.
+> * **Resource Policies:** Yeh direct kisi resource (jaise S3 bucket) par lagayi jati hain. Unme ek ahem cheez hoti hai jise **`Principal`** kehte hain. Principal yeh batata hai ke kaunsa banda ya account is resource par aa sakta hai (aur isko public yani poori duniya ke liye open bhi kiya ja sakta hai).
+> 
+> 
+
+Chaliye policies ke kuch mazedaar design decisions aur codes ko breakdown karte hain:
+
+#### Example 1: Full EC2 Access Policy
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Effect": "Allow",
+        "Action": "ec2:*",
+        "Resource": "*"
+    }]
+}
+
+```
+
+* `"Version": "2012-10-17"`: Yeh AWS ke policy ka engine version hai jise lock rakhna zaroori hai.
+* `"Effect": "Allow"`: Iska matlab hai hum ijazat de rahe hain.
+* `"Action": "ec2:*"`: `ec2` service ka har ek kaam (wildcard `*` ki wajah se) allowed hai.
+* `"Resource": "*"`: Yeh access account ke kisi bhi EC2 resource par chal sakta hai.
+
+#### Example 2: Deny Overrides Allow (Rok-tok Sub Se Pehle)
+
+AWS ka ek pakka qanoon hai: **Deny hamesha Allow par bhaari parta hai**. Agar ek statement ijazat de rahi hai aur doosri mana kar rahi hai, toh kaam ruk jayega.
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Effect": "Allow",
+        "Action": "ec2:*",
+        "Resource": "*"
+    }, {
+        "Effect": "Deny",
+        "Action": "ec2:TerminateInstances",
+        "Resource": "*"
+    }]
+}
+
+```
+
+* **Detail Breakdown:** Pehli statement ne saare kaam allow kiye, lekin doosri statement ne aakar khususi taur par `"ec2:TerminateInstances"` (server ko hamesha ke liye delete karna) par **Deny** laga diya. Nateeja yeh nikala ke user baqi sab kuch kar sakega, par server delete nahi kar payega.
+
+#### Example 3: Faltu Statement Ka Nuksaan
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Effect": "Deny",
+        "Action": "ec2:*",
+        "Resource": "*"
+    },
+    {
+        "Effect": "Allow",
+        "Action": "ec2:TerminateInstances",
+        "Resource": "*"
+    }]
+}
+
+```
+
+* **Detail Breakdown:** Is policy mein pehle hi poori EC2 service ko `"Deny"` kar diya gaya hai. Iske baad niche lagaya gaya `"Allow"` bilkul be-asar (not crucial) ho jata hai, kyunki jab ek baar bada Deny lag gaya, toh doosri statement use kabhi bypass nahi kar sakti.
+
+#### ARN (Amazon Resource Name) Aur Specific Resource Lockdown
+
+AWS mein har ek cheez (jaise server, network, storage) ka apna ek unique identity address hota hai jise **ARN** kehte hain. **Figure 5.7** ke mutabaq, ARN ke paanch main hisse hote hain:
+`arn:aws:ec2:us-east-1:878533158213:instance/i-3dd4f812`
+
+1. **Partition:** `aws` (cloud ka aam hissa).
+2. **Service:** `ec2` (jis service ka resource hai).
+3. **Region:** `us-east-1` (jahan woh maujood hai).
+4. **Account ID:** `878533158213` (12-digit ka account number).
+5. **Resource:** `instance/i-3dd4f812` (asli resource ki ID).
+
+Apne CLI terminal se apna 12-digit ka Account ID nikalne ki command yeh hai:
+
+```bash
+$ aws sts get-caller-identity --query "Account" --output text
+111111111111
+
+```
+
+Agar aapko ARN pata ho, toh aap specific resource par lock laga sakte hain, jaise is policy mein user ko sirf ek hi specific server delete karne ki ijazat di gayi hai:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Effect": "Allow",
+        "Action": "ec2:TerminateInstances",
+        "Resource": "arn:aws:ec2:us-east-1:111111111111:instance/i-0b5c991e026104db9"
+    }]
+}
+
+```
+
+#### Managed Policy vs Inline Policy (Farq Aur Warning)
+
+* **Managed Policy:** Yeh woh aisi policies hoti hain jinhein aap aik se zyada users ya roles par baar-baar reuse kar sakte hain. Yeh do tarah ki hoti hain: **AWS Managed** (jo AWS khud bana kar manage karta hai jaise `AdministratorAccess`) aur **Customer Managed** (jo aap apni company ke hisab se khud banate hain).
+* **Inline Policy:** Yeh aisi policy hoti hai jo kisi ek specific user ya role ke andar hi sili hui (embedded) hoti hai. Agar woh user delete hoga, toh policy bhi khatam ho jayegi. CloudFormation ke sath inhein manage karna bohot easy hota hai.
+
+> ⚠️ **Security Warning:** AWS Managed policies ka bar-bar use karna security ke **Least-Privilege Principle** (kam se kam ijazat dene ka qanoon) ke khilaf chala jata hai. Kyunki AWS managed policies aam taur par resources mein `*` ka use karti hain. Isliye behtareen tareeqa yeh hai ke hum CloudFormation ke zariye apni **Inline Policies** khud likhein.
+
+---
+
+## Users for authentication and groups to organize users
+
+Insaano ke liye hum **Username/Password** banate hain taake woh console mein ja sakein, aur softwares/CLI ke liye **Access Keys** use karte hain.
+
+Abhi tak aap root user use kar rahe the, lekin ab aapko foran **IAM Users** par shift hona chahiye kyunki:
+
+1. Har bande ka apna unique track aur login hoga.
+2. Aap har bande ko sirf uske kaam ke mutabaq limited taqat de sakenge.
+
+Kaam ko azaan karne ke liye hum pehle ek **Group** banate hain (jaise `admin`), us group par policy lagate hain, aur users ko us group ka member bana dete hain. Iska faida yeh hai ke agar kal ko hifazat ke liye hum admin se koi power chinna chahein, toh humein 50 alag-alag users ke paas nahi jana padega, hum sirf ek baar group ki policy badlein ge aur sab par automatic apply ho jayega.
+
+Chaliye CLI se ek mukammal admin user aur group banate hain:
+
+```bash
+# 1. 'admin' naam ka ek central group banayein
+$ aws iam create-group --group-name "admin"
+
+# 2. Is group ke sath AWS ki AdministratorAccess managed policy attach kar dein
+$ aws iam attach-group-policy --group-name "admin" \
+  --policy-arn "arn:aws:iam::aws:policy/AdministratorAccess"
+
+# 3. Ek naya user paida karein jiska naam 'myuser' ho
+$ aws iam create-user --user-name "myuser"
+
+# 4. Apne naye user ko admin group ka member bana dein
+$ aws iam add-user-to-group --group-name "admin" --user-name "myuser"
+
+# 5. Is user ke liye console login password set karein (Replace $Password with a strong password)
+$ aws iam create-login-profile --user-name "myuser" --password '$Password'
+
+```
+
+#### Naye User Se Login Karne Ka Tarika
+
+Ab aap aam root user wale page se login nahi kar sakte. IAM users ke liye link alag hota hai:
+`https://$[accountId.signin.aws.amazon.com/console](https://accountId.signin.aws.amazon.com/console)` (Yahan `$accountId` ki jagah aap apna 12-digit number likhein ge).
+
+---
+
+## Enabling MFA for IAM users
+
+Jaise root user par lagaya tha, waise hi apne naye bane hue `myuser` par bhi MFA on karna laazmi hai:
+
+1. AWS Management Console mein **IAM** service open karein.
+2. Left side bar mein **Users** par click karein.
+3. Apne naye user **myuser** par click karein.
+4. **Security Credentials** ke tab ko select karein.
+5. **Assigned MFA Device** ke paas diye gaye **Manage** link par click karein.
+6. Samne khulne wala wizard bilkul wahi hai jo humne root user ke liye chalaya tha, use follow kar ke scan karein.
+
+> ⚠️ **Strict Critical Warnings:**
+> * **Stop using root:** Aaj ke baad root user use karna bilkul band kar dein, hamesha `myuser` aur naye link se login karein!
+> * **No Keys on EC2:** Kabhi bhi kisi IAM user ki Access Keys ko copy kar ke EC2 instance ke andar save mat karein!
+> * **No Secrets in Git:** Apne program ke code ke andar kabhi bhi passwords ya keys likh kar GitHub ya repository par push na karein, hamesha **IAM Roles** ka use karein!
+> 
+> 
+
+---
+
+## Authenticating AWS resources with roles
+
+Aam taur par hamare servers (EC2 instances) ko AWS ke baqi resources se baat karni parti hai, jaise:
+
+* Apna data backup karne ke liye **S3 Bucket** mein file upload karna.
+* Kaam khatam hone par paise bachane ke liye khud ko hi **Terminate/Stop** kar dena.
+* Network (VPC) ki settings ko automatically tabdeel karna.
+
+In kaamon ke liye server ko AWS API se baat karni parti hai. Agar hum wahan access keys likh kar chorenge, toh unki rotation (har thode din baad badalna) ek bura khwaab ban jayega aur keys leak hone ka khatra rahega. Iska modern hal **IAM Role** hai. Jab aap kisi EC2 instance par role lagate hain, toh AWS khud hi uske andar safe temporary access keys dalti aur badalti rehti hai.
+
+#### Practical Project: Auto-Stopping EC2 Instance (Paise Bachane Ka System)
+
+Hum ek aisi machine banayenge jo chalu hone ke 5 minute baad khud ko automatic band (`stop`) kar degi taake hamare paise fuzool mein zaya na hon. Iske liye hum Linux ki `at` command aur AWS CLI use karenge:
+
+```bash
+$ echo "aws ec2 stop-instances --instance-ids i-0b5c991e026104db9" | at now + 5 minutes
+
+```
+
+Lekin is command ko chalne ke liye instance ke paas khud ko rokne ki power (`ec2:StopInstances`) honi chahiye. Chaliye iska CloudFormation script dekhte hain:
+
+```yaml
+Role:
+  Type: 'AWS::IAM::Role'
+  Properties:
+    AssumeRolePolicyDocument:
+      Version: '2012-10-17'
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'ec2.amazonaws.com'    <--------- EC2 service ko is role ka main malik (Principal) banaya
+          Action: 'sts:AssumeRole'          <--------- EC2 ko ijazat di ke woh yeh mukammal role dhaar sake
+    ManagedPolicyArns:
+      - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+    Policies:
+      - PolicyName: ec2
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: 'ec2:StopInstances'   <--------- Servers ko stop karne ki power di
+              Resource: '*'                 <--------- Saare instances par...
+              Condition:                    <--------- LEKIN sirf tab, jab niche wali condition poori ho!
+                StringEquals:
+                  'ec2:ResourceTag/aws:cloudformation:stack-id': !Ref 'AWS::StackId' <--------- Sirf un servers ko roke jo isi CloudFormation stack ka hissa hain.
+
+```
+
+* **Design Decision Explanation:** Yahan `Resource: "*"` isliye lagaya gaya kyunki jab stack ban raha hota hai, toh cyclic dependency ki wajah se role ko pehle se server ka exact ARN nahi pata hota. Iska tod humne ek sakht **Condition** laga kar nikala ke server sirf usi machine ko stop kar sakega jiske upar is specific CloudFormation Stack ki tag ID lagi hogi.
+
+Ab is role ko direct server par lagane ke liye pehle ek **Instance Profile** (ek tarah ka lifafa) banana parta hai:
+
+```yaml
+InstanceProfile:
+  Type: 'AWS::IAM::InstanceProfile'
+  Properties:
+    Roles:
+      - !Ref Role    <--------- Hamare upar wale IAM Role ka reference
+
+```
+
+Aakhri step mein hum is Profile ko apne EC2 instance ke sath attach karte hain aur **UserData** ke andar modern token system (**IMDSv2**) ka use kar ke server ki apni ID nikalte hain aur auto-stop command schedule kar dete hain:
+
+```yaml
+Instance:
+  Type: 'AWS::EC2::Instance'
+  Properties:
+    # [...]
+    IamInstanceProfile: !Ref InstanceProfile  <--------- Role lifafe ko yahan jor diya
+    UserData:
+      'Fn::Base64': !Sub |
+        #!/bin/bash -ex
+        # 1. IMDSv2 ka secure temporary token haasil karein
+        TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+        # 2. Us token ko use kar ke is chalne wale server ki exact Instance ID khinchein
+        INSTANCEID=`curl -H "X-aws-ec2-metadata-token: $TOKEN" -s "http://169.254.169.254/latest/meta-data/instance-id"`
+        # 3. 'at' command ke zariye parameter mein diye gaye waqt (${Lifetime}) baad auto-stop run karein
+        echo "aws ec2 stop-instances --region ${AWS::Region} --instance-ids $INSTANCEID" | at now + ${Lifetime} minutes
+
+```
+
+---
+
+### Cleaning up
+
+> ⚠️ **Cost Warning:**
+> Jab aap is demo ka practical test mukammal kar lein, toh CloudFormation console par ja kar apne `ec2-iam-role` stack ko **Delete** karna hargiz mat bhooliyega. Yad rakhein, server stop hone ke bawajood bhi uske sath jo network-attached storage (**EBS Volume**) hota hai, AWS uske paise barabar leta rehta hai. Account ko saaf rakhna hi behtareen security aur bachat hai!
+
+---
