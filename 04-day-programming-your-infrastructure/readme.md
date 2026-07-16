@@ -670,3 +670,555 @@ Agarchay CLI se kaam automate ho jata hai, lekin is mein kuch baray trade-offs a
 Inhi kamiyon ko door karne ke liye, hum agle step mein seekhenge ke kaise **AWS SDK (Software Development Kit)** ka use kar ke is process ko mazeed behtareen banaya jaye!
 
 ---
+
+## Programming with the SDK
+
+AWS humein mukhtalif programming languages aur platforms ke liye SDKs (Software Development Kits) provide karta hai, jin mein shamil hain:
+
+* JavaScript/Node.js
+* Java
+* .NET
+* PHP
+* Python
+* Ruby
+* Go
+* C++
+
+### SDK Kya Hai Aur Yeh Hamari Zindagi Kaise Aasaan Banata Hai?
+
+> **Bachon Wali Misal (Easy Analogy):**
+> Farz karein aap ne kisi doosre mulk (AWS) mein apna ek kaam karwana hai. Agar aap direct HTTP API call use karte hain, toh iska matlab hai ke aap ko khud us mulk ki mushkil zubaan seekhni paregi, lifafay par sahi stamp lagani paregi, post office ke chakkar kaatne parenge, aur agar khat raastay mein kho jaye toh khud hi dhoondna paregi.
+> Lekin **SDK** aap ka ek **Akalmand Personal Assistant** hai. Aap sirf apni zubaan (Python ya JavaScript) mein is assistant ko batate hain ke *"Mujhe ek virtual machine chahiye"*. Yeh assistant khud hi:
+> 1. Aap ke signature check karta hai (Authentication).
+> 2. Khat ko sahi dhabay mein pack karta hai (Data Serialization into JSON/XML).
+> 3. Internet ke zariye AWS tak safely lekar jata hai (HTTPS Communication).
+> 4. Agar rasta block ho ya koi temporary error aaye, toh khud hi dobara koshish karta hai (Retry on error).
+> 
+> 
+
+Is book mein zyadatar examples **JavaScript** mein likhi gayi hain aur unhein chalane ke liye **Node.js** runtime environment ka istemal kiya gaya hai.
+
+---
+
+## Installing and getting started with Node.js
+
+**Node.js** ek aisa platform hai jo JavaScript code ko aap ke computer par direct chalane ki taqat deta hai. Is ki madad se hum aasaani se network applications bana sakte hain.
+
+### Node.js Ko Install Karne Ka Tarika:
+
+1. Sab se pehle `[https://nodejs.org](https://nodejs.org)` website par jayein aur apne Operating System ke mutabaq setup download kar ke install kar lein.
+2. *Note:* Book ke examples Node.js version 14 par test kiye gaye hain. Lekin aaj ke daur (2026) ke hisab se, aap Node.js ka koi bhi latest LTS version (jaise v20+ ya v22+) aasaani se install kar sakte hain, kyunke hamara modern code un par bilkul fit chalega.
+3. Installation check karne ke liye apne terminal mein yeh command likhein:
+```bash
+node --version
+```
+
+
+Aap ko terminal par version ka naam (jaise `v20.x.x`) dikhayi dega.
+4. Node.js ke sath ek bohot hi ahem tool install hota hai jise **npm (Node Package Manager)** kehte hain. Yeh bilkul ek play store ki tarah hai jahan se hum bani-banayi code libraries (dependencies) download karte hain. Isay check karne ka tarika yeh hai:
+```bash
+npm --version
+```
+
+
+
+### JS Code Ko Kaise Chalana Hai?
+
+Agar aap ke paas koi file hai jiska naam `script.js` hai, toh usay chalane ke liye terminal mein simply yeh command likhein:
+
+```bash
+node script.js
+```
+
+> **Ek Zaroori Farq (Concept):**
+> **JavaScript** ek programming language (zubaan) hai, jabke **Node.js** us zubaan ko aap ke system par chalane ka engine/environment (runtime) hai. Hum is book mein Node.js is liye use kar rahe hain kyunke isay install karna asaan hai, kisi bhari IDE (software) ki zaroorat nahi parti, aur iska syntax zyadatar programmers ko pehle se pata hota hai.
+
+Hum ab ek application banayenge jiska naam hai **Node Control Center for AWS** (ya short mein **nodecc**) jo AWS ke virtual machines ko control karegi.
+
+---
+
+## Controlling virtual machines with SDK: nodecc
+
+**nodecc** ek aisi application hai jo terminal ke andar ek simple text-based screen (UI) banati hai, jis se hum ek se zyada temporary virtual machines ko aasaani se manage kar sakte hain.
+
+### nodecc Ke Khaas Features:
+
+* Yeh ek hi waqt mein **multiple virtual machines** ko handle kar sakti hai.
+* JavaScript mein likhi hone ki wajah se yeh kisi bhi computer (Windows, Mac, Linux) par chal sakti hai.
+* Iska interface graphical nahi hai, balkay terminal ke andar chalne wala text interface hai.
+
+### Figure 4.7 Ka Breakdown (Start Screen):
+
+<div align="center">
+  <img src="./images/07.png" width="600"/>
+</div>
+
+Jab aap `nodecc` ko start karte hain, toh terminal par aap ko **Figure 4.7** ke mutabaq ek screen dikhayi deti hai:
+
+* **Left Side (Actions Panel):** Yahan aap ko teen options milte hain:
+1. `list virtual machines` (VMs dekhne ke liye)
+2. `create virtual machine` (Nayi VM banane ke liye)
+3. `terminate virtual machine` (VM ko delete karne ke liye)
+
+
+* **Right Side (Console/Info Panel):** Yahan par instructions likhi hoti hain ke aap arrow keys se upar-niche scroll kar sakte hain, selection ke liye **Enter** daba sakte hain, aur application se bahar nikalne ke liye **ESC** ya **q** press kar sakte hain.
+
+### nodecc Ko Chalane Ka Tarika:
+
+1. Is application ko chalane ke liye aap ke paas ek IAM role hona chahiye jiska naam **`ec2-ssm-core`** hai (jo hum ne banaya tha).
+2. Apne terminal par book ke code folder mein is path par jayein: `/chapter04/nodecc/`.
+3. Saari zaroori dependency libraries install karne ke liye yeh command chalayein:
+```bash
+npm install
+```
+
+
+4. Application ko start karne ke liye run karein:
+```bash
+node index.js
+```
+
+
+*Yeh program wahi settings use karega jo aap ne `aws configure` ke zariye `mycli` user ke liye set ki thi.*
+
+---
+
+## How nodecc creates a virtual machine
+
+Virtual machine banane ke liye pehla step yeh hota hai ke hum ek **AMI (Amazon Machine Image)** select karein, jo ke hamare server ka operating system template hota hai.
+
+### Figure 4.8 Ka Breakdown (AMI Selection):
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+Jab aap `create virtual machine` select karte hain, toh **Figure 4.8** ke mutabaq right side par Amazon Linux AMIs ki ek list khul jati hai. Aap arrow keys ka use kar ke apni pasand ki image select karte hain.
+
+Aayein dekhte hain ke background mein SDK kis tarah is list ko AWS se nikal kar lata hai.
+
+### Listing 4.3 Fetching the list of available AMIs: /lib/listAMIs.js
+
+#### Modern JavaScript (AWS SDK v3 - ES Modules)
+
+```javascript
+import { EC2Client, DescribeImagesCommand } from "@aws-sdk/client-ec2";
+
+// AWS SDK v3 mein client ko alag se initialize kiya jata hai
+const ec2 = new EC2Client({ region: 'us-east-1' });
+
+export default async function listAMIs() {
+  const params = {
+    Filters: [{
+      Name: 'name',
+      Values: ['amzn2-ami-hvm-2.0.202*-x86_64-gp2']
+    }]
+  };
+
+  try {
+    // Command object banaya aur client ko send kiya
+    const command = new DescribeImagesCommand(params);
+    const data = await ec2.send(command);
+
+    // Images ka data map kar ke nikalna
+    const amiIds = data.Images.map(image => image.ImageId);
+    const descriptions = data.Images.map(image => image.Description);
+
+    return { amiIds, descriptions };
+  } catch (err) {
+    throw err;
+  }
+}
+```
+
+#### Modern Python 3.11+ (Boto3 equivalent)
+
+```python
+import boto3
+from typing import Dict, List, Tuple, Any
+
+# EC2 Client ko initialize karna
+ec2_client = boto3.client('ec2', region_name='us-east-1')
+
+def list_amis() -> Tuple[List[str], List[str]]:
+    """
+    AWS se available Amazon Linux 2 AMIs ki list nikalta hai.
+    """
+    try:
+        # describe_images API call filter ke sath
+        response = ec2_client.describe_images(
+            Filters=[
+                {
+                    'Name': 'name',
+                    'Values': ['amzn2-ami-hvm-2.0.202*-x86_64-gp2']
+                }
+            ]
+        )
+        
+        # Responses se ImageId aur Description nikalna
+        ami_ids: List[str] = [img['ImageId'] for img in response.get('Images', [])]
+        descriptions: List[str] = [img.get('Description', 'No Description') for img in response.get('Images', [])]
+        
+        return ami_ids, descriptions
+        
+    except Exception as e:
+        print(f"Error fetching AMIs: {e}")
+        raise e
+
+```
+
+#### Code Ki Gehrai Se Tafseel (Dono Languages Ke Liye)
+
+* **Initialization:** JavaScript mein hum `@aws-sdk/client-ec2` se client banate hain, jabke Python mein hum `boto3.client('ec2')` use karte hain.
+* **Filtering (Talash):** Hum AWS ko batate hain ke humein saari images nahi chahiye. Hum ne filter lagaya ke jin images ka naam `amzn2-ami-hvm-2.0.202*-x86_64-gp2` se match karta ho, sirf wahi dikhao. Yeh wild card `*` dynamic dates ko search karne mein madad karta hai.
+* **Data Extraction:** Dono codes response mein se loop chala kar (`map` in JS, `list comprehension` in Python) har image ki ahem details (`ImageId` aur `Description`) ko alag alag arrays mein save kar ke return kar dete hain.
+
+---
+
+### Figure 4.9 Ka Breakdown (Subnet Selection):
+
+<div align="center">
+  <img src="./images/09.png" width="600"/>
+</div>
+
+AMI choose karne ke baad, hamare samne **Figure 4.9** ke mutabaq subnets ki list aati hai. Subnet asal mein hamare network ka ek hissa hota hai jahan hamari machine rakhi jayegi. Aap in mein se kisi bhi ek subnet ko select karte hain.
+
+Aayein dekhte hain ke subnet ki list nikalne ka code kaise chal raha hai.
+
+### Listing 4.4 Fetching the list of available default subnets: /lib/listSubnets.js
+
+#### Modern JavaScript (AWS SDK v3 - ES Modules)
+
+```javascript
+import { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand } from "@aws-sdk/client-ec2";
+const ec2 = new EC2Client({ region: 'us-east-1' });
+
+export default async function listSubnets() {
+  try {
+    // Step 1: Default VPC (main network) dhoondna
+    const vpcCommand = new DescribeVpcsCommand({
+      Filters: [{ Name: 'isDefault', Values: ['true'] }]
+    });
+    const vpcData = await ec2.send(vpcCommand);
+    
+    if (!vpcData.Vpcs || vpcData.Vpcs.length === 0) {
+      throw new Error("No default VPC found!");
+    }
+    const vpcId = vpcData.Vpcs[0].VpcId;
+
+    // Step 2: Us VPC ke subnets dhoondna
+    const subnetCommand = new DescribeSubnetsCommand({
+      Filters: [{ Name: 'vpc-id', Values: [vpcId] }]
+    });
+    const subnetData = await ec2.send(subnetCommand);
+
+    // Subnet IDs ki list return karna
+    return subnetData.Subnets.map(subnet => subnet.SubnetId);
+  } catch (err) {
+    throw err;
+  }
+}
+```
+
+#### Modern Python 3.11+ (Boto3 equivalent)
+
+```python
+import boto3
+from typing import List
+
+ec2_client = boto3.client('ec2', region_name='us-east-1')
+
+def list_subnets() -> List[str]:
+    """
+    Pehle default VPC dhoondta hai, phir us ke andar majood subnets ki list lata hai.
+    """
+    try:
+        # Step 1: Default VPC ki detail nikalna
+        vpc_response = ec2_client.describe_vpcs(
+            Filters=[{'Name': 'isDefault', 'Values': ['true']}]
+        )
+        
+        vpcs = vpc_response.get('Vpcs', [])
+        if not vpcs:
+            raise Exception("No default VPC found!")
+            
+        vpc_id = vpcs[0]['VpcId']
+        
+        # Step 2: Is VPC ID ke mutabaq subnets nikalna
+        subnet_response = ec2_client.describe_subnets(
+            Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
+        )
+        
+        subnet_ids: List[str] = [sub['SubnetId'] for sub in subnet_response.get('Subnets', [])]
+        return subnet_ids
+        
+    except Exception as e:
+        print(f"Error fetching subnets: {e}")
+        raise e
+```
+
+#### Code Ki Gehrai Se Tafseel (Dono Languages Ke Liye)
+
+* **Do-Marhala Maqsad (Two-step process):** Hum seedha subnets nahi dhoond sakte jab tak humein network (VPC) ka pata na ho. Is liye dono codes pehle AWS se poochte hain: *"Mere account ka default VPC (main network) kaunsa hai?"*
+* **Linking (Jor):** Jab AWS VPC ID (jaise `vpc-12345`) deta hai, toh hum us ID ko use kar ke doosri call karte hain: *"Is specific VPC ke andar jitne subnets hain, un ki list de do"*.
+* **Result:** Aakhir mein dono scripts sirf subnet ki unique IDs (jaise `subnet-abc12`) filter kar ke user ke screen par show karne ke liye bhej deti hain.
+
+---
+
+Subnet select hone ke baad, hamara script virtual machine ko launch karne ka hukum bhejta hai.
+
+### Listing 4.5 Launching an EC2 instance: /lib/createVM.js
+
+#### Modern JavaScript (AWS SDK v3 - ES Modules)
+
+```javascript
+import { EC2Client, RunInstancesCommand } from "@aws-sdk/client-ec2";
+const ec2 = new EC2Client({ region: 'us-east-1' });
+
+export default async function createVM(amiId, subnetId) {
+  const params = {
+    IamInstanceProfile: {
+      Name: 'ec2-ssm-core' // System Manager se connect hone ke liye zaroori role
+    },
+    ImageId: amiId,
+    MinCount: 1,
+    MaxCount: 1,
+    InstanceType: 't2.micro',
+    SubnetId: subnetId
+  };
+
+  try {
+    const command = new RunInstancesCommand(params);
+    const data = await ec2.send(command);
+    
+    // Nayi banne wali VM ki InstanceId return karna
+    return data.Instances[0].InstanceId;
+  } catch (err) {
+    throw err;
+  }
+}
+```
+
+#### Modern Python 3.11+ (Boto3 equivalent)
+
+```python
+import boto3
+
+ec2_client = boto3.client('ec2', region_name='us-east-1')
+
+def create_vm(ami_id: str, subnet_id: str) -> str:
+    """
+    Diyay gaye AMI aur Subnet ID ko use kar ke ek t2.micro instance launch karta hai.
+    """
+    try:
+        response = ec2_client.run_instances(
+            IamInstanceProfile={
+                'Name': 'ec2-ssm-core'
+            },
+            ImageId=ami_id,
+            MinCount=1,
+            MaxCount=1,
+            InstanceType='t2.micro',
+            SubnetId=subnet_id
+        )
+        
+        # Nayi instance ki ID return karna
+        instance_id: str = response['Instances'][0]['InstanceId']
+        return instance_id
+        
+    except Exception as e:
+        print(f"Error creating virtual machine: {e}")
+        raise e
+```
+
+#### Code Ki Gehrai Se Tafseel (Dono Languages Ke Liye)
+
+* **`run_instances` / `RunInstancesCommand`:** Yeh asli core command hai jo AWS par naya server launch karti hai.
+* **MinCount & MaxCount:** Dono values `1` hain, iska matlab hai humein sirf ek hi server launch karna hai.
+* **IamInstanceProfile:** Hum ne yahan `ec2-ssm-core` role pass kiya hai taake security safely configure ho sake aur hum browser console ke bina terminal se direct connection kar sakein.
+* **Return:** Jaise hi request accept hoti hai, AWS humein ek confirmation data bhejta hai jis mein se hum naye server ki unique `InstanceId` nikal kar save kar lete hain.
+
+---
+
+## How nodecc lists virtual machines and shows virtual machine details
+
+Jaise hi virtual machine ban jati hai, humein usay manage karne ke liye chalne wale servers ki list dekhni hoti hai taake hum connection details dekh sakein.
+
+### Figure 4.10 Ka Breakdown (Listing VMs):
+
+<div align="center">
+  <img src="./images/10.png" width="600"/>
+</div>
+
+Jab aap `list virtual machines` select karte hain, toh **Figure 4.10** ke mutabaq right side par chalne wali virtual machines ki IDs (jaise `i-04e525075fa80fcfd`) list ho jati hain.
+
+### Listing 4.6 Listing EC2 instances: /lib/listVMs.js
+
+#### Modern JavaScript (AWS SDK v3 - ES Modules)
+
+```javascript
+import { EC2Client, DescribeInstancesCommand } from "@aws-sdk/client-ec2";
+const ec2 = new EC2Client({ region: 'us-east-1' });
+
+export default async function listVMs() {
+  const params = {
+    Filters: [{
+      Name: 'instance-state-name',
+      Values: ['pending', 'running'] // Sirf chalne wali ya start hone wali machines dikhao
+    }],
+    MaxResults: 10 // Ek waqt mein zyada se zyada 10 results
+  };
+
+  try {
+    const command = new DescribeInstancesCommand(params);
+    const data = await ec2.send(command);
+
+    // Reservations ke andar se saari Instance IDs ko flatten (ek hi list mein) karna
+    const instanceIds = data.Reservations
+      .flatMap(r => r.Instances.map(i => i.InstanceId));
+
+    return instanceIds;
+  } catch (err) {
+    throw err;
+  }
+}
+```
+
+#### Modern Python 3.11+ (Boto3 equivalent)
+
+```python
+import boto3
+from typing import List
+
+ec2_client = boto3.client('ec2', region_name='us-east-1')
+
+def list_vms() -> List[str]:
+    """
+    Pending aur Running states mein chalne wali instances ki IDs filter kar ke lata hai.
+    """
+    try:
+        response = ec2_client.describe_instances(
+            Filters=[
+                {
+                    'Name': 'instance-state-name',
+                    'Values': ['pending', 'running']
+                }
+            ],
+            MaxResults=10
+        )
+        
+        instance_ids: List[str] = []
+        # DescribeInstances ka response nested hota hai: Reservations -> Instances -> Details
+        for reservation in response.get('Reservations', []):
+            for instance in reservation.get('Instances', []):
+                instance_ids.append(instance['InstanceId'])
+                
+        return instance_ids
+        
+    except Exception as e:
+        print(f"Error listing VMs: {e}")
+        raise e
+```
+
+#### Code Ki Gehrai Se Tafseel (Dono Languages Ke Liye)
+
+* **State Filtering:** Hum ne AWS ko bola ke jo machines band ho chuki hain (terminated), unhein dikhane ki zaroorat nahi hai. Sirf wohi dikhao jo `pending` (chalne ki tayyari mein hain) ya `running` (bilkul theek chal rahi hain) hain.
+* **MaxResults:** Hum ne limit `10` set ki hai taake terminal screen par dher saara data ek sath na aa jaye.
+* **Data Structure Challenge (Flattening):** AWS EC2 humein data direct list mein nahi deta. Woh use `Reservations` ke andar nested structures mein deta hai.
+* JS mein hum ne functional programming ka feature `flatMap` use kiya jo arrays ke andar se arrays nikal kar unhein ek single plain array mein badal deta hai.
+* Python mein hum ne double nested loops (`for` loops) use kiye taake har `reservation` ke andar se `Instances` ki plain list nikaali ja sake.
+
+
+
+---
+
+### Figure 4.11 Ka Breakdown (Showing VM Details):
+
+<div align="center">
+  <img src="./images/11.png" width="600"/>
+</div>
+
+Jab aap chalne wali kisi machine ID par click karte hain, toh **Figure 4.11** ke mutabaq us machine ka poora kacha-chitha (details) khul jata hai:
+
+* **InstanceId:** Machine ka unique naam.
+* **InstanceType:** Size (t2.micro).
+* **LaunchTime:** Machine kab start hui thi. Is se humein yeh pata chalta hai ke kahin koi machine bohot purani aur fuzool toh nahi chal rahi, taake hum usay band kar ke paise bacha sakein.
+* **PublicDnsName:** Server ka internet address jis se hum connection bana sakte hain.
+
+---
+
+## How nodecc terminates a virtual machine
+
+Jab hamara temporary testing ka kaam mukammal ho jata hai, toh bill se bachne ke liye virtual machine ko hamesha ke liye delete (terminate) karna zaroori hota hai.
+
+### Listing 4.7 Terminating an EC2 instance: /lib/terminateVM.js
+
+#### Modern JavaScript (AWS SDK v3 - ES Modules)
+
+```javascript
+import { EC2Client, TerminateInstancesCommand } from "@aws-sdk/client-ec2";
+const ec2 = new EC2Client({ region: 'us-east-1' });
+
+export default async function terminateVM(instanceId) {
+  const params = {
+    InstanceIds: [instanceId] // Is array mein hum multiple IDs bhi de sakte hain
+  };
+
+  try {
+    const command = new TerminateInstancesCommand(params);
+    await ec2.send(command);
+    return true;
+  } catch (err) {
+    throw err;
+  }
+}
+```
+
+#### Modern Python 3.11+ (Boto3 equivalent)
+
+```python
+import boto3
+
+ec2_client = boto3.client('ec2', region_name='us-east-1')
+
+def terminate_vm(instance_id: str) -> bool:
+    """
+    Diyay gaye Instance ID ko terminate/delete karne ki request AWS ko bhejta hai.
+    """
+    try:
+        ec2_client.terminate_instances(
+            InstanceIds=[instance_id]
+        )
+        return True
+    except Exception as e:
+        print(f"Error terminating VM {instance_id}: {e}")
+        raise e
+```
+
+#### Code Ki Gehrai Se Tafseel (Dono Languages Ke Liye)
+
+* **`terminate_instances` / `TerminateInstancesCommand`:** Yeh command server ko stop karti hai aur AWS ke physical server se us virtual machine ke saare data ko hamesha ke liye mita (delete) deti hai.
+* **Array Parameter:** Dono languages mein yeh call ek array input accept karti hai `[instanceId]`, jiska matlab hai ke agar hum chahein toh ek hi click mein 5-10 virtual machines ko bhi ek sath terminate kar sakte hain.
+
+---
+
+## Cleaning up
+
+> **Zaroori Baat:** Agay barhne se pehle `nodecc` ke menu mein ja kar apni banayi hui saari virtual machines ko **terminate** karna mat bhooliyega! Agar koi bhi machine active reh gayi toh AWS ka bill chalu rahega.
+
+---
+
+### SDK Ke Major Trade-offs Aur Mushkilat (The Hard Parts of SDK):
+
+Agarchay SDK hamare liye kaafi kaam aasaan karta hai, lekin is ke sath kaam karte hue kuch mushkilat pesh aati hain jin par ghaur karna zaroori hai:
+
+1. **Imperative Approach (Hukum-dar-hukum tarika):**
+SDK ya Node.js mein humein computer ko ek-ek step batana padta hai. Maslan: "Pehle default VPC dhoondo, phir uske subnets nikalo, phir un subnets mein machine run karo, phir machine ke start hone ka wait karo". Agar beech mein ek bhi step ghalti se miss ho jaye ya crash kar jaye, toh poora system kharab ho jata hai.
+2. **Dependencies Ko Manage Karna:**
+Humein khud dhyan rakhna padta hai ke jab tak virtual machine fully boot ho kar active (running state) na ho jaye, hum Session Manager se connect karne ka link show nahi kar sakte. Is synchronization aur wait ko khud code mein handle karna bohot complex kaam hai.
+3. **Updates Ka Mushkil Hona (No Change Management):**
+Agar hamare paas koi virtual machine chal rahi hai aur hum uski settings badalna chahein (jaise us ka size `t2.micro` se barha kar `t2.medium` karna), toh SDK ke zariye chalte hue server par direct yeh tabdeeli karna aur automatic manage karna intehai mushkil hai. Hum ne naya server create toh kar liya, par update ka rasta aasaan nahi hai.
+
+Isi liye, ab hum is **Imperative World** (jahan hum har step khud likhte hain) ko chhor kar **Declarative World** (jahan hum sirf aakhri state likhte hain aur AWS khud sab kuch manage karta hai) ki taraf barhenge, jo ke **AWS CloudFormation** aur modern Infrastructure as Code (IaC) ka bunyadi concept hai!
+
+---
