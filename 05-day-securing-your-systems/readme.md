@@ -720,3 +720,273 @@ Instance:
 > Jab aap is demo ka practical test mukammal kar lein, toh CloudFormation console par ja kar apne `ec2-iam-role` stack ko **Delete** karna hargiz mat bhooliyega. Yad rakhein, server stop hone ke bawajood bhi uske sath jo network-attached storage (**EBS Volume**) hota hai, AWS uske paise barabar leta rehta hai. Account ko saaf rakhna hi behtareen security aur bachat hai!
 
 ---
+
+## Controlling network traffic to and from your virtual machine
+
+Cloud mein network security ka sab se sunehri usool yeh hai ke aapke virtual server (EC2 instance) ke andar sirf wahi traffic dakhil ho ya bahar jaye jiski waqifiyatan zaroorat ho. Is traffic ko control karne ke liye hum **Firewall** ka istemal karte hain jo aane wale (Inbound/Ingress) aur jaane wale (Outbound/Egress) traffic par nazar rakhti hai.
+
+> 🚪 **Bachon Wali Example:**
+> Farz karein aapka server ek ghar hai aur aapne wahan ek dukan (Web Server) kholi hui hai. Ab dukan par aane ke liye customers ko sirf do darwazon ki zaroorat hai: **Port 80** (HTTP traffic) aur **Port 443** (HTTPS traffic). Baqi ghar ke saare khufia darwaze aur khidkiyan band honi chahiye taake koi chor andar na ghus sakay. Jitna zyada aap darwazon ko band rakhein ge, aapka ghar (system) utna hi mehfooz rahega.
+
+Firewall lagane ka ek aur bara faida yeh hai ke yeh aapko insani galtiyon (**Human Failure**) se bachati hai.
+
+* **Real-World Example:** Farz karein aap ek test system par kaam kar rahe hain aur galti se koi aisi command chal jati hai jo aapke asli customers ko emails bhejna shuru kar de. Agar aapne firewall ke zariye test system ka outgoing SMTP (email bhejne wala port) pehle hi block kiya hua hoga, toh woh email bahar ja hi nahi sakay gi aur aap aik bare nuksaan se bach jayenge.
+
+AWS mein network traffic server tak pohonchne se pehle hi AWS ki di gayi firewall se guzarta hai jo har packet ko check karti hai ke use andar aane dena hai ya kachray ke dabbe (bin) mein phenkna hai.
+
+> 💡 **IP vs. IP address (Chota sa farq):**
+> * **IP:** Iska matlab hai Internet Protocol (yani internet par baatchit karne ka qanoon).
+> * **IP Address:** Yeh kisi specific device ka mukammal digital pata hota hai, jaise `84.186.116.47`.
+> 
+> 
+
+---
+
+### Figure 5.8 Ka Breakdown: SSH Request Ka Safar
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+Agar aap **Figure 5.8** ki tasweer ko ghaur se dekhein, toh isme ek packet ka safar dikhaya gaya hai jise firewall inspect kar rahi hai:
+
+1. **Source (10.0.0.10):** Ek client computer jis ka IP address `10.0.0.10` hai, woh destination server (`10.10.0.20`) ko **Port 22** par ek SSH (secure login) request bhejta hai.
+2. **Firewall Aur Rules:** Raste mein bethi **Firewall** is packet ko pakarti hai aur apni rules ki diary kholti hai. Diary mein likha hota hai ke "Agar koi TCP protocol ke zariye Port 22 par aana chahe, toh use **Allow** kar do".
+3. **Destination (10.10.0.20):** Kyunke rule maujood tha, isliye firewall ne packet ko aage jaane diya aur server ne use sukoon se receive kar ke response wapas bhej diya. Agar rule na hota, toh yeh packet niche bane trash bin (Deny) mein chala jata.
+
+**Zimmedari Ka Farq:** AWS aapko yeh firewall bana kar deta hai, lekin is firewall ke andar kya rules likhne hain, yeh poori tarah aapki zimmedari hai. Paidaishi taur par (by default) security group mein inbound (andar aane wala) traffic bilkul band hota hai, jabke outbound (bahar jaane wala) traffic poora khula hota hai. Agar aapko high security chahiye, toh aap outbound rule ko delete kar ke apni marzi ke limited rules laga sakte hain.
+
+---
+
+## Debugging or monitoring network traffic
+
+Kabhi kabhi aisa hota hai ke aapne saare rules sahi lagaye hote hain, phir bhi aapka SSH ya web traffic server tak nahi pohonch raha hota aur aap pareshan ho jaate hain ke galti kahan hai. Is maslay ko hal karne ke liye AWS ke paas do behtareen tools hain:
+
+* **VPC Reachability Analyzer:** Yeh ek simulation tool hai. Yeh bilkul ek nakli packet network par bhej kar check karta hai aur aapko raaste mein batata hai ke traffic kahan ja kar ruk raha hai ya kis rule mein kharabi hai.
+* **VPC Flow Logs:** Yeh aapke network ka register hai. Isko on karne se aapko un saare network connections ka data mil jata hai jinhein firewall ne **Reject** (denied) kiya hota hai, taake aap dekh sakein ke kaunsi genuine request block ho rahi hai.
+
+---
+
+## Controlling traffic to virtual machines with security groups
+
+AWS mein virtual machines (EC2) ki is firewall ko **Security Group** kaha jata hai. Ek EC2 instance ke sath ek se zyada security groups bhi jore ja sakte hain, aur ek hi security group bohot saare instances par ek sath lagaya ja sakta hai.
+
+Security group ka har ek rule char cheezon par mushtamil hota hai:
+
+1. **Direction:** Traffic andar aa raha hai (Inbound) ya bahar ja raha hai (Outbound).
+2. **IP Protocol:** Baatchit ka tareeqa kya hai—TCP, UDP, ya ICMP (ping ke liye).
+3. **Port:** Kis khidki/darwaze se traffic guzre ga.
+4. **Source/Destination:** Traffic kahan se aa raha hai ya kahan ja raha hai (kisi IP address range se ya kisi doosre AWS security group se).
+
+Aap chahein toh sab khol sakte hain lekin secure tareeqa yeh hai ke rules ko jitna ho sakay sakht aur mehdood (restrictive) rakhein.
+
+Chaliye **Listing 5.1** ke CloudFormation template ko dekhte hain jahan ek khali security group banya gaya hai:
+
+### Listing 5.1 CloudFormation template: Security group
+
+```yaml
+Parameters:
+  VPC:
+    Type: String
+  Subnet:
+    Type: String
+
+Resources:
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Learn how to protect your EC2 Instance.'   # Bodyguard ka description
+      VpcId: !Ref VPC                                               # Jis network (VPC) mein yeh group banana hai
+      Tags:
+        - Key: Name
+          Value: 'AWS in Action: chapter 5 (firewall)'
+
+  Instance:
+    Type: 'AWS::EC2::Instance'                                      # EC2 server define kiya
+    Properties:
+      # [..]
+      SecurityGroupIds:
+        - !Ref SecurityGroup                                        # Is server par upar wala khali security group laga diya
+      SubnetId: !Ref Subnet
+```
+
+* **Detail Breakdown:** Is code mein jo `SecurityGroup` banaya gaya hai, usme koi rule define nahi kiya gaya. Iska nateeja yeh hoga ke is server par **Inbound traffic poori tarah block** ho jayega aur **Outbound traffic poori tarah open** rahega.
+
+---
+
+## Allowing ICMP traffic
+
+Agar aap apne computer ke terminal se apne EC2 server ko check karne ke liye `ping` command chalayein, toh shuru mein woh fail ho jayegi kyunke default security group saara inbound traffic block kar deta hai:
+
+```bash
+$ ping 34.205.166.12
+PING 34.205.166.12 (34.205.166.12): 56 data bytes
+Request timeout for icmp_seq 0
+Request timeout for icmp_seq 1
+```
+
+Isko theek karne ke liye humein **Internet Control Message Protocol (ICMP)** ka rule add karna hoga. Chaliye **Listing 5.2** ka CloudFormation code dekhte hain:
+
+### Listing 5.2 CloudFormation template: Security group that allows ICMP
+
+```yaml
+SecurityGroup:
+  Type: 'AWS::EC2::SecurityGroup'
+  Properties:
+    GroupDescription: 'Learn how to protect your EC2 Instance.'
+    VpcId: !Ref VPC
+    Tags:
+      - Key: Name
+        Value: 'AWS in Action: chapter 5 (firewall)'
+    SecurityGroupIngress:                                     # Inbound (andar aane wale) rules yahan shuru hote hain
+      - Description: 'allowing inbound ICMP traffic'
+        IpProtocol: icmp                                      # Protocol ka naam ICMP rakha
+        FromPort: '-1'                                        # ICMP mein ports nahi hote, isliye -1 ka matlab hai "All Types"
+        ToPort: '-1'
+        CidrIp: '0.0.0.0/0'                                   # Duniya ke kisi bhi IP address se ping allow ho jaye
+```
+
+* **Detail Breakdown:** Jab aap is template se apne stack ko update karenge, toh security group mein ICMP traffic khul jayega. Ab agar aap dubara ping karenge, toh response aana shuru ho jayega:
+
+```bash
+$ ping 34.205.166.12
+64 bytes from 34.205.166.12: icmp_seq=0 ttl=234 time=109.095 ms
+```
+
+---
+
+## Allowing HTTP traffic
+
+Ping chalne ke baad, agar hum server par website chalana chahte hain, toh humein **Port 80 (HTTP)** kholna hoga. **Listing 5.3** ke mutabaq jab hum template (`firewall3.yaml`) ko deploy karte hain, toh security group ke andar ek naya rule add ho jata hai jo TCP protocol ke zariye Port 80 par traffic ko aane ki ijazat deta hai. Is stack ko update karne ke baad jab aap browser mein server ka IP dalenge, toh test page khul jayega.
+
+---
+
+## Allowing HTTP traffic from a specific source IP address
+
+Pichle step mein humne Port 80 ko poori duniya (`0.0.0.0/0`) ke liye khol diya tha, jo ke unsafe ho sakta hai agar website sirf aapke zaati istemal ke liye ho. Hum chahte hain ke sirf hamare ghar ya office ke IP address se hi website khule.
+
+> 🌐 **Public vs Private IP (Farq):**
+> Aapke ghar ke andar laptop ka IP `192.168.0.10` aur iPad ka IP `192.168.0.20` ho sakta hai—yeh unke **Private IPs** hain jo sirf aapke ghar ke router tak mehdood hain. Lekin jab yeh internet par jaate hain, toh router (Internet Gateway) in sab ko ek hi pehchan deta hai jise **Public IP** kehte hain (jaise `79.241.98.155`). AWS ko sirf aapke Public IP ka pata hota hai. Aap apna public IP check karne ke liye [checkip.amazonaws.com](https://checkip.amazonaws.com/) par ja sakte hain. Aam taur par home internet ka public IP har 24 ghante baad badal jata hai.
+
+Kyunke IP badal sakta hai, isliye code mein IP hardcode karne ke bajaye hum CloudFormation **Parameters** ka use karenge:
+
+### Listing 5.4 Security group allows traffic from source IP
+
+```yaml
+Parameters:
+  WhitelistedIpAddress:
+    Description: 'Whitelisted IP address'
+    Type: String
+    AllowedPattern: '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' # IP format validation regex
+    ConstraintDescription: 'Enter a valid IPv4 address'
+
+Resources:
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Learn how to protect your EC2 Instance.'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - Description: 'allowing inbound HTTP traffic'
+          IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: !Sub '${WhitelistedIpAddress}/32'          # !Sub ke zariye user ke IP ke aage /32 lagaya
+
+```
+
+> 🔢 **Classless Inter-Domain Routing (CIDR) Kya Hai?**
+> IP address 32 bits (binary digits) se banta hai. Jab hum kisi IP ke aage **`/32`** lagate hain, toh iska matlab hota hai ke saare ke saare 32 bits match hone chahiye, yani **"Sirf aur sirf yeh aik exact IP address allowed hai"**.
+> Agar hum range banana chahein, toh hum boundary numbers use karte hain, jaise:
+> * `10.0.0.0/24`: Iska matlab hai range `10.0.0.0` se lekar `10.0.0.255` tak (akhri hissa badal sakta hai).
+> * `0.0.0.0/0`: Iska matlab hai zero bits lock hain, yani duniya ka koi bhi IP range mein shamil hai.
+> 
+> 
+
+---
+
+## Allowing HTTP traffic from a source security group
+
+Asli production environments mein servers automatic scale hotey hain (naye servers aate hain aur purane delete hote hain). Aise mein IPs lagatar badalte rehte hain aur security group mein bar-bar IPs update karna na-mumkin ho jata hai. Iska aala hal yeh hai ke hum IPs ke bajaye **Source Security Group** par rule banayein.
+
+> 🤝 **Proxy Aur Backend Ki Misal:**
+> Hum chahte hain ke internet se aane wala koi bhi customer hamare asli database ya Backend server ko direct touch na kar sakay. Saara traffic pehle ek **Proxy (Load Balancer)** par aayega, aur Proxy check kar ke traffic aage Backend ko bhejegi.
+
+### Figure 5.9 Ka Breakdown: Proxy To Backend Flow
+
+<div align="center">
+  <img src="./images/09.png" width="600"/>
+</div>
+
+**Figure 5.9** mein is architecture ko safaf dikhaya gaya hai:
+
+1. Internet se traffic Proxy tak aata hai (**HTTP allowed**).
+2. Lekin agar koi internet se seedha Backend par jana chahe, toh rasta band hai (**HTTP not allowed**).
+3. Backend sirf us traffic ko kabool karta hai jo Proxy ke security group ka thappa (tag) laga kar aata hai.
+
+Chaliye iska CloudFormation code dekhte hain ke yeh kaise configure hota hai:
+
+### Listing 5.5 CloudFormation template: HTTP from proxy to backend
+
+```yaml
+# 1. Proxy ka Security Group (Yeh public face hai)
+SecurityGroupProxy:
+  Type: 'AWS::EC2::SecurityGroup'
+  Properties:
+    GroupDescription: 'Allowing incoming HTTP and ICMP from anywhere.'
+    VpcId: !Ref VPC
+    SecurityGroupIngress:
+      - Description: 'allowing inbound ICMP traffic'
+        IpProtocol: icmp
+        FromPort: '-1'
+        ToPort: '-1'
+        CidrIp: '0.0.0.0/0'                           # Duniya mein kahin se bhi ping allow hai
+      - Description: 'allowing inbound HTTP traffic'
+        IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: '0.0.0.0/0'                           # Duniya mein kahin se bhi web traffic allow hai
+
+# 2. Backend ka Security Group (Yeh khufia/secured deewar hai)
+SecurityGroupBackend:
+  Type: 'AWS::EC2::SecurityGroup'
+  Properties:
+    GroupDescription: 'Allowing incoming HTTP from proxy.'
+    VpcId: !Ref VPC
+    SecurityGroupIngress:
+      - Description: 'allowing inbound HTTP traffic from proxy'
+        IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        SourceSecurityGroupId: !Ref SecurityGroupProxy # IP address ki jagah PROXY ke Security Group ka reference de diya!
+```
+
+* **Detail Breakdown & Trade-off:** `SourceSecurityGroupId` ka use karne se ab agar Proxy ke piche 100 naye servers bhi aa jayein, humein IP badalna nahi parega. Backend sirf yeh dekhega ke aane wala packet `SecurityGroupProxy` se hokar aaya hai ya nahi.
+
+#### Verification With Curl:
+
+Jab aap `firewall5.yaml` stack deploy karte hain, toh aapko do outputs milte hain: `ProxyPublicIpAddress` aur `BackendPublicIpAddress`.
+
+* Agar aap browser mein **Proxy** ka IP kholenge, toh website chalegi kyunke Proxy backend se data khinch kar aapko dikha rahi hai.
+* Lekin agar aap direct **Backend** ka public IP browser mein dalenge, toh page load nahi hoga aur error aayega, kyunke aapka zaati IP backend par allowed nahi hai.
+
+Agar aap terminal se testing karein:
+
+```bash
+$ curl -I http://$ProxyPublicIpAddress
+HTTP/1.1 200 OK
+...
+x-backend: app1
+
+```
+
+Yahan response header mein aane wala `x-backend: app1` saaf sabit karta hai ke request pehle proxy par gayi, aur proxy ne use backend machine (`app1`) tak forward kiya.
+
+---
+
+### Cleaning up
+
+> ⚠️ **Cost Reminder:**
+> Practical seekhne ke baad CloudFormation par ja kar stack ko **Delete** karna hargiz mat bhooliyega. Agar resources khule reh gaye, toh AWS aapke account par charges laga dega.
+
+---
