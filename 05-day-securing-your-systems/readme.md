@@ -145,3 +145,233 @@ Yad rakhein, agar aap ne flat ka darwaza khula chora (yani firewall ghalt set ki
 Agar aap is model ko mazeed gehrai se aur tasweeron ke sath samjhana chahte hain, toh aap unki is official link ko dekh sakte hain: [aws.amazon.com/compliance/shared-responsibility-model/](https://aws.amazon.com/compliance/shared-responsibility-model/).
 
 ---
+
+## Keeping the operating system up-to-date
+
+Duniya mein koi bhi software aisa nahi hai jisme kabhi koi kharabi ya kamzori (vulnerability) na nikle. Har hafte Linux Kernel, OpenSSL, Java, Apache, PHP, ya WordPress jise chalne wale softwares mein naye security bugs dhoonde jaate hain.
+
+* **Bachon Wali Example:** Farz karein aapke ghar ke taale (lock) mein choron ko ek aisi kharabi ka pata chal jaye jisse koi bhi purani chaabi lagakar taala khola ja sakta hai. Ab agar taala banane wali company us kharabi ko theek karne ke liye ek naya "patch" ya pucha (fix) nikalti hai, toh aapki zimmedari hai ke aap furan use apne taale par lagayein. Agar aap der karenge, toh chor (hackers) us kharabi ka faida utha kar andar ghus jayenge.
+
+Isliye, cloud engineering mein aapke paas ek solid aur automatic plan hona chahiye ke jaise hi koi naya security update aaye, aapke saare virtual servers (EC2 instances) furan patch (update) ho sakein.
+
+**Amazon Linux 2** operating system jab pehli baar start hota hai, toh woh **cloud-init** ke zariye critical aur ahem security updates ko automatic install kar leta hai. Lekin baqi bache hue updates ko handle karne ke liye hamare paas teen main options hote hain:
+
+1. **Boot ke aakhri hisse mein saare updates install karna:** Iske liye hum user-data script mein `yum -y update` command likhte hain.
+2. **Boot ke waqt sirf security updates install karna:** Iske liye hum user-data script mein `yum -y --security update` chalate hain.
+3. **AWS Systems Manager Patch Manager ka use karna:** Yeh sab se behtareen aur robust tareeqa hai jisme hum rules ke mutabaq patching karte hain.
+
+Chaliye pehle shuruaati do options ke CloudFormation codes ko dekh kar samajhte hain.
+
+---
+
+### User Data Ke Zariye Initial Patching Setup
+
+Agar aap chahte hain ke aapka EC2 instance chalte hi automatic tarike se update ho jaye, toh aap CloudFormation template mein niche diye gaye tarike se UserData ka use kar sakte hain:
+
+#### Option A: Saare Updates Install Karna (All Updates)
+
+```yaml
+Instance:
+  Type: 'AWS::EC2::Instance'
+  Properties:
+    # [...]
+    UserData: !Base64 |
+      #!/bin/bash -ex
+      yum -y update    <--------- Installs all updates
+```
+
+* **Asaan Explanation:** Yahan `yum` Amazon Linux 2 ka official package manager (yani dukan-dar) hai. Jab server pehli baar chalta hai, toh bash script ke andar betha `yum -y update` dukan-dar se kehta hai ke "bina mujh se pooche (`-y` yani yes), is server ke saare softwares ko unke sab se naye version par update kar do."
+
+#### Option B: Sirf Security Updates Install Karna (Security Updates Only)
+
+Agar aap chahte hain ke baqi softwares ke versions na bbadlein aur sirf wahi cheezein update hon jo security ke liye zaroori hain, toh aap yeh code use karte hain:
+
+```yaml
+Instance:
+  Type: 'AWS::EC2::Instance'
+  Properties:
+    # [...]
+    UserData: !Base64 |
+      #!/bin/bash -ex
+      yum -y --security update    <--------- Installs only security updates
+```
+
+* **Asaan Explanation:** `--security` tag lagane se `yum` baqi aam features ko chor deta hai aur sirf un patches ko install karta hai jo system ko hackers se bachane ke liye sab se zyada ahem hain.
+
+---
+
+### The Following Challenges Are Still Waiting For A Solution
+
+Upar diye gaye dono tareeqay bohot asaan lagte hain, lekin inme do bare maslay (challenges) hain jinhein hal karna zaroori hai:
+
+* **The Reboot Problem:** Sab se bara masla yeh hai ke kuch updates (khususan **Kernel updates**, jo operating system ka dil hota hai) install hone ke bawajood tab tak kaam shuru nahi kartin jab tak server ko **reboot (restart)** na kiya jaye. Agar server restart nahi hua, toh update hone ke bawajood aapka system kamzor (vulnerable) hi rahega.
+* **Not Continuous:** Startup par patching karna kaafi nahi hota. Agar aapka server lagatar 6 mahine tak chalta rahe, toh 6 mahine pehle ki updates toh lag jayengi, lekin is dauran rozana aane wali nayi kamzoriyon se nipatne ke liye aapke paas koi continuous (lagatar) nizaam nahi hoga.
+
+---
+
+### Solution: AWS Systems Manager (SSM) Patch Manager
+
+Inhi dono maslon se bachne ke liye hum khud se dubara koi naya system nahi banate (yani we don't reinvent the wheel), balkay AWS ke bane-banaye tool **AWS Systems Manager (SSM) Patch Manager** ka use karte hain.
+
+**Figure 5.2** ke mutabaq, Patch Manager akela kaam nahi karta, balkay yeh SSM ke andar maujood un ahem core features (capabilities) ka ek majmua hai jo aapas mein mil kar kaam karte hain:
+
+<div align="center">
+  <img src="./images/02.png" width="600"/>
+</div>
+
+* **Agent:** Yeh server ke andar betha ek chota sa mukhbir ya worker software hota hai. Amazon Linux 2 mein yeh pehle se install aur automatic start hota hai. Yeh har waqt AWS cloud se aane wale orders ka intezar karta hai.
+* **Document:** Yeh samajh lein ke ek aam script ka bara bhai (script on steroids) hai. Patching ke liye hum AWS ka pehle se banaya hua standard document use karte hain jiska naam hai `AWS-RunPatchBaseline`.
+* **Run Command:** Yeh cloud se baji gayi woh command hai jo bina kisi manual login (SSH) ke, direct Agent ke zariye server ke andar scripts chala deti hai.
+* **Association:** Yeh State Manager ka hissa hai. Iska kaam yeh tay karna hai ke koi command kisi schedule ke tehat ya server ke start hote hi (startup par) lazmi execute ho.
+* **Maintenance Window:** Yeh ek khas waqt ka hissa (time window) hota hai jo hum tay karte hain (jaise raat ke 3 baje). Hum AWS ko kehte hain ke jo bhi heavy maintenance ya restart ka kaam hai, woh sirf isi time window ke andar hona chahiye taake aam users ka nuksaan na ho.
+* **Patch baseline:** Yeh rules ki ek policy book hoti hai jo batati hai ke kaunse patches ko safe samajh kar install karna hai. AWS ne Amazon Linux 2 ke liye ek default patch baseline di hui hai jo un tamam security patches ko automatic approve kar deti hai jin ki severity **Critical** ya **Important** hoti hai. Isme ek **7-day waiting period** hota hai—yani jab koi naya patch market mein aata hai, toh yeh system 7 din intezar karta hai taake yeh pakka ho sake ke us patch mein koi bug nahi hai, aur phir use automatic approve kar deta hai.
+
+---
+
+### CloudFormation Setup For Patch Manager
+
+Niche diye gaye CloudFormation code ke zariye hum ek automatic Maintenance Window aur Association tay karte hain taake patching automatic aur continuous ho sake:
+
+#### 1. Maintenance Window Define Karna
+
+```yaml
+MaintenanceWindow:
+  Type: 'AWS::SSM::MaintenanceWindow'
+  Properties:
+    AllowUnassociatedTargets: false
+    Duration: 2
+    Name: !Ref 'AWS::StackName'
+    Schedule: 'cron(0 5 ? * SUN *)'
+    Cutoff: 1
+```
+
+* **Asaan Explanation:** Yeh code ek **2 ghante ki window** (`Duration: 2`) banata hai jo har **Sunday subah 5:00 AM UTC** par chalegi (`cron(0 5 ? * SUN *)`). Yahan `Cutoff: 1` ka matlab yeh hai ke aakhri 1 ghante mein koi naya kaam shuru nahi kiya jayega, taake jo kaam pehle se chal rahe hain unhein khatam hone ka poora waqt mil sake.
+
+#### 2. Target Server Select Karna
+
+```yaml
+MaintenanceWindowTarget:
+  Type: 'AWS::SSM::MaintenanceWindowTarget'
+  Properties:
+    ResourceType: INSTANCE
+    Targets:
+      - Key: 'InstanceIds'
+        Values:
+          - !Ref Instance
+    WindowId: !Ref MaintenanceWindow
+```
+
+* **Asaan Explanation:** Yeh resource hamari maintenance window ko hamare specific EC2 instance (`!Ref Instance`) ke sath jor deta hai. Agar hum chahein toh yahan IDs ke bajaye specific Tags (jaise Environment: Production) ka use kar ke bohot saare servers ko ek sath target kar sakte hain.
+
+#### 3. Task Assign Karna (What to do?)
+
+```yaml
+MaintenanceWindowTask:
+  Type: 'AWS::SSM::MaintenanceWindowTask'
+  Properties:
+    MaxConcurrency: '1'
+    MaxErrors: '1'
+    Priority: 1
+    WindowId: !Ref MaintenanceWindow
+    Targets:
+      - Key: 'WindowTargetIds'
+        Values:
+          - !Ref MaintenanceWindowTarget
+    TaskArn: 'AWS-RunPatchBaseline'
+    TaskType: 'RUN_COMMAND'
+    TaskInvocationParameters:
+      RunCommandParameters:
+        Comment: 'Patch instance'
+        OutputS3BucketName: !Ref S3Bucket
+```
+
+* **Asaan Explanation:** Yeh resource bta raha hai ke jab Sunday subah 5 baje window khulegi, toh kaunsa kaam hoga. Yeh `RUN_COMMAND` ke zariye `AWS-RunPatchBaseline` document ko hamare server par chalayega. Yeh document khud hi check karega ke kaunse patches bache hain, unhein install karega, aur agar zaroorat hui toh instance ko **reboot** bhi kar dega. Is poore kaam ka logs ek S3 bucket mein save ho jayega.
+
+#### 4. Startup Par Checking Ke Liye Association
+
+```yaml
+MaintenanceWindowTaskAssociation:
+  Type: 'AWS::SSM::MaintenanceWindowTaskAssociation'
+  Properties:
+    Name: !Ref MaintenanceWindow
+    TaskArn: 'AWS-RunPatchBaseline'
+    Targets:
+      - Key: 'InstanceIds'
+        Values:
+          - !Ref Instance
+```
+
+* **Asaan Explanation:** Yeh association is baat ko yakeeni banati hai ke jab bhi instance pehli dafa start (boot) ho, toh yeh same patching parameters ke mutabaq furan checking shuru kar de.
+
+---
+
+### Prerequisite: IAM Instance Role For S3 Access
+
+Patch Manager ko chalne ke liye hamare EC2 instance ke paas AWS ke kuch specific S3 buckets se data khinchne (Read access) ki ijazat honi chahiye. Iske bina Agent kaam nahi kar sakega:
+
+```yaml
+InstanceRole:
+  Type: 'AWS::IAM::Role'
+  Properties:
+    #[...]
+    Policies:
+      - PolicyName: PatchManager
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: 's3:GetObject'
+              Resource:
+                - !Sub 'arn:aws:s3:::patch-baseline-snapshot-${AWS::Region}/*'
+                - !Sub 'arn:aws:s3:::aws-ssm-${AWS::Region}/*'
+```
+
+* **Asaan Explanation:** Yeh IAM Policy server ko ijazat deti hai ke woh chalte waqt AWS ke regional buckets (`patch-baseline-snapshot` aur `aws-ssm`) ke andar ja kar patching se mutaliq zaroori configuration files aur data ko `s3:GetObject` ke zariye read kar sake.
+
+---
+
+### Visualizing Patches With Scan Association
+
+Patch Manager sirf patches lagata nahi hai, balkay yeh aapko yeh bhi dikha sakta hai ke kaunse patches bache hue hain aur aapka server kitna safe hai. Is data ko har waqt fresh rakhne ke liye hum ek alag association banate hain jo sirf scan karti hai:
+
+```yaml
+AssociationRunPatchBaselineScan:
+  Type: 'AWS::SSM::Association'
+  Properties:
+    ApplyOnlyAtCronInterval: true
+    Name: 'AWS-RunPatchBaseline'
+    Parameters:
+      Operation:
+        - Scan
+    ScheduleExpression: 'cron(0 0/1 * * ? *)'
+    Targets:
+      - Key: InstanceIds
+        Values:
+          - !Ref Instance
+```
+
+* **Asaan Explanation:** Yeh association har ghante (`cron(0 0/1 * * ? *)`) chal kar server ka muayna (Scan) karti hai ke koi naya patch aane wala toh nahi hai.
+* **Crucial Design Decision:** Yahan `ApplyOnlyAtCronInterval: true` lagaya gaya hai taake yeh association startup par run na ho. Iska faida yeh hota hai ke yeh hamari pehli wali association (jo startup par install karti hai) ke sath takrayegi nahi. Agar `AWS-RunPatchBaseline` document ek hi waqt mein ek server par do dafa chal jaye (ek taraf se Scan aur ek taraf se Install), toh yeh crash ho jata hai. Is takrao (conflict) se bachne ke liye yeh setting lazmi hai.
+
+---
+
+### Figure 5.3 Ka Breakdown: Patch Manager Dashboard
+
+<div align="center">
+  <img src="./images/03.png" width="600"/>
+</div>
+
+Jab aap is poori CloudFormation template ko deploy karte hain aur AWS Systems Manager ke console mein ja kar **Patch Manager** ko open karte hain, toh aapko **Figure 5.3** jaisa ek dashboard dikhta hai:
+
+* **Gol Chart (Pie Chart):** Yeh chart aapko live status dikhata hai. Jaisa ke figure mein dikhaya gaya hai, agar aapka server poori tarah up-to-date hai, toh wahan **"Compliant: 1"** likha aayega aur ek green circle poora nazar aayega.
+* **Non-compliance Counts:** Dashboard ke right side par agar kisi patch ki installation fail ho jaye, ya koi critical patch missing ho, ya koi server restart (reboot) hone ka intezar kar raha ho, toh unki ginti (count) `0` se badh kar wahan show ho jati hai taake engineer ko furan pata chal sake.
+* **Manual Override:** Agar aap automatic schedule ka intezar nahi karna chahte aur furan patching shuru karna chahte hain, toh aap dashboard par upar right corner mein diye gaye **"Patch now"** button par click kar ke manually bhi isi waqt patching process start kar sakte hain.
+
+---
+
+### Cleaning up
+
+> ⚠️ **Cost Reminder:**
+> Jab aap is section ka practical mukammal kar lein, toh AWS CloudFormation par ja kar apne banaye hue `ec2-os-update` stack ko **Delete** karna mat bhooliyega. Agar aap resources ko chalta chor denge, toh unke chalne ka kharcha (charges) aapke account par par sakta hai.
+
+---
