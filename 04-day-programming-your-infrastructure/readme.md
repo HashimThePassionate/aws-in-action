@@ -350,8 +350,8 @@ $ aws configure
 Jaise hi aap Enter dabayenge, terminal aap se 4 sawal poochega. Aap ne ek-ek kar ke browser se values copy kar ke yahan paste karni hain:
 
 ```text
-AWS Access Key ID [None]: AKIAIRUR3YLPOSVD72CA
-AWS Secret Access Key [None]: SSKIng7jkAKERpcT3YphX4cD87SBYgWWv2enqBj7
+AWS Access Key ID [None]: YOUR-ACCESS-KEY-HERE
+AWS Secret Access Key [None]: YOUR-ACCESS-KEY-HERE
 Default region name [None]: us-east-1
 Default output format [None]: json
 ```
