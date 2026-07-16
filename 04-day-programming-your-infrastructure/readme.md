@@ -1,5 +1,34 @@
 # Programming your infrastructure: The command line, SDKs, and CloudFormation
 
+<details>
+<summary><strong>Table of Contents</strong></summary>
+
+- [Room lighting as a service](#room-lighting-as-a-service)
+- [Virtual machines on AWS](#virtual-machines-on-aws)
+- [AWS Tools on top of the HTTP API](#aws-tools-on-top-of-the-http-api)
+- [AWS Control via API](#aws-control-via-api)
+  - [How the API works](#how-the-api-works)
+  - [Automation and the DevOps movement](#automation-and-the-devops-movement)
+  - [Why should you automate?](#why-should-you-automate)
+- [Using the command-line interface](#using-the-command-line-interface)
+  - [Installing the CLI](#installing-the-cli)
+  - [Configuring the CLI](#configuring-the-cli)
+  - [Using the CLI](#using-the-cli)
+  - [Dealing with long output](#dealing-with-long-output)
+  - [Automating with the CLI](#automating-with-the-cli)
+  - [Programming with the SDK](#programming-with-the-sdk)
+  - [Installing and getting started with Node.js](#installing-and-getting-started-with-nodejs)
+  - [Controlling virtual machines with SDK: nodecc](#controlling-virtual-machines-with-sdk-nodecc)
+  - [Infrastructure as Code](#infrastructure-as-code)
+  - [Inventing an infrastructure language: JIML](#inventing-an-infrastructure-language-jiml)
+  - [Using AWS CloudFormation to start a virtual machine](#using-aws-cloudformation-to-start-a-virtual-machine)
+  - [Anatomy of a CloudFormation template](#anatomy-of-a-cloudformation-template)
+  - [Creating your first template](#creating-your-first-template)
+  - [Updating infrastructure using CloudFormation](#updating-infrastructure-using-cloudformation)
+  - [Alternatives to CloudFormation](#alternatives-to-cloudformation)
+  - [Summary](#summary)
+</details>
+
 ## Room lighting as a service
 
 Farz karein hum kamre ki lights ko ek "service" ke taur par bechna chahte hain. Agar hum chahein ke koi software ke zariye kamre ki light ko off kar sake, toh hamein ek hardware device ki zaroorat hogi jise hum **relay** kehte hain. Yeh relay light ke electric circuit ke sath connect hota hai.
@@ -272,7 +301,6 @@ Windows par installation ke liye hum Microsoft Installer (MSI) ka use karenge:
 4. PowerShell mein niche di gayi command likhein aur Enter dabayein:
 ```powershell
 Set-ExecutionPolicy Unrestricted
-
 ```
 
 
@@ -350,8 +378,8 @@ $ aws configure
 Jaise hi aap Enter dabayenge, terminal aap se 4 sawal poochega. Aap ne ek-ek kar ke browser se values copy kar ke yahan paste karni hain:
 
 ```text
-AWS Access Key ID [None]: YOUR-ACCESS-KEY-HERE
-AWS Secret Access Key [None]: YOUR-ACCESS-KEY-HERE
+AWS Access Key ID [None]: AKIAIRUR3YLPOSVD72CA
+AWS Secret Access Key [None]: SSKIng7jkAKERpcT3YphX4cD87SBYgWWv2enqBj7
 Default region name [None]: us-east-1
 Default output format [None]: json
 ```
@@ -472,7 +500,6 @@ Aayein isko practical samjhein. Agar hum Amazon Linux 2 ki images list karein:
 
 ```bash
 $ aws ec2 describe-images --filters "Name=name,Values=amzn2-ami-hvm-2.0.202*-x86_64-gp2"
-
 ```
 
 Iska output bohot bada hota hai jis mein dheron details hoti hain, jaise:
@@ -492,7 +519,6 @@ Humein machine chalane ke liye sirf `"ami-0ce1e3f77cd41957e"` chahiye, baqi ka k
 
 ```bash
 $ aws ec2 describe-images --filters "Name=name,Values=amzn2-ami-hvm-2.0.202*-x86_64-gp2" --query "Images[0].ImageId"
-
 ```
 
 **Output:**
@@ -507,7 +533,6 @@ Quotes ko hatane ke liye aur bilkul saaf-suthra raw text hasil karne ke liye hum
 
 ```bash
 $ aws ec2 describe-images --filters "Name=name,Values=amzn2-ami-hvm-2.0.202*-x86_64-gp2" --query "Images[0].ImageId" --output text
-
 ```
 
 **Output:**
