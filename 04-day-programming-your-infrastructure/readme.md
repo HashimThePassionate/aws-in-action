@@ -1297,20 +1297,20 @@ Niche hum ne exact wahi JSON template likha hai jo hamare poore system ka naksha
 {
   "region": "us-east-1",
   "resources": [{
-    "type": "loadbalancer",
+    "type": "loadbalancer", // Load balancer ki zaroorat hai.
     "id": "LB",
     "config": {
-      "virtualmachines": 2,
+      "virtualmachines": 2, // Do VMs ki zaroorat hai.
       "virtualmachine": {
         "cpu": 2,
         "ram": 4,
-        "os": "ubuntu"
+        "os": "ubuntu" // VMs Ubuntu Linux hain (4 GB memory, 2 cores ke sath).
       }
     },
-    "waitFor": "$DB"
+    "waitFor": "$DB" // LB tabhi ban sakta hai agar database ready ho.
   },
   {
-    "type": "cdn",
+    "type": "cdn", // CDN ka istemaal hota hai jo LB ki requests ko cache karta hai ya static assets (images, CSS files, ...) bucket se fetch karta hai.
     "id": "CDN",
     "config": {
       "defaultSource": "$LB",
@@ -1321,7 +1321,7 @@ Niche hum ne exact wahi JSON template likha hai jo hamare poore system ka naksha
     }
   },
   {
-    "type": "database",
+    "type": "database", // Data MySQL database mein store hota hai.
     "id": "DB",
     "config": {
       "password": "****",
@@ -1329,17 +1329,16 @@ Niche hum ne exact wahi JSON template likha hai jo hamare poore system ka naksha
     }
   },
   {
-    "type": "dns",
+    "type": "dns", // DNS entry CDN ki taraf point karti hai.
     "config": {
       "from": "www.mydomain.com",
       "to": "$CDN"
     }
   },
   {
-    "type": "bucket",
+    "type": "bucket", // Bucket ka istemaal static assets (images, CSS files, ...) ko store karne ke liye hota hai.
     "id": "BUCKET"
-  }]
-}
+  }]}
 ```
 
 #### JSON Ki Step-by-Step Aasaan Detail:
@@ -1391,19 +1390,19 @@ Is nakshe ko niche se upar aur left se right parhte hue, JIML tool commands ki e
 Niche di gayi list hamare tool ki banayi hui seedhi instructions (commands) hain jo bilkul sahi order mein chalengi:
 
 ```text
-$DB = database create {"password": "****", "engine": "MySQL"}
-$VM1 = virtualmachine create {"cpu": 2, "ram": 4, "os": "ubuntu"}
-$VM2 = virtualmachine create {"cpu": 2, "ram": 4, "os": "ubuntu"}
-$BUCKET = bucket create {}
+$DB = database create {"password": "****", "engine": "MySQL"} // Database create karta hai.
+$VM1 = virtualmachine create {"cpu": 2, "ram": 4, "os": "ubuntu"} // Virtual machine create karta hai.
+$VM2 = virtualmachine create {"cpu": 2, "ram": 4, "os": "ubuntu"} // Virtual machine create karta hai.
+$BUCKET = bucket create {} // Bucket create karta hai.
 
-await [$DB, $VM1, $VM2]
-$LB = loadbalancer create {"virtualmachines": [$VM1, $VM2]}
+await [$DB, $VM1, $VM2] // Dependencies ka wait karta hai.
+$LB = loadbalancer create {"virtualmachines": [$VM1, $VM2]} // Load balancer create karta hai.
 
-await [$LB, $BUCKET]
-$CDN = cdn create {...}
+await [$LB, $BUCKET] // Dependencies ka wait karta hai.
+$CDN = cdn create {...} // CDN create karta hai.
 
 await $CDN
-$DNS = dns create {...}
+$DNS = dns create {...} // DNS entry create karta hai.
 
 await $DNS
 ```
