@@ -1476,15 +1476,15 @@ Aayein is basic dhanchay (structure) ko YAML code mein dekhte hain:
 ### Listing 4.10 CloudFormation template structure
 
 ```yaml
----
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'CloudFormation template structure'
+--- # Document shuru ho raha hai
+AWSTemplateFormatVersion: '2010-09-09' # Yeh wahid valid version hai
+Description: 'CloudFormation template structure' # Yeh template kis baare mein hai?
 Parameters:
-  # [...]
+  # [...] # Parameters ko define karta hai
 Resources:
-  # [...]
+  # [...] # Resources ko define karta hai
 Outputs:
-  # [...]
+  # [...] # Outputs ko define karta hai
 ```
 
 ---
@@ -1505,9 +1505,9 @@ Parameter ka kam az kam ek **Name** aur ek **Type** hona zaroori hai. Saath mein
 
 ```yaml
 Parameters:
-  Demo:
-    Type: Number
-    Description: 'This parameter is for demonstration'
+  Demo: # Aap parameter ka naam khud chun sakte hain.
+    Type: Number # Yeh parameter ek number ko represent karta hai.
+    Description: 'This parameter is for demonstration' # Parameter ki description.
 ```
 
 Is parameter ka naam `Demo` hai aur is ki type `Number` hai.
@@ -1520,15 +1520,15 @@ Aayein ab parameters ki mukhtalif types ko samajhte hain jo niche table mein di 
 | --- | --- |
 | **String** / **CommaDelimitedList** | Ek plain text (jaise `my-website`) ya comma se separate ki gayi texts ki list (jaise `a,b,c`). |
 | **Number** / **List<Number>** | Ek complete number ya float (jaise `10` ya `3.14`), ya un numbers ki list. |
-| **AWS::EC2::AvailabilityZone::Name** / **List<...>** | AWS ke data center ki exact location ka naam (jaise `us-east-1a`). |
-| **AWS::EC2::Image::Id** / **List<...>** | Amazon Machine Image (AMI) ki ID (jaise `ami-12345`). |
-| **AWS::EC2::Instance::Id** / **List<...>** | Pehle se chalne wali virtual machine ki unique ID. |
+| **AWS::EC2::AvailabilityZone::Name** / **`List<AWS::EC2::AvailabilityZone::Name>`** | AWS ke data center ki exact location ka naam (jaise `us-east-1a`). |
+| **AWS::EC2::Image::Id** / **`List<AWS::EC2::Image::Id>`** | Amazon Machine Image (AMI) ki ID (jaise `ami-12345`). |
+| **AWS::EC2::Instance::Id** / **`List<AWS::EC2::Instance::Id>`** | Pehle se chalne wali virtual machine ki unique ID. |
 | **AWS::EC2::KeyPair::KeyName** | Server login karne ke liye Security Key Pair ka naam. |
-| **AWS::EC2::SecurityGroup::Id** / **List<...>** | Virtual firewall (Security Group) ki ID. |
-| **AWS::EC2::Subnet::Id** / **List<...>** | Network ke specific area (Subnet) ki ID. |
-| **AWS::EC2::Volume::Id** / **List<...>** | Hard drive (EBS volume) ki ID. |
-| **AWS::EC2::VPC::Id** / **List<...>** | Poore virtual network network (VPC) ki ID. |
-| **AWS::Route53::HostedZone::Id** / **List<...>** | Domain Name System (DNS) zone ki ID. |
+| **AWS::EC2::SecurityGroup::Id** / **`List<AWS::EC2::SecurityGroup::Id>`** | Virtual firewall (Security Group) ki ID. |
+| **AWS::EC2::Subnet::Id** / **`List<AWS::EC2::Subnet::Id>`** | Network ke specific area (Subnet) ki ID. |
+| **AWS::EC2::Volume::Id** / **`List<AWS::EC2::Volume::Id>`** | Hard drive (EBS volume) ki ID. |
+| **AWS::EC2::VPC::Id** / **`List<AWS::EC2::VPC::Id>`** | Poore virtual network network (VPC) ki ID. |
+| **AWS::Route53::HostedZone::Id** / **`List<AWS::Route53::HostedZone::Id>`** | Domain Name System (DNS) zone ki ID. |
 
 In types ke alawa, hum parameters ko mazeed secure aur bound karne ke liye mukhtalif properties de sakte hain:
 
@@ -1550,17 +1550,17 @@ Aayein ek comprehensive parameters block ki misal dekhte hain:
 Parameters:
   KeyName:
     Description: 'Key Pair name'
-    Type: 'AWS::EC2::KeyPair::KeyName'
+    Type: 'AWS::EC2::KeyPair::KeyName' # Sirf key-pair names ki ijazat hai.
   NumberOfVirtualMachines:
     Description: 'How many virtual machine do you like?'
     Type: Number
-    Default: 1
+    Default: 1 # Default ek virtual machine hai.
     MinValue: 1
-    MaxValue: 5
+    MaxValue: 5 # Zyada kharche se bachne ke liye upper limit set ki gayi hai.
   WordPressVersion:
     Description: 'Which version of WordPress do you want?'
     Type: String
-    AllowedValues: ['4.1.1', '4.0.1'
+    AllowedValues: ['4.1.1', '4.0.1'] # Sirf kuch specific versions tak mehdood hai.
 ```
 
 ---
@@ -1573,24 +1573,25 @@ Resources block mein hum batate hain ke humein AWS ka kaun sa purza banana hai. 
 
 ```yaml
 Resources:
-  VM:
-    Type: 'AWS::EC2::Instance'
+  VM: # Yeh resource ka naam ya logical ID hai jise aap select kar sakte hain.
+    Type: 'AWS::EC2::Instance' # AWS::EC2::Instance type ka resource ek virtual machine ko define karta hai.
     Properties:
-      # [...]
+      # [...] # Is resource type ke liye zaroori properties.
 ```
 
 ### Listing 4.13 CloudFormation EC2 instance resource
 
 ```yaml
 Resources:
-  VM:                           # <-- Logical ID (Aap apni marzi se koi bhi naam rakh sakte hain)
-    Type: 'AWS::EC2::Instance'   # <-- AWS Resource Type (Yeh virtual machine ko zahir karta hai)
-    Properties:
-      ImageId: 'ami-6057e21a'    # <-- Operating system template ID
-      InstanceType: 't2.micro'   # <-- Server ka size (CPU, Memory wagera)
-      SecurityGroupIds:
-        - 'sg-123456'            # <-- Firewall settings
-      SubnetId: 'subnet-123456'  # <-- Network location (Hum isay Chapter 5 mein deeply parhenge)
+  VM: # Resource ka naam ya logical ID jo aap chun sakte hain.
+    Type: 'AWS::EC2::Instance' # AWS::EC2::Instance type ka resource ek virtual machine ko define karta hai.
+
+Properties:
+  ImageId: 'ami-6057e21a' # AMI, vm ka operating system define karti hai.
+  InstanceType: 't2.micro' # Instance type vCPUs, memory, aur mazeed cheezein define karta hai.
+  SecurityGroupIds: # Iske baare mein aap Chapter 5 mein seekhenge.
+    - 'sg-123456'
+  SubnetId: 'subnet-123456' # Iske baare mein bhi aap Chapter 5 mein seekhenge.
 ```
 
 ---
@@ -1603,9 +1604,9 @@ Outputs tab use hota hai jab hum chahein ke CloudFormation hamare liye resource 
 
 ```yaml
 Outputs:
-    NameOfOutput:                 # <-- Output ka Logical ID
-        Value: '1'                # <-- Output ki value
-        Description: 'This output is always 1'
+  NameOfOutput: # Output ka naam jo aap choose kar sakte hain.
+    Value: '1' # Output ki value.
+    Description: 'This output is always 1'
 ```
 
 Aise static outputs ka koi khas faida nahi hota. Hum aam tor par dynamic values ko dhoondne ke liye **Intrinsic Functions** ka use karte hain:
@@ -1618,10 +1619,10 @@ Aise static outputs ka koi khas faida nahi hota. Hum aam tor par dynamic values 
 ```yaml
 Outputs:
   ID:
-    Value: !Ref Server                       # <-- Server instance ki ID nikalega
+    Value: !Ref Server # EC2 instance ko reference karta hai.
     Description: 'ID of the EC2 instance'
   PublicName:
-    Value: !GetAtt 'Server.PublicDnsName'    # <-- Server ka public URL nikalega
+    Value: !GetAtt 'Server.PublicDnsName' # EC2 instance ka PublicDnsName attribute hasil karta hai.
     Description: 'Public name of the EC2 instance'
 ```
 
@@ -1652,38 +1653,84 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'AWS in Action: chapter 4'
 Parameters:
   VPC:
-    Type: 'AWS::EC2::VPC::Id'
+    Type: 'AWS::EC2::VPC::Id' # Iske baare mein aap Chapter 5 mein seekhenge.
   Subnet:
-    Type: 'AWS::EC2::Subnet::Id'
-  InstanceType:
-    Description: 'Select one of the possible instance types'  # <-- User size select karega
+    Type: 'AWS::EC2::Subnet::Id' # Iske baare mein aap Chapter 5 mein seekhenge.
+  InstanceType: # User instance type ko define karta hai.
+    Description: 'Select one of the possible instance types'
     Type: String
     Default: 't2.micro'
-    AllowedValues: ['t2.micro', 't2.small', 't2.medium']  # <-- Chapter 5 mein details parhenge
+    AllowedValues: ['t2.micro', 't2.small', 't2.medium']
 Resources:
   SecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
+    Type: 'AWS::EC2::SecurityGroup' # Iske baare mein aap Chapter 5 mein seekhenge.
     Properties:
-      # VPC/Network related security properties
-      GroupDescription: 'Allow SSM access'
-      VpcId: !Ref VPC
-  VM:
-    Type: 'AWS::EC2::Instance'  # <-- Minimum EC2 Instance
+      # [...]
+  VM: # Ek minimal EC2 instance ko define karta hai.
+    Type: 'AWS::EC2::Instance'
     Properties:
-      ImageId: 'ami-061ace2015473fbe2' # Amazon Linux AMI
-      InstanceType: !Ref InstanceType # User ke select kiye parameter ka reference
-      IamInstanceProfile: 'ec2-s3m-core'
-      SecurityGroupIds: [!Ref SecurityGroup] # Dynamic security group check (implicit dependency)
+      ImageId: 'ami-061ac2e015473fbe2'
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: 'ec2-ssm-core'
+      SecurityGroupIds: [!Ref SecurityGroup] # Security group ko reference karke, ek implicit dependency declare ho jati hai.
       SubnetId: !Ref Subnet
 Outputs:
-  InstanceId:
-    Value: !Ref VM  # <-- Returns EC2 Instance ID
+  InstanceId: # EC2 instance ki ID return karta hai.
+    Value: !Ref VM
     Description: 'Instance id (connect via Session Manager)'
 ```
 
 #### Code Ki Gehrai Se Tafseel:
+### 1. Structure Overview
 
-* `SecurityGroupIds: [!Ref SecurityGroup]`: Jab hum ne VM ke andar `SecurityGroup` ka reference diya, toh CloudFormation ne automatic samajh liya ke pehle Security Group banana zaroori hai aur VM baad mein banegi. Isay hum **Implicit Dependency** kehte hain.
+Yeh template 3 main hisson mein divide hai:
+
+* **Parameters:** Yeh "Input" section hai. Jab aap yeh template run karenge, AWS aapse kuch values maangega (jaise VPC ID, Subnet ID).
+* **Resources:** Yeh "Execution" section hai. Yahan define hota hai ke kya banana hai (EC2 instance aur Security Group).
+* **Outputs:** Yeh "Result" section hai. Jab infrastructure ban jayega, toh yeh humein kya info return karega.
+
+---
+
+### 2. Line-by-Line Breakdown
+
+#### **Parameters (Inputs)**
+
+* `Parameters`: Yeh section user ko freedom deta hai ke har baar code edit na karna pade.
+* `VPC` & `Subnet`: Ye identifiers hain. CloudFormation jab run hoga, yeh aapse puchega ke "Kaunsi VPC aur Subnet mein server banana hai?"
+* `InstanceType`: Yahan `AllowedValues` ka use hua hai. Yeh validation hai—aap sirf `t2.micro`, `small`, ya `medium` hi select kar sakte hain. Agar kuch aur daala, toh code error de dega.
+
+#### **Resources (Infrastructure)**
+
+Yeh template ka dil (heart) hai.
+
+* `SecurityGroup`: Yahan firewall rules define honge (jo abhi comment mein hidden hain).
+* `VM`: Yeh aapka EC2 instance hai.
+* `ImageId`: `ami-061ac2e015473fbe2`. Yeh specific OS image hai jo load hogi.
+* `InstanceType`: `!Ref InstanceType`.
+* **Note:** `!Ref` ek intrinsic function hai. Yeh upar diye gaye `Parameters` section se us value ko uthata hai jo aapne select ki thi.
+
+
+* `IamInstanceProfile`: `ec2-ssm-core`. Yeh instance ko permissions deta hai ke wo AWS Systems Manager (SSM) se connect ho sake, taake aap baghair SSH key ke login kar saken.
+* `SecurityGroupIds`: `[!Ref SecurityGroup]`. Yahan `!Ref` use karke humne `VM` aur `SecurityGroup` ke darmiyan **dependency** create ki hai. Iska matlab hai: "Pehle Security Group banao, phir VM banao."
+
+
+
+#### **Outputs (Results)**
+
+* `InstanceId`: Deployment complete hone ke baad, AWS aapko us server ki ID dikha dega, taake aap usay `Session Manager` ke zariye access kar saken.
+
+---
+
+### 3. Key Concepts jo aapko samajhne chahiye
+
+| Concept | Kya Matlab Hai? |
+| --- | --- |
+| **!Ref** | Yeh ek pointer hai. Yeh dusre section ki value ko yahan "refer" (copy) kar deta hai. |
+| **Declarative** | Aap bata rahe hain "mujhe 1 VM chahiye," na ke "pehle EC2 console kholo, phir region select karo, phir..." |
+| **Dependency** | `SecurityGroupIds: [!Ref SecurityGroup]` likhne se AWS samajh jata hai ke VM ko Security Group ki zaroorat hai, isliye wo pehle Group banayega. |
+
+---
+
 * **Where is the template located?** Yeh template GitHub repository par `chapter04/virtualmachine.yaml` ke naam se majood hai. Aap isay download kar sakte hain ya Amazon S3 par majood direct link use kar sakte hain: `[https://s3.amazonaws.com/awsinaction-code3/chapter04/virtualmachine.yaml](https://s3.amazonaws.com/awsinaction-code3/chapter04/virtualmachine.yaml)`.
 
 ---
