@@ -565,12 +565,12 @@ Let's look at the exact differences in **Table 5.1**:
 
 #### Table 5.1 Differences among an AWS account root user, IAM user, and IAM role
 
-| Feature | AWS account root user | IAM user | IAM role |
-| --- | --- | --- | --- |
-| **Can have a password** (needed to log in to the AWS Management Console) | Always | Yes | No |
-| **Can have access keys** (needed to send requests to the AWS API (e.g., for CLI or SDK)) | Yes (not recommended) | Yes | No |
-| **Can belong to a group** | No | Yes | No |
-| **Can be associated with an EC2 instance, ECS container, Lambda function** | No | No | Yes |
+| Khususiyat | AWS account root user | IAM user | IAM role |
+| :--- | :--- | :--- | :--- |
+| **Password ho sakta hai** (AWS Management Console mein login karne ke liye zaroori hai) | Hamesha | Haan | Nahi |
+| **Access keys ho sakti hain** (AWS API requests bhejney ke liye zaroori hain, maslan CLI ya SDK ke liye) | Haan (sifarish nahi ki jati) | Haan | Nahi |
+| **Group ka hissa ban sakta hai** | Nahi | Haan | Nahi |
+| **EC2 instance, ECS container, ya Lambda function ke sath associate ho sakta hai** | Nahi | Nahi | Haan |
 
 > 🔑 **Golden Rule:** AWS mein paidaishi taur par (by default) kisi bhi user ya role ke paas koi taqat nahi hoti, woh kuch nahi kar sakte. Jab tak aap unke sath ek **Identity Policy** attach nahi karenge, unka access zero rahega.
 
