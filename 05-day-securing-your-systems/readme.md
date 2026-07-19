@@ -1059,32 +1059,41 @@ Chaliye **Listing 5.1** ke CloudFormation template ko dekhte hain jahan ek khali
 ### Listing 5.1 CloudFormation template: Security group
 
 ```yaml
+---
 Parameters:
-  VPC:
-    Type: String
-  Subnet:
-    Type: String
+  VPC: # Iske baare mein aap section 5.5 mein seekhenge.
+  Subnet: # Iske baare mein aap section 5.5 mein seekhenge.
 
 Resources:
-  SecurityGroup:
+  SecurityGroup: # Security group ko bina kisi rules ke define karta hai (by default, inbound traffic denied hota hai aur outbound traffic allowed hota hai). Rules aglay sections mein add kiye jayenge.
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Learn how to protect your EC2 Instance.'   # Bodyguard ka description
-      VpcId: !Ref VPC                                               # Jis network (VPC) mein yeh group banana hai
+      GroupDescription: 'Learn how to protect your EC2 Instance.'
+      VpcId: !Ref VPC
+
+  Instance: # EC2 instance ko define karta hai.
+    Type: 'AWS::EC2::Instance'
+    Properties:
       Tags:
         - Key: Name
           Value: 'AWS in Action: chapter 5 (firewall)'
-
-  Instance:
-    Type: 'AWS::EC2::Instance'                                      # EC2 server define kiya
-    Properties:
-      # [..]
       SecurityGroupIds:
-        - !Ref SecurityGroup                                        # Is server par upar wala khali security group laga diya
+        - !Ref SecurityGroup # Security group ko EC2 instance ke sath associate karta hai.
       SubnetId: !Ref Subnet
 ```
 
-* **Detail Breakdown:** Is code mein jo `SecurityGroup` banaya gaya hai, usme koi rule define nahi kiya gaya. Iska nateeja yeh hoga ke is server par **Inbound traffic poori tarah block** ho jayega aur **Outbound traffic poori tarah open** rahega.
+* **Detail Breakdown:**:
+Yeh CloudFormation template do main cheezon ko define kar raha hai: ek Security Group (Firewall) aur ek EC2 Instance. Aaiye isay points mein samajhte hain:
+
+* `Parameters` section mein `VPC` aur `Subnet` diye gaye hain. Yeh variables ki tarah hote hain, jiska matlab hai ke jab aap is template ko run karenge, to system aapse puchega ke aapko kis specific VPC aur Subnet mein ye resources banane hain.
+* `Resources` section mein sabse pehle `SecurityGroup` define kiya gaya hai, jiska type `AWS::EC2::SecurityGroup` hai. Yeh ek virtual firewall hai jo aapki instance ko protect karega.
+* `GroupDescription` mein "Learn how to protect your EC2 Instance" likha hai, jo is group ka purpose ya naam wazeh karta hai.
+* `VpcId: !Ref VPC` ka matlab hai ke yeh Security Group usi VPC ke andar banaya jaye jo aapne `Parameters` mein select kiya hai (`!Ref` ka matlab hota hai "Reference", yani upar define ki gayi value ko yahan use karo).
+* Is Security Group mein abhi koi rules nahi hain, isliye AWS ka default rule apply hoga: koi bhi "Inbound" (bahar se andar aane wala) traffic allow nahi hoga, jabke "Outbound" (andar se bahar jaane wala) traffic allow hoga.
+* Iske baad `Instance` resource hai, jiska type `AWS::EC2::Instance` hai. Yeh aapka real server ya virtual machine hai jo banega.
+* `Tags` mein `Name` key ke sath "AWS in Action: chapter 5 (firewall)" likha hai. Iska faida yeh hai ke jab aap AWS console mein login karenge, to aapko ye instance is naam se dikhayi degi, jisse pehchanne mein aasani hoti hai.
+* `SecurityGroupIds: !Ref SecurityGroup` line kafi ahem hai. Yeh batati hai ke jo Security Group humne upar banaya tha, use is instance ke sath attach (jod) do. Ab yeh instance usi firewall policy ke andar rahegi.
+* `SubnetId: !Ref Subnet` yeh batata hai ke is instance ko kis specific subnet mein launch karna hai. Networking ke lihaz se, instance ka ek network location mein hona zaroori hai, aur yeh parameter usi ki ijazat deta hai.
 
 ---
 
@@ -1112,19 +1121,30 @@ SecurityGroup:
     Tags:
       - Key: Name
         Value: 'AWS in Action: chapter 5 (firewall)'
-    SecurityGroupIngress:                                     # Inbound (andar aane wale) rules yahan shuru hote hain
+    SecurityGroupIngress: # Incoming traffic ko allow karne wale rules.
       - Description: 'allowing inbound ICMP traffic'
-        IpProtocol: icmp                                      # Protocol ka naam ICMP rakha
-        FromPort: '-1'                                        # ICMP mein ports nahi hote, isliye -1 ka matlab hai "All Types"
+        IpProtocol: icmp # Protocol ke taur par ICMP specify karta hai.
+        FromPort: '-1' # ICMP ports ka istemaal nahi karta. -1 ka matlab har port hai.
         ToPort: '-1'
-        CidrIp: '0.0.0.0/0'                                   # Duniya ke kisi bhi IP address se ping allow ho jaye
+        CidrIp: '0.0.0.0/0' # Kisi bhi source IP address se traffic ko allow karta hai.
 ```
 
-* **Detail Breakdown:** Jab aap is template se apne stack ko update karenge, toh security group mein ICMP traffic khul jayega. Ab agar aap dubara ping karenge, toh response aana shuru ho jayega:
+* **Detail Breakdown:**
+* `SecurityGroupIngress` woh jagah hai jahan aap "Inbound Rules" likhte hain, yani woh traffic jo internet se aapki instance ki taraf aayega.
+* `Description` field mein di gayi info ("allowing inbound ICMP traffic") baad mein policy audit karte waqt samajhne mein aasani deti hai ke yeh rule kis liye banaya gaya tha.
+* `IpProtocol: icmp` ka matlab hai ke aap "ICMP" traffic ko allow kar rahe hain. ICMP aam tor par `ping` command ke liye use hota hai, taake check kiya ja sake ke server online hai ya nahi.
+* `FromPort: '-1'` aur `ToPort: '-1'` ka istemal ICMP ke liye lazmi hai. Kyunki ICMP mein TCP/UDP ki tarah specific ports nahi hotay, isliye `-1` ka matlab "All ICMP types" hota hai.
+* `CidrIp: '0.0.0.0/0'` ka matlab hai ke puri duniya (internet) se koi bhi IP address aapki instance ko ping kar sakta hai. Yeh "Open to the world" access hai.
+
+> **Security Tip:** `0.0.0.0/0` ka matlab hai ke puri internet population ko aapke instance tak access mil gaya hai (sirf ping karne ke liye). Production systems par, sirf apne trusted IP addresses ko allow karna hamesha zyada secure rehta hai.
 
 ```bash
 $ ping 34.205.166.12
+PING 34.205.166.12 (34.205.166.12): 56 data bytes
 64 bytes from 34.205.166.12: icmp_seq=0 ttl=234 time=109.095 ms
+64 bytes from 34.205.166.12: icmp_seq=1 ttl=234 time=107.000 ms
+[...]
+round-trip min/avg/max/stddev = 107.000/108.917/110.657/1.498 ms
 ```
 
 ---
@@ -1133,7 +1153,74 @@ $ ping 34.205.166.12
 
 Ping chalne ke baad, agar hum server par website chalana chahte hain, toh humein **Port 80 (HTTP)** kholna hoga. **Listing 5.3** ke mutabaq jab hum template (`firewall3.yaml`) ko deploy karte hain, toh security group ke andar ek naya rule add ho jata hai jo TCP protocol ke zariye Port 80 par traffic ko aane ki ijazat deta hai. Is stack ko update karne ke baad jab aap browser mein server ka IP dalenge, toh test page khul jayega.
 
+
+Jab aap pichle step mein apne EC2 instance ko kamyabi se ping kar lete hain, toh iska matlab hai ke network ka buniyaadi rasta khul chuka hai. Ab hamara agla maqsad is virtual computer par aik asli **Web Server** chalana hai taake log hamari website dekh sakein.
+
+Website chalane ke liye humein do kaam karne parenge: pehla yeh ke firewall mein **Port 80 (HTTP)** par aane wali requests ko andar aane ki ijazat (Allow) dein, aur doosra yeh ke server ke andar web server software install karein.
+
+> 🏬 **Bachon Wali Example:**
+> Tasawwur karein ke aapne aik naye market mein khilono ki dukan (Web Server) kholi hai. Agar aap dukan ka shutter hamesha band rakhein ge, toh koi khareedar andar nahi aa sakega. Security Group mein **Port 80** kholna bilkul aisa hi hai jaise aap apni dukan ka samne wala main shutter utha rahe hain taake internet se aane wale customers dukan ke andar dakhil ho sakein. Aur dukan ke andar betha salesman hamara **Apache Software** hai, jo customer ke maangne par use website (index.html) nikal kar deta hai.
+
 ---
+
+### CloudFormation Code Breakdown: Security Group Config
+
+Niche diye gaye code ke zariye hum digital bodyguard (Security Group) ko batate hain ke web traffic ke liye darwaza kaise kholna hai:
+
+```yaml
+SecurityGroup:
+  Type: 'AWS::EC2::SecurityGroup'
+  Properties:
+    GroupDescription: 'Learn how to protect your EC2 Instance.'
+    VpcId: !Ref VPC
+    # [...]
+    SecurityGroupIngress: # Incoming HTTP traffic ko allow karne ke liye rule add karta hai.
+      # [...]
+      - Description: 'allowing inbound HTTP traffic'
+        IpProtocol: tcp # HTTP TCP protocol par mabni hai.
+        FromPort: '80' # Default HTTP port 80 hai.
+        ToPort: '80' # Aap ports ki range allow kar sakte hain ya FromPort = ToPort set kar sakte hain.
+        CidrIp: '0.0.0.0/0' # Kisi bhi source IP address se traffic allow karta hai.
+```
+
+* **`IpProtocol: tcp`:** Internet par website ka jo data chalta hai, woh hamesha **TCP protocol** (baatchit ka aik pakka aur mehfooz tareeqa) ka istemal karta hai. Isliye humne bodyguard ko bola ke sirf TCP packets par nazar rakhe.
+* **`FromPort: '80'` aur `ToPort: '80'`:** AWS mein hum ports ki poori range (jaise 80 se 90 tak) khol sakte hain. Lekin kyunke website ka standard darwaza sirf **Port 80** hota hai, isliye humne shuru ka port (`FromPort`) aur aakhri port (`ToPort`) dono ko 80 par set kar ke lock kar diya hai.
+* **`CidrIp: '0.0.0.0/0'`:** Yeh sab se jaduwi line hai. `0.0.0.0/0` ka matlab hota hai **"Duniya ka koi bhi IP address"**. Is rule ko lagane se America, Pakistan, ya dunya ke kisi bhi kone mein betha insaan aapki website ko open kar sakega.
+
+---
+
+### CloudFormation Code Breakdown: EC2 Instance Aur Automation (UserData)
+
+Sirf darwaza kholna kaafi nahi hai, dukan ke andar salesman (software) ka hona bhi zaroori hai. Iske liye hum EC2 instance ke andar **UserData** script ka istemal karte hain jo computer ke start hote hi automatic chal jati hai:
+
+```yaml
+Instance:
+  Type: 'AWS::EC2::Instance'
+  Properties:
+    # [...]
+    UserData:
+      'Fn::Base64': |
+        #!/bin/bash -ex
+        yum -y install httpd # Startup par Apache HTTP Server install karta hai.
+        systemctl start httpd # Apache HTTP Server start karta hai.
+        echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Hello AWS in Action!</title></head><body><p>Hello AWS in Action!</p></body></html>' > /var/www/html/index.html
+
+```
+
+* **`'Fn::Base64': |`:** Yeh standard AWS setting hai jo hamari likhi hui commands ko safe tarike se convert kar ke virtual machine tak pohnchati hai taake computer use asani se parh sakay.
+* **`#!/bin/bash -ex`:** Yeh script ki pehli line hoti hai jo Linux ko batati hai ke niche di gayi saari commands Bash shell mein chalani hain. Isme lagaye gaye `-e` ka matlab hai ke agar koi aik command bhi fail ho toh script wahin ruk jaye, aur `-x` ka matlab hai ke jo bhi command chale, uski poori detail terminal log mein print ho taake debugging asaan ho.
+* **`yum -y install httpd`:** `yum` Linux ka sarkari dukan-dar (package manager) hai. Yeh command internet se Apache Web Server (jiska technical naam **httpd** hai) ko download aur install karti hai. `-y` lagane ka faida yeh hota hai ke installation ke dauran yeh system hum se baar-baar "Yes/No" nahi poochta, balkay automatic "Yes" kar ke install kar deta hai.
+* **`systemctl start httpd`:** Software install toh ho gaya, lekin use chalu (activate) karne ke liye yeh command zaroori hai. Yeh Linux ke background mein Apache server ka engine start kar deti hai.
+* **`echo '<html>...</html>' > /var/www/html/index.html`:** Yeh command aik choti si, buniyaadi HTML file (webpage) banati hai aur use Apache ke makhsoos folder (`/var/www/html/`) mein save kar deti hai. Jab bhi koi bahar se hamara IP address kholega, use yahi webpage nazar aayegi.
+
+---
+
+### Stack Update Aur Testing Ka Step-by-Step Tarika
+
+1. Aapne apne AWS CloudFormation console par jana hai aur apne maujooda stack ko update karne ke liye book ke folder mein di gayi template `[https://s3.amazonaws.com/awsinaction-code3/chapter05/firewall3.yaml](https://s3.amazonaws.com/awsinaction-code3/chapter05/firewall3.yaml)` ka use karna hai.
+2. Jab CloudFormation stack ki update mukammal (Complete) ho jaye, toh apne EC2 dashboard par ja kar us server ka **Public IP address** copy karein.
+3. Ab apne web browser (jaise Chrome ya Firefox) ko kholein, uske address bar mein woh Public IP paste karein aur Enter dabaaein.
+4. Aap ke samne aik bilkul basic test page khul kar aa jayega, jo is baat ka saboot hai ke aapki firewall ne traffic ko sahi tarike se guzara aur aapke server ne webpage load kar di!
 
 ## Allowing HTTP traffic from a specific source IP address
 
@@ -1148,10 +1235,10 @@ Kyunke IP badal sakta hai, isliye code mein IP hardcode karne ke bajaye hum Clou
 
 ```yaml
 Parameters:
-  WhitelistedIpAddress:
+  WhitelistedIpAddress: # Public IP address ka parameter
     Description: 'Whitelisted IP address'
     Type: String
-    AllowedPattern: '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' # IP format validation regex
+    AllowedPattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
     ConstraintDescription: 'Enter a valid IPv4 address'
 
 Resources:
@@ -1160,13 +1247,14 @@ Resources:
     Properties:
       GroupDescription: 'Learn how to protect your EC2 Instance.'
       VpcId: !Ref VPC
+      # [...]
       SecurityGroupIngress:
+        # [...]
         - Description: 'allowing inbound HTTP traffic'
           IpProtocol: tcp
           FromPort: '80'
           ToPort: '80'
-          CidrIp: !Sub '${WhitelistedIpAddress}/32'          # !Sub ke zariye user ke IP ke aage /32 lagaya
-
+          CidrIp: !Sub '${WhitelistedIpAddress}/32' # IP address input ko CIDR mein badalne ke liye WhitelistedIpAddress/32 ki value ka istemaal karta hai.
 ```
 
 > 🔢 **Classless Inter-Domain Routing (CIDR) Kya Hai?**
@@ -1174,8 +1262,15 @@ Resources:
 > Agar hum range banana chahein, toh hum boundary numbers use karte hain, jaise:
 > * `10.0.0.0/24`: Iska matlab hai range `10.0.0.0` se lekar `10.0.0.255` tak (akhri hissa badal sakta hai).
 > * `0.0.0.0/0`: Iska matlab hai zero bits lock hain, yani duniya ka koi bhi IP range mein shamil hai.
-> 
-> 
+
+* `Parameters` section mein `WhitelistedIpAddress` ka maqsad user se ek valid IP address input lena hai taake aap sirf apni machine ya office network ko access de sakein.
+* `Type: String` yeh batata hai ke input ke taur par aapko ek text format mein data dena hai.
+* `AllowedPattern` ek Regular Expression (Regex) hai jo validate karta hai ke user ne jo IP likha hai, wo sahi IPv4 format mein hai ya nahi (e.g., 192.168.1.1). Agar format galat hoga, to template deploy nahi hoga.
+* `ConstraintDescription` woh message hai jo user ko nazar aayega agar wo ghalat format mein IP address enter karega, taake use pata chale ke kya galti hui hai.
+* `SecurityGroupIngress` ke andar, aap define kar rahe hain ke kaunsa traffic aapki instance ke andar aa sakta hai.
+* `CidrIp: !Sub '${WhitelistedIpAddress}/32'` is code ka sabse ahem hissa hai. `!Sub` ek function hai jo variable ki value ko string ke sath jodh deta hai.
+* `/32` ka technical matlab hota hai ek "Single Host" (sirf ek IP). Jab aap user se diye gaye IP ke saath `/32` lagate hain, to aap firewall ko batate hain ke "Sirf is ek specific IP ko access do, puri duniya ko nahi."
+* Is tarah se, aapne server ko puri tarah public (0.0.0.0/0) karne ke bajaye, sirf apne trusted IP address tak mehfooz (secure) kar diya hai. 
 
 ---
 
