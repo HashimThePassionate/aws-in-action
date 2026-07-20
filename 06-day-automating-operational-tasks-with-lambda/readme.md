@@ -225,3 +225,236 @@ Pehlay writer ka diya gaya table dekhein, phir is ki ek ek feature ko aasan urdu
 
 
 ---
+
+## Building a website health check with AWS Lambda
+
+Kya aap kisi website ya application ke chalte rehne (**uptime**) ke zimmedar hain? Writer batata hai ke wo apni blog website (`[https://cloudonaut.io](https://cloudonaut.io)`) ko 24/7 on rakhne ki poori koshish karte hain.
+
+Lekin agar website kabhi band (down) ho jaye, toh sab se pehle kis ko pata chalna chahiye? Readers ko ya aap ko? Zaahir hai aap ko! Is kaam ke liye hum ek **External Health Check** lagate hain jo ek security guard (safety net) ki tarah kaam karta hai.
+
+### Website Health Check Ke Liye AWS Lambda Kyun Sab Se Best Hai?
+
+Sochein, website check karne ke liye aap ko 24 ghante computer chalane ki zaroorat nahi hai. Aap ko sirf har 5 minute baad, 1-2 milliseconds ke liye code chalana hai. AWS Lambda is kaam ke liye **perfect** hai kyunki yeh idle time ke paise nahi leta!
+
+Is section mein hum Lambda ka use karke apni website ke liye ek automatic health check setup karenge.
+
+---
+
+### Is Setup Mein Konsi AWS Services Use Hongi?
+
+1. **AWS Lambda:** Humara Python code chalaye gi.
+2. **Amazon CloudWatch:** Lambda by-default apne saare results aur errors CloudWatch ko bhejta hai. Yahan hum charts dekh sakte hain aur **Alarms** bana sakte hain jo website down hone par email bhejenge.
+3. **Amazon EventBridge:** Yeh humari **timer clock** ka kaam karega jo har 5 minute baad Lambda function ko jagega (trigger karega).
+
+---
+
+### Architecture Breakdown (Figure 6.2)
+
+Writer ne **Figure 6.2** mein is poore system ke 3 mukhya (main) hissay bataye hain:
+
+<div align="center">
+  <img src="./images/02.png" width="600"/>
+</div>
+
+#### Figure 6.2 Ka Detail Breakdown:
+
+* **1. EventBridge rule:** Har 5 minute baad ek event (ishara) bhejta hai jo Lambda function ko execute karta hai. Yeh bilkul Linux ke **cron service** (scheduled timer) ki tarah kaam karta hai.
+* **2. Lambda function:** Ek Python script chalta hai jo aap ki website par HTTP request (e.g., `GET [https://cloudonaut.io](https://cloudonaut.io)`) bhejta hai aur check karta hai ke response mein khas lafz (jaise `cloudonaut`) likha hua aa raha hai ya nahi.
+* **3. Alarm:** CloudWatch check karta hai ke kitni baar health check fail hua. Agar website down ho, toh yeh aap ko **email notification** bhej deta hai.
+
+> **Note:** Is section mein hum yeh poora setup **AWS Management Console** (buttons click karke) banaen ge taake aap ko Lambda use karne ki achi practice ho jaye. Automated tarika (CloudFormation) hum section 6.3 mein seekhein ge.
+
+---
+
+## Creating a Lambda function
+
+Aayein step-by-step apni pehli Lambda function banate hain:
+
+### Step 1: Lambda Console Kholna
+
+1. Browser mein AWS Console open karein: `[https://console.aws.amazon.com/lambda/home](https://console.aws.amazon.com/lambda/home)`
+2. **Create a Function** button par click karein.
+
+#### Figure 6.3 Breakdown:
+
+<div align="center">
+  <img src="./images/03.png" width="600"/>
+</div>
+
+**Figure 6.3** mein AWS Lambda ka Welcome screen dikhaya gaya hai jahan **Get started** box ke andar **Create a function** ka orange button hai. Is button par click karke function banane ka wizard shuru hota hai.
+
+---
+
+### Step 2: AWS Blueprint Ka Istemal Karna
+
+AWS humein bani-banai templates (code + settings) deta hai jinhein hum **Blueprints** kehte hain.
+
+* **Blueprint Selection:** **Use a blueprint** wala option select karein.
+* **Search:** Search box mein `canary` likhein.
+* **Select:** Results mein se `lambda-canary` blueprint ko chun lein.
+
+#### Figure 6.4 Breakdown:
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+**Figure 6.4** mein Console ka screen hai jahan top par **Use a blueprint** selected hai. Search bar mein `"canary"` filter karne par neeche `lambda-canary` card nazar aata hai (jo Python 3.7 / modern Python runtimes par chalta hai). Us par click karke bottom right par **Configure** button dabaen.
+
+> **Canary Kya Hota Hai?** Purane zamanay mein koyle ki khanon (coal mines) mein log ek choti chidya (canary) sath le jaate the. Agar zaharili gas aati thi toh chidya sab se pehle behosh ho jati thi aur mazdooron ko khatre ka pata chal jata tha. IT mein bhi "Canary" us chote check ko kehte hain jo system ke kharab hone par sab se pehle alert deta hai.
+
+---
+
+### Step 3: Function Name aur IAM Role Set Karna
+
+#### Function Name Rules:
+
+* Name box mein `website-health-check` likhein.
+* Name aap ke AWS account aur current region (e.g., `US East (N. Virginia)`) mein unique hona chahiye.
+* Is ki max length **64 characters** hoti hai.
+
+#### IAM Role (Permissions):
+
+* **Execution Role:** Select karein **Create a New Role with Basic Lambda Permissions**.
+* Yeh role Lambda ko permission deta hai ke wo apne logs Amazon CloudWatch mein write (save) kar sake.
+
+#### Figure 6.5 Breakdown:
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+**Figure 6.5** mein **Basic information** ka section hai jahan `website-health-check` name type kiya gaya hai aur Execution role mein **Create a new role with basic Lambda permissions** wala radio button selected hai.
+
+---
+
+### Step 4: EventBridge Trigger (Schedule Expression) Setup Karna
+
+Hum chahte hain ke humara health check har 5 minute baad automatic chalay. Is ke liye hum **EventBridge (CloudWatch Events)** trigger add karenge:
+
+1. **Rule Option:** Select **Create a New Rule**.
+2. **Rule Name:** Type karein `website-health-check`.
+3. **Rule Description:** Kuch bhi simple description likhein, e.g., `Check website every 5 minutes`.
+4. **Rule Type:** Select **Schedule Expression**.
+5. **Schedule Expression Value:** Box mein `rate(5 minutes)` likhein.
+
+#### Figure 6.6 Breakdown:
+
+<div align="center">
+  <img src="./images/06.png" width="600"/>
+</div>
+
+**Figure 6.6** mein **EventBridge (CloudWatch Events) trigger** ka section hai. Is mein Rule Name, Description, Schedule Expression radio button, aur text field mein `rate(5 minutes)` enter kiya hua nazar aa raha hai.
+
+---
+
+### Schedule Expressions Deep Detail (Rate vs Cron)
+
+Recurring (baar baar hone wale) tasks ke liye AWS do tarah ke Schedule Expressions deta hai:
+
+#### 1. Rate Expression Syntax: `rate($value $unit)`
+
+* **Rules:** `$value` hamesha ek positive integer (1, 2, 5, 10 etc.) hoga.
+* **Units:** Aap `minute`, `minutes`, `hour`, `hours`, `day`, ya `days` use kar sakte hain.
+* **Examples:**
+* `rate(5 minutes)` ──> Har 5 minute baad chalega.
+* `rate(1 hour)` ──> Har 1 ghante baad chalega.
+
+
+* **Limitation:** **1 minute se kam** (e.g., seconds mein) ki frequency support nahi hoti.
+
+#### 2. Cron Expression Syntax: `cron($minutes $hours $dayOfMonth $month $dayOfWeek $year)`
+
+Agar aap ko specific time par code chalana ho (jaise roz subah 8 baje), toh Cron expression use hoti hai:
+
+```bash
+# Formats: cron(Minutes Hours Day-of-month Month Day-of-week Year)
+
+# Example 1: Har roz subah 8:00 baje (UTC) chalana:
+cron(0 8 * * ? *)
+
+# Example 2: Har Monday se Friday shaam 4:00 baje (UTC) chalana:
+cron(0 16 ? * MON-FRI *)
+```
+
+---
+
+### Step 5: Code aur Environment Variables Setup
+
+Blueprint use karne ka fayda yeh hua ke AWS ne Python code pehle se likh kar de diya hai.
+
+#### Environment Variables Kya Hote Hain?
+
+Code ke andar URL ya keywords hardcode karne ke bajaye hum **Environment Variables** (Key-Value pairs) use karte hain. Is se code ko chhede bina settings change ki ja sakti hain.
+
+Aap ko 2 Environment Variables add karne hain:
+
+* **`site`**: Aap ki website ka URL (e.g., `[https://cloudonaut.io](https://cloudonaut.io)`).
+* **`expected`**: Webpage par maujood koi lafz jo confirm kare ke page sahi load hua hai (e.g., `cloudonaut`).
+
+#### Code Ka Breakdown (Python):
+
+Blueprint dwara diya gaya Python code (2026 Modern Python standard ke sath) yeh hai:
+
+```python
+import os
+from datetime import datetime
+from urllib.request import Request, urlopen
+
+# Environment Variables se values read karna
+SITE = os.environ['site']
+EXPECTED = os.environ['expected']
+
+def validate(res):
+    '''Agar expected text page mein na miley toh False return karo'''
+    return EXPECTED in res
+
+def lambda_handler(event, context):
+    print(f"Checking {SITE} at {event.get('time', datetime.now().isoformat())}")
+    try:
+        # Website par HTTP Request bhejna
+        req = Request(SITE, headers={'User-Agent': 'AWS Lambda'})
+        page_content = str(urlopen(req).read())
+        
+        # Check karna ke expected word content mein hai ya nahi
+        if not validate(page_content):
+            raise Exception("Validation failed")
+            
+    except Exception as e:
+        print("Check failed!")
+        raise e
+
+```
+
+#### Code Ki Step-by-Step Samajh:
+
+1. `os.environ['site']` aur `os.environ['expected']`: Console mein diye gaye `site` aur `expected` variables ki values ko read karte hain.
+2. `lambda_handler(event, context)`: Yeh Lambda ka **entry point** hai. Jab bhi EventBridge trigger hoga, AWS sab se pehle is function ko call karega.
+3. `Request(SITE, headers=...)`: Website ko HTTP GET request bhejta hai.
+4. `validate(...)`: Webpage ka HTML response check karta hai. Agar `expected` lafz (jaise `cloudonaut`) HTML mein na mile, toh Exception create hota hai.
+5. `raise e`: Jab error aata hai, toh Lambda execution mark ho jati hai as **Failed**. Yeh failure entry CloudWatch bhej di jati hai.
+
+#### Figure 6.7 Breakdown:
+
+<div align="center">
+  <img src="./images/07.png" width="600"/>
+</div>
+
+**Figure 6.7** mein top section par Code Editor hai jahan Python code (Python runtime environment) dikhaya gaya hai. Neeche **Environment variables** ka section hai jahan `site` = `[https://cloudonaut.io](https://cloudonaut.io)` aur `expected` = `cloudonaut` set kiya gaya hai. Sab se aakhir mein orange **Create function** button hai.
+
+---
+
+### Conclusion & Final Step
+
+Tamam configurations aur Environment Variables set karne ke baad, screen ke aakhir mein **Create Function** button par click karein.
+
+**Mubarak ho!** Aap ne apna pehla AWS Lambda function safaltapurvak create kar liya hai. Ab har 5 minute baad yeh automatic jagega, website check karega, aur wapas so jayega.
+
+> **Doosre Tasks Ke Liye Use-Cases:** Is tarah ke scheduled Lambda functions ko aap doosre automatic kaamon ke liye bhi use kar sakte hain, jaise:
+> * System status monitor karna.
+> * Faltu resources (jaise purane EBS Snapshots) ko clean-up/delete karna.
+> * Har roz automatic summary reports email karna.
+> 
+> 
+
+---
