@@ -760,3 +760,114 @@ Agar aap yeh setup sirf practice ke liye kar rahe hain, toh AWS mein faltu charg
 6. **Amazon SNS:** SNS -> Topics mein ja kar `website-health-check` waala topic delete karein.
 
 ---
+
+## Accessing endpoints within a VPC
+
+Is section mein writer humein yeh samjha raha hai ke jab aap ka code **AWS Lambda** par chal raha ho, toh wo doosri cheezon (jaise websites, databases, ya servers) se baat (communication) kaise karta hai—khas taur par jab wo cheezein aap ke apne private network (**VPC - Virtual Private Cloud**) ke andar chhupi hui hon.
+
+---
+
+### Lambda Ka Default Network Behavior (By Default Kya Hota Hai?)
+
+By default (aam taur par), AWS Lambda functions aap ke banaye hue **VPC (Virtual Private Cloud)** ke andar **nahi** chalte. Wo AWS ke apne managed network ke andar chalte hain.
+
+#### Public Internet Access:
+
+By default, har Lambda function seedha **Internet** se juda (connected) hota hai. Is ka matlab hai ke Lambda internet par maujood kisi bhi aisi service se baat kar sakta hai jiska public address (IP/URL) ho.
+
+#### Writer Ki Real-World Example:
+
+Pichle section mein jab hum ne **Website Health Check** banaya tha, toh hum ne Lambda ko internet ke zariye hi `[https://cloudonaut.io](https://cloudonaut.io)` par HTTP request bhejne ke liye use kiya tha. Lambda ne internet ka rasta pakda aur public website check kar li.
+
+---
+
+### Figure 6.16 Breakdown (Default Lambda Setup)
+
+**Figure 6.16** mein Lambda function ka default rasta dikhaya gaya hai:
+
+<div align="center">
+  <img src="./images/16.png" width="600"/>
+</div>
+
+* **Lambda Function:** Yeh aap ke VPC ke bahar chal raha hai.
+* **Internet:** Middle layer hai jahan se traffic guzar kar jata hai.
+* **Public Resources:** Internet ke zariye Lambda kisi bhi public website ya AWS ki un services se baat kar sakta hai jinke public endpoints hote hain (jaise **Amazon DynamoDB**, **Amazon S3**, aur **Amazon CloudWatch**).
+
+---
+
+### Problem: Private Resources Tak Kaise Pahunchein?
+
+Maan lijiye aap ke paas ek aisi website ya database hai jo internet par open **nahi** hai. Wo aap ke **VPC ke private subnet** mein chhupi hui hai (jaise company ka internal HR portal ya private RDS Database).
+
+Agar Lambda default settings par rahega, toh wo aap ke private network ke andar maujood resources ko access **nahi** kar payega, kyunki internet se private IPs tak rasta nahi milta.
+
+---
+
+### Solution: Lambda Ko VPC Se Connect Karna
+
+Agar aap chahte hain ke Lambda aap ke private network ke andar ja kar kaam kare (jaise kisi internal website ka health check karna ya private database se data read karna), toh aap ko Lambda mein **VPC Access** enable karna parta hai.
+
+Jab aap VPC access enable karte hain, toh AWS Lambda background mein Elastic Network Interfaces (ENIs / Virtual Network Cards) bana kar aap ke VPC ke saath jod deta hai.
+
+---
+
+### Figure 6.17 Breakdown (Lambda inside VPC Setup)
+
+<div align="center">
+  <img src="./images/17.png" width="600"/>
+</div>
+```
+
+#### Figure 6.17 Ka Step-by-Step Breakdown:
+
+1. **Lambda Function with VPC Access Enabled:** Lambda ab aap ke private VPC network ka hissa ban chuka hai.
+2. **Accessing Internal Resources:** Lambda ab VPC ke andar maujood private resources se seedhi baat kar sakta hai, jaise:
+* **Virtual Machine (EC2 Instance):** Internal web servers ya microservices.
+* **Amazon RDS (Database):** Private SQL/PostgreSQL/MySQL databases.
+
+
+3. **Accessing External Resources via Internet (Zaroori Point):**
+* **Bohat Zaroori Point:** Jab aap Lambda ko VPC se jod dete hain, toh us ka **default direct internet access khatam ho jata hai**!
+* Agar VPC wale Lambda ko bahar internet par bhi baat karni hai, toh VPC ke andar **NAT Gateway** ka hona zaroori hai, taake traffic Lambda ──> NAT Gateway ──> Internet ja sake.
+
+
+
+---
+
+### VPC Access Configure Karne Ke Liye Kitni Cheezein Chahiye?
+
+Lambda ko apne VPC se jodne ke liye aap ko 3 buniyaadi settings deni parti hain:
+
+1. **VPC ID:** Batana hota hai ke kis VPC se connect karna hai.
+2. **Subnets:** Kam az kam 2 ya 3 alag-alag Availability Zones ke subnets select karne chahiye taake High Availability bani rahe.
+3. **Security Groups:** Lambda ka apna firewall (Security Group) set karna hota hai jo batata hai ke Lambda kin IP addresses aur ports par traffic bhej sakta hai.
+
+---
+
+### Writer Ki Real-World Project Examples
+
+Writer batata hai ke unhon ne apne multiple client projects mein Lambda ko VPC se connect karne ki ability ko use kiya hai, khas taur par:
+
+* **Private Databases Access:** Lambda functions ke zariye private VPC mein chal rahe databases (jaise Amazon RDS) se secure data fetch ya write karna.
+
+---
+
+### Design Decision & Trade-offs (Writer Ki Key Advice)
+
+Architectural design ke lehaz se writer ne ek bohot zaroori mashwara (trade-off) bataya hai:
+
+#### 1. Writer Recommendation:
+
+> **"Lambda function ko VPC se sirf TABHI connect karein jab aisa karna MUKAMMAL ZAROORI ho."**
+
+#### 2. Trade-off (Wajah Kya Hai?):
+
+* **Additional Complexity:** VPC connect karne se system mein networking ki complexity badh jaati hai (Subnets, Security Groups, IP address limits ko sambhalna parta hai).
+* **Cost & Setup:** Internet access ke liye NAT Gateway lagana parta hai jis ka alag se monthly charge hota hai.
+
+#### 3. Best Use-Cases (Yeh Kab Karna Chahiye?):
+
+* Jab aap ko **Legacy Systems** (purane chalte hue internal company servers) ke sath integration karni ho.
+* Jab aap ko **Private Databases** (RDS, ElastiCache) se secure connection banana ho.
+
+---
