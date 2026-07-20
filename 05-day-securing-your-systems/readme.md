@@ -1,5 +1,23 @@
 # Securing your system: IAM, security groups, and VPC
 
+<details open>
+  <summary><strong>📚 Table of Contents</strong></summary>
+
+  <div style="margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid #d8e2f0; border-radius: 8px; background: #f8fbff;">
+    <ul>
+      <li><a href="#securing-your-systems-on-aws">Securing your systems on AWS</a></li>
+      <li><a href="#whos-responsible-for-security">Who’s responsible for security?</a></li>
+      <li><a href="#keeping-the-operating-system-up-to-date">Keeping the operating system up-to-date</a></li>
+      <li><a href="#securing-your-aws-account">Securing your AWS account</a></li>
+      <li><a href="#aws-identity-and-access-management-iam">AWS Identity and Access Management (IAM)</a></li>
+      <li><a href="#controlling-network-traffic-to-and-from-your-virtual-machine">Controlling network traffic</a></li>
+      <li><a href="#amazon-virtual-private-cloud-vpc">Amazon Virtual Private Cloud (VPC)</a></li>
+    </ul>
+  </div>
+</details>
+
+<a id="securing-your-systems-on-aws"></a>
+
 ## Securing your systems on AWS
 
 Deewar (wall) ki misaal se security ko samajhna sab se asaan hai. Agar aap ne apne ghar ki hifazat ke liye ek mazboot deewar khari karni hai, toh aapko bohot saari eenton (bricks) ki zaroorat hogi. Agar un mein se ek bhi eent kamzor hui ya apni jagah par na hui, toh chor (hackers) us kamzoori ka faida utha kar andar ghus sakte hain.
@@ -90,6 +108,8 @@ Is chapter ke concepts ko asani se hazam karne ke liye, aapko in networking ke b
 ---
 
 
+<a id="whos-responsible-for-security"></a>
+
 ## Who’s responsible for security?
 
 Cloud mein security kisi ek bande ka kaam nahi hai. Yeh ek **Shared-Responsibility Environment** hai. Iska matlab hai ke cloud ko secure rakhne ki zimmedari AWS aur aap (customer) ke darmiyan aadhi-aadhi banti hui hai.
@@ -145,6 +165,8 @@ Yad rakhein, agar aap ne flat ka darwaza khula chora (yani firewall ghalt set ki
 Agar aap is model ko mazeed gehrai se aur tasweeron ke sath samjhana chahte hain, toh aap unki is official link ko dekh sakte hain: [aws.amazon.com/compliance/shared-responsibility-model/](https://aws.amazon.com/compliance/shared-responsibility-model/).
 
 ---
+
+<a id="keeping-the-operating-system-up-to-date"></a>
 
 ## Keeping the operating system up-to-date
 
@@ -496,6 +518,8 @@ Jab aap is poori CloudFormation template ko deploy karte hain aur AWS Systems Ma
 
 ---
 
+<a id="securing-your-aws-account"></a>
+
 ## Securing your AWS account
 
 AWS account ki security aap ke cloud infrastructure ki buniyaad hai. Agar koi badmaash ya attacker aapke AWS account ka access haasil kar leta hai, toh woh aapka keemti data chura sakta hai, aapke kharche par heavy resources chala kar aapko hazaron dollars ka bill bhej sakta hai, ya phir aapka saara data ek jhatke mein delete kar sakta hai.
@@ -545,6 +569,8 @@ Root user aapke account ka sab se bada darwaza hai, isliye is par MFA lagana sab
 > ⚠️ **Professional Security Tip:** Agar aap apne mobile ko hi virtual MFA bana rahe hain, toh us mobile ke andar kabhi bhi root user ka password save mat karein aur na hi us mobile se AWS console chalayein. Token aur password dono alag alag jagah hone chahiye. Zyada high security ke liye aap hardware tokens jaise **YubiKeys** ka use bhi kar sakte hain.
 
 ---
+
+<a id="aws-identity-and-access-management-iam"></a>
 
 ## AWS Identity and Access Management (IAM)
 
@@ -995,6 +1021,8 @@ Yeh industry ka **sab se ahem concept** hai. **Role** insaan ke liye nahi, **mac
 
 ---
 
+<a id="controlling-network-traffic-to-and-from-your-virtual-machine"></a>
+
 ## Controlling network traffic to and from your virtual machine
 
 Cloud mein network security ka sab se sunehri usool yeh hai ke aapke virtual server (EC2 instance) ke andar sirf wahi traffic dakhil ho ya bahar jaye jiski waqifiyatan zaroorat ho. Is traffic ko control karne ke liye hum **Firewall** ka istemal karte hain jo aane wale (Inbound/Ingress) aur jaane wale (Outbound/Egress) traffic par nazar rakhti hai.
@@ -1374,6 +1402,8 @@ Yahan response header mein aane wala `x-backend: app1` saaf sabit karta hai ke r
 > Practical seekhne ke baad CloudFormation par ja kar stack ko **Delete** karna hargiz mat bhooliyega. Agar resources khule reh gaye, toh AWS aapke account par charges laga dega.
 
 ---
+
+<a id="amazon-virtual-private-cloud-vpc"></a>
 
 ## Amazon Virtual Private Cloud (VPC)
 
