@@ -1073,3 +1073,133 @@ Har Event Pattern mein hum mukhya taur par 2 buniyaadi fields hamesha specify ka
 Hum ne successfully yeh decide kar liya hai ke kaun sa event humare Lambda function ko jagaye ga (trigger karega). Next hum is Lambda function ke actual Python code ko implement karenge!
 
 ---
+
+## Implementing the Lambda function in Python
+
+EC2 instance par us ke owner (banaane wale user) ka naam automatically Tag karne ke liye humein bohat lamba-choura code likhne ki zaroorat nahi hai. Yeh kaam sirf **10 lines se bhi kam Python code** mein ho jata hai.
+
+Lambda ka programming model har language ke liye ek khas structure (dhaancha) follow karta hai. Chahe aap C#/.NET Core, Go, Java, JavaScript/Node.js, Python, ya Ruby use kar rahe hon, basic tareeqa-e-kaar ek jaisa hi rehta hai.
+
+Python mein Lambda function banane ke liye pehle us ke basic structure ko samajhna zaroori hai.
+
+---
+
+### Listing 6.3 Lambda function written in Python
+
+Neeche Lambda function ka basic Python structure diya gaya hai:
+
+```python
+# Python function ka naam, jise AWS Lambda 'function handler' ke taur par reference karta hai.
+def lambda_handler(event, context):
+    # Is function ke andar hum apna actual logic likhte hain.
+    
+    return # Function execution khatam karne ke liye return use hota hai.
+```
+
+#### Code Ka Structure Breakdown:
+
+* **`lambda_handler` (Entry Point):** Yeh aap ke code ka mukhya (main) darwaza hai. Jab bhi Lambda trigger hota hai, AWS sab se pehle is `lambda_handler` function ko dhoond kar call karta hai.
+* **`event` Parameter:** Yeh ek Python Dictionary (JSON format) hota hai. AWS jab bhi Lambda ko jagata hai, toh wo saara relevant data (jaise CloudTrail se aaya hua EC2 launch event data) is `event` variable ke andar daal kar bhejta hai.
+* **`context` Parameter:** Is parameter ke andar Lambda execution environment ki information hoti hai (jaise function ka naam, memory size, aur timeout hone mein kitna time bacha hai).
+* **`return`:** Function ki execution ko khatam karta hai.
+* **Asynchronous Invocation Note:** Kyunki humara Lambda function EventBridge ke event se **asynchronously** (background mein) chal raha hai, is liye event bhejne wala system kisi wapsi (return value) ka wait nahi kar raha hota. Is wajah se yahan koi value return karna zaroori nahi hai.
+
+
+
+---
+
+### Where is the code located?
+
+Book ka tamam code official GitHub repository par maujood hai:
+
+* **Repository Link:** `[https://github.com/AWSinAction/code3](https://github.com/AWSinAction/code3)`
+* **Directory:** `chapter06` folder mein is example ke liye saari zaroori files maujood hain.
+
+---
+
+### Time to write some Python code!
+
+Ab hum apna actual Python script likhte hain jo CloudTrail event se EC2 launch hone ki khabar receive karega, user ka naam aur instance ID nikale ga, aur EC2 par `Owner` tag laga dega.
+
+#### Boto3 SDK Kya Hai?
+
+Python ke zariye AWS services se baat karne ke liye hum AWS ka official SDK use karte hain jiska naam **`boto3`** hai. AWS Lambda ke Python runtime environment mein `boto3` pehle se **built-in (pre-installed)** hota hai, is liye aap ko isay alag se install karne ki zaroorat nahi parti.
+
+---
+
+### Listing 6.4 Lambda function adding a tag to EC2 instance
+
+Neeche modern Python standards ke sath complete script ka code aur us ka detailed breakdown diya gaya hai:
+
+```python
+import boto3
+
+# EC2 service se baat karne ke liye AWS SDK client banana
+ec2 = boto3.client('ec2')
+
+def lambda_handler(event, context):
+    # Debugging ke liye aane wale CloudTrail event ko CloudWatch Logs mein print karna
+    print(event)
+    
+    # CloudTrail event ke ARN se user ka naam extract karna
+    user_arn = event['detail']['userIdentity']['arn']
+    if "/" in user_arn:
+        user_name = user_arn.split('/')[1]
+    else:
+        user_name = user_arn
+        
+    # CloudTrail event se naye EC2 instance ki ID extract karna
+    instance_id = event['detail']['responseElements']['instancesSet']['items'][0]['instanceId']
+    
+    print(f"Adding owner tag {user_name} to instance {instance_id}.")
+    
+    # EC2 instance par 'Owner' Key aur User Name ki Value ka Tag lagana
+    ec2.create_tags(
+        Resources=[instance_id],
+        Tags=[
+            {
+                'Key': 'Owner',
+                'Value': user_name
+            }
+        ]
+    )
+    
+    return
+```
+
+---
+
+### Code Ka Step-by-Step Breakdown
+
+Aayein is code ki ek ek line aur logic ko bacho ki tarah aasan karke samajhte hain:
+
+#### 1. SDK Client Initialization (`import boto3` & `ec2 = boto3.client('ec2')`)
+
+* Pehle hum ne `boto3` library import ki.
+* `ec2 = boto3.client('ec2')` ke zariye hum ne EC2 service ke sath connection banane ka ek client tayyar kiya.
+* **Design Decision:** Hum ne client ko `lambda_handler` function ke **bahar** banaya hai. Is ka fayda yeh hota hai ke jab Lambda baar baar chalta hai (**Warm Start**), toh client ko dobara initialize nahi karna parta, jis se execution fast ho jati hai.
+
+#### 2. User Name Extract Karne Ka Logic
+
+AWS mein har user ka ek unique **ARN (Amazon Resource Name)** hota hai, jaise:
+`arn:aws:iam::123456789012:user/Hashim`
+
+* **`user_arn = event['detail']['userIdentity']['arn']`**: Code event JSON ke andar ja kar user ka ARN read karta hai.
+* **`if "/" in user_arn:`**: ARN mein `/` hota hai. Code check karta hai ke agar slash maujood hai, toh `split('/')[1]` ke zariye slash ke baad waala hissa yani sirf clean naam (`Hashim`) alag kar leta hai.
+* **`else`**: Agar ARN mein slash na ho (jaise root user case mein), toh poora ARN hi `user_name` variable mein save kar leta hai.
+
+#### 3. Instance ID Extract Karne Ka Logic
+
+CloudTrail ka JSON data bohot gehra (nested) hota hai. Instance ID tak pahunche ke liye code step-by-step path follow karta hai:
+`event['detail']['responseElements']['instancesSet']['items'][0]['instanceId']`
+
+* Yeh logic specific path par ja kar naye banne wale EC2 instance ka ID number (e.g., `i-07a3c0d78dclcb505`) chun leta hai.
+
+#### 4. Tag Lagane Ka Action (`ec2.create_tags(...)`)
+
+User Name aur Instance ID milne ke baad, Boto3 SDK ka `create_tags` function call hota hai:
+
+* **`Resources=[instance_id]`**: Batata hai ke kis specific EC2 instance par tag lagana hai.
+* **`Tags=[{'Key': 'Owner', 'Value': user_name}]`**: Batata hai ke tag ki Key `'Owner'` honi chahiye aur Value extract kiya gaya user name (e.g., `'Hashim'`) hona chahiye.
+
+---
