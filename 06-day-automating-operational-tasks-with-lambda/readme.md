@@ -1435,3 +1435,201 @@ aws s3 rb s3://ec2-owner-tag-$yourname --force
 > **Note:** Agar aap ne test karne ke liye koi EC2 instance launch kiya tha, toh deployment delete karne se pehle EC2 console par ja kar us instance ko **Terminate** karna mat bhooliye ga, warna uska bill aata rahega!
 
 ---
+
+## What are the limitations of AWS Lambda?
+
+AWS Lambda kitna bhi powerful ho, is ki kuch sakht limits (pabandiyan) hain jinhein samajhna har cloud architect ke liye zaroori hai:
+
+### 1. 15 Minutes (900 Seconds) Maximum Execution Limit
+
+AWS Lambda par chalne wala koi bhi single function **15 minute (900 seconds)** se ziada nahi chal sakta. Agar aap ka code 15 minute se ek second bhi upar leta hai, toh AWS usay zabardasti band (kill) kar deta hai.
+
+#### Writer Ki Real-World Story (2017 US Elections Anecdote):
+
+> Writer batata hai ke unhon ne news sites ke analytics data ko process karne ke liye ek serverless system banaya tha. Aam dino mein Lambda functions 180 seconds se kam mein data process kar lete the. Lekin jab **2017 US Elections** aaye, toh news sites par traffic aur data ka tufan aa gaya! Data itna ziada ho gaya ke Lambda functions us waqt ki limit (jo us daur mein 300 seconds yani 5 minute thi) ke andar kaam poora hi nahi kar paaye, aur poora serverless architecture wahi ruk gaya (**show-stopper**).
+
+---
+
+### 2. Cold Start Problem (Thandag Se Shuruat)
+
+Jab aap apna Lambda function run karte hain, toh background mein AWS aap ke code ko chalane ke liye ek naya "Execution Context" (ek chota sa container environment) banata hai.
+
+#### Cold Start Kab Hota Hai?
+
+1. Jab aap bilkul naya code upload karke deploy karte hain.
+2. Jab bohot der tak function par koi request na aaye aur environment so (idle ho) jaye.
+3. Jab achanak traffic barh jaye aur AWS ko naye environments banane parein.
+
+#### Cold Start Mein AWS Kya Karta Hai?
+
+AWS pehle aap ka code download karta hai, runtime environment setup karta hai, aur phir code ko memory mein load karta hai. Is process mein **kuch milliseconds se lekar 2-3 seconds** tak ka delay aa jata hai. Isay **Cold Start** kehte hain.
+
+#### Cold Start Kam Karne Ke Tarike:
+
+* Code package ka zip size jitna ho sake chota rakhein.
+* Lambda function ko thodi ziada RAM (Memory) allocate karein.
+* Fast runtimes use karein (jaise Python ya JavaScript/Node.js).
+
+#### Solution: Provisioned Concurrency (Environment Ko Garam Rakhna)
+
+Agar aap real-time web applications bana rahe hain jahan 1 second ka delay bhi bardasht nahi, toh aap **Provisioned Concurrency** enable kar sakte hain.
+
+* **Yeh Kya Karta Hai?** Aap AWS ko kehte hain ke *"Bhai! Mere 5 ya 10 execution contexts hamesha tayyar (warm) rakho, chahe request aaye ya na aaye!"*
+* **Trade-off (Paisa):** Is ke liye aap ko **$0.0000041667 per provisioned GB per second** extra dene parte hain, chahe aap capacity use karein ya na karein.
+
+---
+
+### 3. Memory (RAM) Limit
+
+* Lambda function ko aap Maximum **10,240 MB (10 GB)** RAM de sakte hain. Agar aap ka code is se ziada RAM use karega, toh execution interrupt (terminate) ho jayegi.
+* **Pro-Tip (CPU & Networking Speed):** AWS Lambda mein aap alag se CPU ya Network Speed select nahi karte. Aap jitni ziada **Memory (RAM)** select karenge, AWS us ke hisab se **CPU power aur Network Speed automatically barha deta hai**. Fast processing ke liye RAM badhana fayedamand rehta hai.
+
+---
+
+### 4. Package Size & Ephemeral Storage (`/tmp`)
+
+* **Deployment Package Limit:** Direct zip file upload ka maximum compressed size **250 MB** hota hai.
+* **Temporary Disk Space (`/tmp`):** Code chaltay waqt file save karne ke liye temporary storage milti hai. Book ke daur mein yeh **512 MB** thi *(2026 modern AWS mein aap is /tmp storage ko 10 GB tak barha sakte hain)*.
+
+---
+
+## Effects of the serverless pricing model
+
+Traditional EC2 servers mein aap ko server on rakhne ke har ghante/second ka kiraya dena parta hai, chahe server khali (idle) baitha rahe.
+
+AWS Lambda mein pricing model bilkul alag hai: **Pay-per-Request** aur **Pay-per-Execution Time** (1 millisecond ki accuracy ke saath).
+
+---
+
+### Table 6.3 AWS Lambda pricing model
+
+Pehlay writer ka diya gaya pricing table dekhein, phir is ki details samajhte hain:
+
+| Category | Free Tier | x86 Architecture | Arm Architecture (AWS Graviton) |
+| --- | --- | --- | --- |
+| **Lambda function invocations ki tadad** | Har mahine pehli 1 million requests muft hain. | $0.0000002 fi request | $0.0000002 fi request |
+| **Lambda function ke liye provisioned memory ki bunyad par 1 ms increments mein bill ki duration** | Har mahine 1 GB ke sath 400,000 seconds ke Lambda function ke equivalent provisioned memory muft hai. | $0.0000166667 (1 GB ko ek second istemal karne ke liye) | $0.0000133334 (1 GB ko ek second istemal karne ke liye) |
+
+#### Table 6.3 Ka Breakdown:
+
+1. **Invocations Cost:** Pehli 10 lakh (1 Million) requests har mahine FREE hain! Us ke baad har single request par sirf $0.0000002 ka kharcha aat hai.
+2. **Duration Cost:** 1 GB RAM ke saath 400,000 seconds har mahine FREE hain!
+3. **Arm vs x86 (Graviton Savings):** Agar aap Lambda ko **Arm (AWS Graviton)** architecture par chalate hain, toh duration price lagbhag **20% sasti** ho jaati hai!
+
+> **AWS Lambda Free Tier Ki Khasiyat:** AWS EC2 ka Free Tier 12 mahine baad khatam ho jata hai, lekin **AWS Lambda ka Free Tier LIFETIME FREE rehta hai**! Yeh kabhi expire nahi hota.
+
+---
+
+### Figure 6.20 & AWS Bill Excerpt (November 2017)
+
+Writer ne apne ek live product chatbot (`marbot.io`) ka actual AWS Lambda bill share kiya hai taake hum samajh sakein ke yeh kitna sasta hai:
+
+### AWS Lambda Bill Excerpt (November 2017)
+
+| Description | Usage | Cost |
+| --- | --- | --- |
+| **Lambda** | - | **$0.04** |
+| **US East (Northern Virginia) Region** | - | **$0.04** |
+| AWS Lambda Lambda-GB-Second | - | $0.00 |
+| AWS Lambda - Compute Free Tier - 400,000 GB-Seconds - US East (Northern Virginia) | 331,906.500 seconds | $0.00 |
+| AWS Lambda Request | - | $0.04 |
+| 0.000000367 USD per AWS Lambda - Requests Free Tier - 1,000,000 Requests - US East (Northern Virginia) (blended price)* | 1,209,096 Requests | $0.04 |
+
+*Figure 6.20: November 2017 ke AWS bill ka hissa jo AWS Lambda ke kharche dikha raha hai.*
+
+#### Figure 6.20 Breakdown:
+
+* Chatbot ne mahine mein **1.2 Million (12 lakh) times** execution ki.
+* Total Duration **216,000 seconds (60 hours)** thi (1536 MB RAM ke saath), jo ke Free Tier (400,000 GB-seconds) ke andar hi cover ho gayi, is liye Compute Cost **$0.00** aayi.
+* Sirf 1 Million se upar wali extra requests ka bill bana, jo kul milakar sirf **$0.04 (sirf 4 Cents yani chand rupey)** bana!
+* Sirf 4 Cents mein unhon ne **400 paid customers** ko chatbot service di!
+
+---
+
+### Total Cost of Ownership (TCO) vs High Load
+
+* **High Load Scenario:** Agar aap ki website par daily 1 Crore (10 Million+) requests aa rahi hon, toh shaayad raw compute price mein EC2 sasta pare.
+* **Total Cost of Ownership (TCO):** Lekin sirf infrastructure ka bill mat dekhein. EC2 ko maintain karne, security updates lagane, aur engineers ki salary ka kharcha milayein, toh **Lambda hamesha sasta aur tension-free** padta hai.
+
+---
+
+## Use case: Web application
+
+Lambda ka sab se common use case Modern Web ya Mobile Application backend banana hai.
+
+```
+[ User / Frontend ] ──(HTTPS)──> [ Amazon API Gateway ] ──> [ AWS Lambda ] ──> [ S3 / DynamoDB ]
+
+```
+
+### Figure 6.21 Breakdown (Serverless Web App):
+
+<div align="center">
+  <img src="./images/20.png" width="600"/>
+</div>
+
+* **1. User / Client:** Web browser ya mobile app se HTTPS request bhejta hai.
+* **2. Amazon API Gateway:** Secure REST API offer karta hai jo request receive karke **AWS Lambda** ko bhejta hai.
+* **3. AWS Lambda:** Business logic (Python/Node.js code) chalta hai, request ka data process karta hai.
+* **4. Object Store & NoSQL Database:** Data save ya read karne ke liye Lambda **Amazon S3** (Object Storage) ya **Amazon DynamoDB** (NoSQL Database) se baat karta hai aur response user ko wapas bhej deta hai.
+
+---
+
+## Use case: Data processing
+
+Ek aur zabardast use case **Event-Driven Data Processing** hai. Jab bhi naya data aaye, automatic event trigger ho aur Lambda data transform kar de.
+
+```
+[ Load Balancer ] ──(Upload Logs)──> [ Object Store (S3) ] ──(Trigger Event)──> [ AWS Lambda ] ──> [ Elasticsearch Analytics ]
+
+```
+
+### Figure 6.22 Breakdown (Log Analytics Pipeline):
+
+<div align="center">
+  <img src="./images/21.png" width="600"/>
+</div>
+
+* **Step 1:** Load Balancer website ke tamam Access Logs collect karke **S3 Object Store** par upload karta hai.
+* **Step 2:** Jaise hi S3 mein nayi log file aati hai, S3 automatically **Lambda function** ko trigger kar deta hai.
+* **Step 3:** Lambda function S3 se log file download karta hai, us mein se kam ki maloomat nikalta hai, aur data ko **Elasticsearch / OpenSearch** database mein bhej deta hai taake analytics dashboards par visuals ban sakein.
+
+*(Yad rakhein: Data processing jobs 15 minute ke andar khatam honi chahiye).*
+
+---
+
+## Use case: IoT backend
+
+Internet of Things (IoT) devices (jaise smart sensors, cars, ya home automation) ke data ko process karne ke liye Lambda bohot ziada use hota hai.
+
+```
+[ IoT Device / Thing ] ──(MQTT Protocol)──> [ Message Broker ] ──(IoT Rule)──> [ AWS Lambda ] ──> [ Business Logic ]
+
+```
+
+### Figure 6.23 Breakdown (IoT Event Processing):
+
+<div align="center">
+  <img src="./images/22.png" width="600"/>
+</div>
+
+* **1. Thing (Sensor):** Koi bhi IoT device (jaise temperature sensor ya smart vehicle) **MQTT protocol** ke zariye sensor data bhejta hai.
+* **2. Message Broker & Rules:** AWS IoT ka Message Broker data receive karta hai. **IoT Rule** filter karta hai ke konsa data zaroori hai.
+* **3. AWS Lambda:** Rule zaroori message ko Lambda function ke hawale kar deta hai. Lambda business logic chala kar faisla karta hai ke alert bhejna hai ya dashboard update karna hai.
+
+---
+
+## Summary
+
+Is poore chapter ka khulasa (key takeaways) yeh hai:
+
+* **Multi-Language Execution:** AWS Lambda aap ko C#/.NET Core, Go, Java, JavaScript/Node.js, Python, aur Ruby code ko bina kisi server ke highly available environment mein chalane deta hai.
+* **Console & Blueprints:** AWS Console aur Blueprints beginner level par jaldi seekhne mein madad karte hain.
+* **Schedule Expressions:** Rate ya Cron expressions ke zariye aap Lambda ko periodic (timer par) chala sakte hain (bilkul Linux Cron job ki tarah).
+* **Monitoring:** CloudWatch Logs, Metrics, aur Alarms se Lambda ki debugging aur monitoring hoti hai.
+* **Infrastructure as Code (SAM):** Serverless Application Model (SAM) CloudFormation ke zariye Lambda ko automated tarike se deploy karta hai.
+* **Event-Driven Sources:** CloudTrail, S3, EventBridge, aur IoT jaise bohot se event sources Lambda ko trigger kar sakte hain.
+* **15-Min Limit:** Lambda ki sab se badi limitation 900 seconds (15 minute) ka maximum execution time hai.
+* **Versatile Use Cases:** Operational tasks automate karne ke alawa Lambda se Web Apps, Big Data Pipelines, aur IoT backends bhi banaye jaate hain.
+
+---
