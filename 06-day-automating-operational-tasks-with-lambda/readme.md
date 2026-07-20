@@ -565,3 +565,198 @@ Centralized jagah par logs ko search karna debugging (code ki galti dhoondne) ke
 > **Yad Rakhein:** Logs turant nahi aate! Har execution ke baad logs CloudWatch tak pahunche mein **1 se 2 minute ka delay** ho sakta hai. Agar aap ko apna naya log message nazar na aaye, toh pareshan hue bina table ko **reload** kar lein.
 
 ---
+
+## Monitoring a Lambda function with CloudWatch metrics and alarms
+
+Aap ka Lambda function ab har 5 minute baad website ki sehat (health) check kar raha hai, aur har check ka result **CloudWatch Logs** mein likha ja raha hai.
+
+Lekin agar raat ko ya kisi bhi waqt website down ho jaye, toh aap ko phone ya email par fawran alert kaise miley ga? Is kaam ke liye hum **CloudWatch Metrics** aur **Alarms** ka istemal karte hain.
+
+AWS Lambda by default har execution ke data points (statistics) ko **Metrics** ki shakal mein Amazon CloudWatch ko bhejta rehta hai.
+
+---
+
+### Table 6.2 The CloudWatch metrics published by each Lambda function
+
+Pehle book ka yeh table dekhein, phir is ki har metric ko bacho ki tarah aasan zaban mein samajhte hain:
+
+| Name | Description |
+| --- | --- |
+| **Invocations** | Counts the number of times a function is invoked. Includes successful and failed invocations. |
+| **Errors** | Counts the number of times a function failed due to errors inside the function, for example, exceptions or timeouts. |
+| **Duration** | Measures how long the code takes to run, from the time when the code starts executing to when it stops executing. |
+| **Throttles** | As discussed at the beginning of the chapter, there is a limit for how many copies of your Lambda function can run at one time. This metric counts how many invocations have been throttled due to reaching this limit. Contact AWS support to increase the limit, if needed. |
+
+---
+
+#### Table 6.2 Ka Simple Breakdown:
+
+1. **Invocations (Kitni Baar Chala):**
+Yeh batata hai ke aap ka function kul (total) kitni baar call/trigger hua. Is mein success hone waale aur fail hone waale, dono checks shamil hote hain.
+2. **Errors (Kitni Baar Fail Hua):**
+Jab aap ke Python code mein koi galti (exception) aaye, website na miley, ya execution ka time khatam (timeout) ho jaye, toh yeh metric 1 point barh jati hai.
+3. **Duration (Kitna Waqt Laga):**
+Code ke shuru hone se khatam hone tak kitne milliseconds (ms) lagay, yeh metric us waqt ko naapti hai. Is se aap ko bill ka andaza hota hai.
+4. **Throttling / Throttles (Kitni Requests Rok Di Gain):**
+AWS Lambda mein ek limit (Concurrent Execution Limit) hoti hai ke ek waqt mein kitne functions ek sath chal sakte hain. Agar requests us limit se ziada ho jayein, toh AWS extra requests ko rok (throttle kar) deta hai. Yeh metric un roki gayi requests ki ginti karti hai. (Agar limit badhani ho toh AWS Support ko request bhejni parti hai).
+
+---
+
+### CloudWatch Alarm Banane Ka Decision
+
+Jab bhi website check fail hoga, Lambda function error return karega aur CloudWatch mein **Errors** metric ki ginti `0` se barh kar `1` ho jayegi.
+
+Hum ek aisa **Alarm** set karenge jo check karega:
+
+> **"Agar 5 minute ke andar Errors metric 0 se ziada ho jaye, toh fawran Email bhej do!"**
+
+#### Writer Ki Recommendation:
+
+Production environment mein hamesha apne Lambda functions ki monitoring ke liye **Errors** aur **Throttles** dono metrics par Alarms zaroor lagayein.
+
+---
+
+### Step-by-Step Guide: Alarm Banane Ka Tareeqa
+
+CloudWatch Console mein ja kar neechay diye gaye steps follow karein:
+
+#### Step 1: Alarm Wizard Shuru Karna
+
+1. AWS Console mein CloudWatch service open karein.
+2. Left side bar se **Alarms** menu par click karein.
+3. Orange rang ke **Create Alarm** button par click karein.
+
+#### Figure 6.11 Breakdown:
+
+<div align="center">
+  <img src="./images/11.png" width="600"/>
+</div>
+
+**Figure 6.11** mein CloudWatch Console dikhaya gaya hai jahan left menu mein **Alarms** highlighted hai aur screen ke beech mein **Create alarm** ka orange button nazar aa raha hai.
+
+---
+
+#### Step 2: Error Metric Dhoondna (Metric Selection)
+
+1. Screen par **Select metric** button par click karein.
+2. AWS Services ki list mein se **Lambda** namespace select karein.
+3. **By Function Name** dimension wale card par click karein.
+
+#### Figure 6.12 Breakdown:
+
+<div align="center">
+  <img src="./images/12.png" width="600"/>
+</div>
+
+**Figure 6.12** ne is step ko 3 chote hisson mein baanta hai:
+
+* **(1)** Top par **Select metric** button par click karein.
+* **(2)** Categories mein se **Lambda** box par click karein.
+* **(3)** Filtering options mein se **By Function Name** select karein taake aap ko function ke naam ke hisab se metrics nazar aayein.
+
+---
+
+#### Step 3: Specific Function Ka Error Metric Select Karna
+
+1. Table mein se `website-health-check` function ke samne wali **Errors** metric wale checkbox ko select karein.
+2. Bottom right corner par **Select metric** button dabaen.
+
+#### Figure 6.13 Breakdown:
+
+<div align="center">
+  <img src="./images/13.png" width="600"/>
+</div>
+
+**Figure 6.13** mein Metric selection screen hai jahan graph ke neechay `website-health-check` function ki `Errors` row ko checkmark (tick) kiya gaya hai aur neeche **Select metric** button dikhaya gaya hai.
+
+---
+
+#### Step 4: Alarm Rules Aur Conditions Set Karna (Metric Configuration)
+
+Ab aap ko set karna hai ke alarm kab aur kis shart par bajega:
+
+1. **Statistic:** Choose karein **Sum** (Yeh evaluation period ke dauran aane wale tamam errors ko aapas mein jama/add karta hai).
+2. **Period:** Select karein **5 minutes** (Kyunki humara health check har 5 minute baad chalta hai).
+3. **Threshold type:** Select **Static**.
+4. **Condition Operator:** Choose **Greater** (`>`).
+5. **Threshold Value:** Type **0**.
+6. **Next** button par click karein.
+
+#### Logic (Alarm Kaise Kaam Karega?):
+
+* **ALARM State:** Agar 5 minute mein total errors > 0 hue, toh Alarm baj uthega (State = ALARM).
+* **OK State:** Agar errors 0 rahenge, toh Alarm khamosh rahega (State = OK).
+
+#### Figure 6.14 Breakdown:
+
+<div align="center">
+  <img src="./images/14.png" width="600"/>
+</div>
+
+**Figure 6.14** mein Conditions setup form dikhaya gaya hai:
+
+* Top par Statistic (`Sum`) aur Period (`5 minutes`) selected hai.
+* Conditions section mein **Static** threshold type, **Greater** condition, aur value **0** enter ki gayi hai.
+
+---
+
+#### Step 5: Email Notification Actions Setup Karna (Amazon SNS)
+
+Jab alarm bajey toh notification kahan jaye? Is ke liye hum **Amazon SNS (Simple Notification Service)** ka use karte hain:
+
+1. **Alarm state trigger:** Select karein **In alarm** (Jab alarm trigger ho).
+2. **Select an SNS topic:** Select karein **Create new topic**.
+3. **Topic Name:** Box mein type karein `website-health-check`.
+4. **Email Endpoint:** Apna actual Email address enter karein (jis par aap alert chahte hain).
+5. **Create topic** dabaen aur phir **Next** button click karein.
+
+#### Figure 6.15 Breakdown:
+
+<div align="center">
+  <img src="./images/15.png" width="600"/>
+</div>
+
+**Figure 6.15** mein Notification section dikhaya gaya hai:
+
+* **In alarm** radio button selected hai.
+* **Create new topic** par click karke Topic name `website-health-check` aur email address fill kiya gaya hai.
+
+---
+
+#### Step 6: Alarm Name Aur Confirmation
+
+1. **Alarm Name:** Type karein `website-health-check-error`.
+2. **Next** par click karke saari details review karein aur **Create Alarm** button daba dein.
+
+> **Zaroori Warning (SNS Email Confirmation):** Alarm bante hi AWS aap ke Email inbox mein ek confirmation message bhejega. Apne email ko khol kar us mein diye gaye **Confirm subscription** link par click karein. **Jab tak aap link click nahi karenge, aap ko alerts ke emails nahi milenge!**
+
+---
+
+### Alarm Ko Test Karne Ka Tareeqa (Testing The Setup)
+
+Aap ko kaise pata chalega ke alarm sach mein kaam kar raha hai? Hum jaan bujh kar system ko fail karke test karenge:
+
+1. Wapas apne **AWS Lambda Console** par jayein.
+2. Function ke **Environment Variables** section mein jayein.
+3. `expected` variable ki value ko `cloudonaut` se badal kar **`FAILURE`** kar dein aur save karein.
+
+#### Kya Hoga?
+
+Aap ki website par `FAILURE` lafz toh maujood nahi hai! Agli baar jab Lambda har 5 minute baad chalega, toh usay text nahi miley ga, code error throw karega, CloudWatch mein `Errors` metric 1 ho jayegi, aur CloudWatch Alarm trigger ho kar aap ko email bhej dega.
+
+* **Time Delay Note:** Error hone se lekar email aap ke inbox tak pahunche mein **15 minute tak ka waqt** lag sakta hai, is liye thoda sabar karein.
+
+---
+
+## Cleaning up
+
+Agar aap yeh setup sirf practice ke liye kar rahe hain, toh AWS mein faltu charges ya resources se bachne ke liye in saare components ko step-by-step delete kar dein:
+
+1. **AWS Lambda:** Lambda console par ja kar `website-health-check` naam ka function delete karein.
+2. **AWS CloudWatch Logs:** CloudWatch -> Logs -> Log Groups mein ja kar `/aws/lambda/website-health-check` log group delete karein.
+3. **Amazon EventBridge:** EventBridge -> Rules mein ja kar `website-health-check` rule delete karein.
+4. **CloudWatch Alarms:** CloudWatch -> Alarms mein ja kar `website-health-check-error` alarm delete karein.
+5. **AWS IAM:** IAM -> Roles mein ja kar wo role delete karein jis ka naam `website-health-check-role-` se shuru hota hai.
+6. **Amazon SNS:** SNS -> Topics mein ja kar `website-health-check` waala topic delete karein.
+
+---
