@@ -458,3 +458,110 @@ Tamam configurations aur Environment Variables set karne ke baad, screen ke aakh
 > 
 
 ---
+
+## Use CloudWatch to search through your Lambda function’s logs
+
+Aap ko kaise pata chalega ke aap ka website health check sahi tareeqe se kaam kar raha hai? Ya aap ko kaise pata chalega ke aap ka Lambda function असल mein chal bhi raha hai ya nahi?
+
+Ab waqt aa gaya hai ke hum seekhein ke Lambda function ki **Monitoring** kaise ki jaati hai. Sab se pehle hum seekhein ge ke Lambda function ke bhejey gaye **Log Messages** ko kaise dekha jata hai, aur is ke baad hum ek **Alarm** banana seekhein ge jo function fail hone par aap ko alert karega.
+
+---
+
+### Step 1: Lambda Function Ka Monitor Tab Dekhna
+
+Aap apne Lambda function ke details page par jayein aur top par maujood **Monitor** tab par click karein.
+
+* **Invocations Chart:** Monitor tab kholte hi aap ko ek chart nazar aayega jo batata hai ke aap ka function kitni baar invoke (call/trigger) hua hai.
+* **Delay Note:** Agar chart mein pehli baar koi line ya point nazar na aaye, toh 1-2 minute sabar karein aur page ko **reload** karein, kyunki data aane mein thoda waqt lagta hai.
+* **CloudWatch Logs Par Jaana:** Logs dekhne ke liye **View logs in CloudWatch** button par click karein.
+
+---
+
+### Figure 6.8 Breakdown (Monitoring Overview)
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+**Figure 6.8** mein Lambda Console ka **Monitor** tab dikhaya gaya hai:
+
+* **Monitor Tab:** Top menu mein `Code`, `Test` ke sath `Monitor` tab selected hai.
+* **View logs in CloudWatch Button:** Is button par click karke aap seedha Amazon CloudWatch service mein chaley jaate hain jahan saare detailed logs maujood hote hain.
+* **CloudWatch Metrics Charts:**
+1. **Invocations:** Yeh chart batata hai ke function kitni baar run hua (e.g., har 5 minute baad 1 count).
+2. **Duration:** Yeh chart batata hai ke function ko chalne mein kitne milliseconds (ms) ka waqt laga (e.g., 130ms - 150ms).
+3. **Error count and success rate (%):** Yeh chart batata hai ke kitni requests kamyab (success) huin aur kitni fail (error).
+
+
+
+---
+
+### CloudWatch Log Groups Aur Log Streams Kya Hote Hain?
+
+By default, AWS Lambda apne tamam output aur error messages **Amazon CloudWatch** ko bhejta hai.
+
+#### 1. Log Group (Main Folder)
+
+Jab aap Lambda function banate hain, toh AWS background mein automatically ek **Log Group** bana deta hai. Is log group ka naam hamesha `/aws/lambda/<function-name>` hota hai (jaise humare case mein `/aws/lambda/website-health-check` hai).
+
+#### 2. Log Streams (Individual Files)
+
+Ek Log Group ke andar bohot saare **Log Streams** hote hain.
+
+* **Aasan Samjh:** Log Group ko ek poori file cabinet samjhein, aur Log Streams ko us ke andar rakhi hui alag-alag files.
+* Lambda jab bhi naya execution environment banata hai, wo ek naya Log Stream shuru kar deta hai taake system par bojh na pare aur logs aasaani se scale ho sakein.
+
+---
+
+### Figure 6.9 Breakdown (Log Group View)
+
+<div align="center">
+  <img src="./images/09.png
+  " width="600"/>
+</div>
+
+**Figure 6.9** mein Amazon CloudWatch Console ka Log Group screen dikhaya gaya hai:
+
+* **Log Group Name:** Top par `/aws/lambda/website-health-check` likha nazar aa raha hai.
+* **Search Log Group Button:** Agar aap ke paas bohot saare Log Streams hain, toh ek ek stream ko alag se kholna mushkil hota hai. Is orange **Search log group** button par click karne se tamam Log Streams ke messages ek hi screen par jama ho kar samne aa jaate hain.
+* **Log Streams List:** Tabular form mein neechay Log Streams ki list dikhai gayi hai jahan har stream ka time aur ID likhi hoti hai.
+
+---
+
+### Logs Mein Result Search Karna
+
+Jab aap **Search log group** par click karte hain, toh aap ke samne saare log events aa jaate hain.
+
+* **Check Passed Message:** Agar aap ka health check sahi chala hai, toh aap ko logs mein `Check passed!` ki line nazar aayeki. Is ka matlab hai ke Lambda ne website par HTTP request bheji, website on mili, aur expected word bhi mil gaya!
+
+---
+
+### Figure 6.10 Breakdown (Searching Log Messages)
+
+<div align="center">
+  <img src="./images/10.png" width="600"/>
+</div>
+
+**Figure 6.10** mein CloudWatch Log Events ki search window dikhai gayi hai:
+
+* **Filter Events Search Bar:** Top par ek search box (`Filter events`) hai. Yahan aap koi bhi keyword (jaise `passed` ya `failed`) likh kar specific logs dhoond sakte hain.
+* **Log Messages List:** Screen par Timestamp, Message, aur Log Stream Name ke sath exact lines dikhai de rahi hain:
+* `START RequestId...` (Function shuru hua)
+* `Checking [https://cloudonaut.io](https://cloudonaut.io)...` (Website check ho rahi hai)
+* `Check passed!` (Health check kamyab ho gaya)
+* `END RequestId...` (Function khatam hua)
+
+
+
+---
+
+### Real-World Debugging Tip (Code Mein Logs Kaise Bhejein?)
+
+Centralized jagah par logs ko search karna debugging (code ki galti dhoondne) ke liye bohot zaroori aur faide-mand hota hai—khas taur par jab aap apna custom Python code likh rahe hon.
+
+* **Python Print Statements:** Python mein jab aap simple `print("Mera message")` likhte hain, toh Lambda automatically us text ko capture karta hai aur CloudWatch Logs mein save kar deta hai.
+* **Python Logging Module:** Aap Python ka built-in `logging` module (`logging.info()`, `logging.error()`) bhi use kar sakte hain. Yeh ziada professional tarika hai kyunki is se log level (INFO, ERROR, WARNING) bhi sath mention hota hai.
+
+> **Yad Rakhein:** Logs turant nahi aate! Har execution ke baad logs CloudWatch tak pahunche mein **1 se 2 minute ka delay** ho sakta hai. Agar aap ko apna naya log message nazar na aaye, toh pareshan hue bina table ko **reload** kar lein.
+
+---
