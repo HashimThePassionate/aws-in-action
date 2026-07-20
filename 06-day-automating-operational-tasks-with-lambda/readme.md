@@ -1203,3 +1203,235 @@ User Name aur Instance ID milne ke baad, Boto3 SDK ka `create_tags` function cal
 * **`Tags=[{'Key': 'Owner', 'Value': user_name}]`**: Batata hai ke tag ki Key `'Owner'` honi chahiye aur Value extract kiya gaya user name (e.g., `'Hashim'`) hona chahiye.
 
 ---
+
+
+## Setting up a Lambda function with the Serverless Application Model (SAM)
+
+Pehle do sections mein aap ne AWS Management Console par clicks karke manual tarike se Lambda function aur EventBridge rules banana seekha. Console seekhne ke liye bohat acha pehla step hai, lekin professional cloud environments mein hum sab kuch code ke zariye automatic deploy karte hain.
+
+AWS ne 2016 mein **Serverless Application Model (SAM)** ko launch kiya tha. SAM plain **AWS CloudFormation** templates ka ek advanced framework/extension hai. Jab hum standard CloudFormation se Lambda function banate hain, toh humein bohot lamba aur mushkil YAML code likhna parta hai. SAM is mushkil kaam ko bohot aasan aur chota bana deta hai.
+
+---
+
+### Listing 6.5 Defining a Lambda function with SAM within a CloudFormation template
+
+Neeche SAM framework ka use karte hue complete CloudFormation template diya gaya hai:
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09' # CloudFormation template ka standard version
+Transform: AWS::Serverless-2016-10-31 # SAM transformation engine jo simple code ko complete infrastructure mein badalta hai
+
+Description: Adding an owner tag to EC2 instances automatically
+
+Resources:
+  EC2OwnerTagFunction: # SAM ka special resource declaration
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.lambda_handler # Filename (lambda_function) aur Python function (lambda_handler) ka naam
+      Runtime: python3.9 # Execution environment (2026 mein modern Python 3.11/3.12 bhi runtime mein use ho sakte hain)
+      Architectures:
+        - arm64 # AWS Graviton processors par chalne ke liye (jo saste aur teez hote hain)
+      CodeUri: '.' # Current folder ki saari files upload aur deploy hongi
+      Policies: # Lambda ko EC2 Tag lagane ki IAM permission
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: 'ec2:CreateTags'
+              Resource: '*'
+      Events: # EventBridge Trigger configuration
+        EventBridgeRule:
+          Type: EventBridgeRule
+          Properties:
+            Pattern: # Event filter pattern
+              source:
+                - 'aws.ec2'
+              detail-type:
+                - 'AWS API Call via CloudTrail'
+              detail:
+                eventSource:
+                  - 'ec2.amazonaws.com'
+                eventName:
+                  - 'RunInstances'
+
+```
+
+---
+
+### Code Breakdown: SAM Template Ki Ek Ek Line Ka Matlab
+
+1. **`Transform: AWS::Serverless-2016-10-31`**:
+Yeh CloudFormation ko batata hai ke "bhai yeh simple SAM template hai. Isay background mein process karke complete CloudFormation resources (jaise IAM Roles, Lambda Functions, Event Rules) mein convert kar do."
+2. **`Type: AWS::Serverless::Function`**:
+Yeh SAM ka diya hua special shortcut resource key hai. Standard CloudFormation mein aap ko Lambda, us ka IAM Role, aur Logs alag-alag likhne parte hain, jabke SAM mein sirf yeh 1 type likhne se AWS parde ke peeche khud saare required resources generate kar deta hai.
+3. **`Architectures: - arm64`**:
+Yeh Lambda function ko AWS ke modern Graviton (ARM-based) processors par chalata hai, jis se performance achi milti hai aur kharcha (cost) kam aata hai.
+4. **`CodeUri: '.'`**:
+Yeh AWS ko batata hai ke current folder (`.`) ke andar maujood Python script (`lambda_function.py`) ko bundle (zip) karke deploy karna hai.
+5. **`Events -> EventBridgeRule`**:
+Yeh section automatic ek **EventBridge Rule** aur Lambda ke saath us ka connection (trigger permissions) tayyar kar deta hai.
+
+> **Zaroori Baat (CloudTrail Prerequisite):**
+> EventBridge rules tab tak kaam nahi kar sakte jab tak aap ke AWS account mein **CloudTrail active na ho**. Is CloudFormation template mein S3 bucket par audit logs save karne ka trail included hota hai taake Events sahi se receive ho sakein.
+
+---
+
+## Authorizing a Lambda function to use other AWS services with an IAM role
+
+AWS ka basic rule hai: **"By default, koi bhi service kisi doosri service ko haath nahi laga sakti."**
+
+Humara Lambda function CloudWatch mein logs likhta hai aur EC2 instance par Tag lagata hai. Is kaam ke liye Lambda function ke paas permissions (ijazat) hona zaroori hain. AWS mein hum permissions dene ke liye **IAM Role** ka use karte hain.
+
+---
+
+### Lambda IAM Role Kaise Work Karta Hai? (Background Process)
+
+Jab Lambda function chalne lagta hai, toh wo AWS se ek **IAM Role "Assume" (udhaar)** leta hai.
+
+1. AWS background mein temporary safety keys generate karta hai (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, aur `AWS_SESSION_TOKEN`).
+2. AWS in keys ko Lambda ke **Environment Variables** mein inject kar deta hai.
+3. Python ka SDK (`boto3`) in variables ko automatically read karta hai aur AWS API requests par digital sign laga kar bheja karta hai.
+
+---
+
+### Least-Privilege Principle (Security Rule)
+
+Writer yahan Security ka ek bohot bara rule samjha raha hai jise **Least-Privilege Principle** kehte hain:
+
+> **"Apne Lambda function ko sirf utni hi ijazat (permissions) do jitni us ke kaam ke liye zaroori ho, us se ek percent bhi ziada nahi!"**
+
+Misaal ke taur par, agar function ko sirf EC2 par Tag lagana hai, toh usay poore EC2 ka Administrator mat banao, sirf `ec2:CreateTags` ki permission do.
+
+---
+
+### Figure 6.19 Breakdown (Lambda IAM Role Flow)
+Writer ne **Figure 6.19** ke zariye yeh poora security architecture samjhaya hai:
+
+<div align="center">
+  <img src="./images/19.png" width="600"/>
+</div>
+
+
+#### Figure 6.19 Ka Step-by-Step Breakdown:
+
+* **1. Function Assumes Role:** Lambda function execution ke waqt IAM Role assume karta hai.
+* **2. IAM Policy Check:** Role ke saath judi hui IAM Policy yeh tay karti hai ke Lambda kaun kaun se kaam kar sakta hai.
+* **3. Authenticated Request:** Signed request ke zariye Lambda doosri services (jaise CloudWatch Logs mein output likhna ya EC2 par Tag lagana) se secure tareeqe se baat kar pata hai.
+
+---
+
+### Listing 6.6 A custom policy for adding tags to EC2 instances
+
+Jab aap SAM (`Type: AWS::Serverless::Function`) use karte hain, toh SAM by default CloudWatch Logs mein write karne ka IAM Role khud bana deta hai. Lekin EC2 par Tag lagane ki ijazat dene ke liye humein alag se custom **Policies** add karni parti hain:
+
+```yaml
+EC2OwnerTagFunction:
+  Type: AWS::Serverless::Function
+  Properties:
+    Handler: lambda_function.lambda_handler
+    Runtime: python3.9
+    CodeUri: '.'
+    Policies: # Custom IAM Policy definition
+      - Version: '2012-10-17'
+        Statement:
+          - Effect: Allow # Explicit ijazat dena
+            Action: 'ec2:CreateTags' # EC2 par Tag banane ki command
+            Resource: '*' # Tamam EC2 instances ke liye
+
+```
+
+#### Listing 6.6 Breakdown:
+
+* **`Policies`**: Yahan hum SAM ko batate hain ke default role ke andar yeh extra permissions bhi shaamil kar do.
+* **`Effect: Allow`**: Explicit ijazat deta hai.
+* **`Action: 'ec2:CreateTags'`**: Sirf EC2 par tag lagane ki API call ki permission hai.
+* **`Resource: '*'`**: Account ke kisi bhi EC2 instance par yeh operation perform karne deta hai.
+
+---
+
+## Deploying a Lambda function with SAM
+
+SAM aur AWS CLI ke zariye apne Lambda function aur us ke tamam resources ko cloud par deploy karne ke **3 simple steps** hain:
+
+```
+[ Step 1: Create S3 Bucket ] ──> [ Step 2: Package Code (`aws cloudformation package`) ] ──> [ Step 3: Deploy Stack (`aws cloudformation deploy`) ]
+
+```
+
+---
+
+### Step 1: Deployment Package Ke Liye S3 Bucket Banana
+
+Lambda ke code (.zip file) ko store karne ke liye pehle ek S3 bucket banayi jaati hai:
+
+```bash
+aws s3 mb s3://ec2-owner-tag-$yourname
+
+```
+
+*(Yahan `$yourname` ko apne naam se replace karein taake bucket name unique rahe).*
+
+---
+
+### Step 2: Code Ko Package Aur Upload Karna
+
+Aap apne terminal mein `chapter06` directory ke andar ja kar yeh command chalate hain:
+
+```bash
+aws cloudformation package --template-file template.yaml \
+  --s3-bucket ec2-owner-tag-$yourname \
+  --output-template-file output.yaml
+
+```
+
+#### Yeh Command Kya Karti Hai?
+
+1. Current folder ke Python code aur dependencies ki `.zip` file banati hai.
+2. Zip file ko aap ki banayi hui S3 bucket par upload karti hai.
+3. Ek naya template file **`output.yaml`** banati hai, jismein local code path (`CodeUri: '.'`) ki jagah S3 bucket ka URL address likha hota hai.
+
+---
+
+### Step 3: CloudFormation Stack Deploy Karna
+
+Ab hum final deployment command chalate hain:
+
+```bash
+aws cloudformation deploy --stack-name ec2-owner-tag \
+  --template-file output.yaml \
+  --capabilities CAPABILITY_IAM
+
+```
+
+#### Command Breakdown:
+
+* **`--stack-name ec2-owner-tag`**: CloudFormation stack ka naam rakhta hai.
+* **`--capabilities CAPABILITY_IAM`**: Kyunki yeh template background mein automatic IAM Roles bana raha hai, AWS security ke liye aap se yeh flag specify karwa kar explicitly confirm leta hai ke "Haan, mujhe pata hai ke IAM Roles ban rahe hain."
+
+#### Testing The Result:
+
+Mubarak ho! Deployment complete hote hi aap ka Lambda system live ho chuka hai. Ab jab bhi aap koi naya EC2 instance launch karenge, kuch hi minutes mein us par automatically `Owner` = `myuser` (aap ke IAM user ka naam) Tag ho jayega!
+
+---
+
+## Cleaning up
+
+Practice poori hone ke baad tamam created resources ko delete karne ke liye apne terminal par yeh 4 commands step-by-step chalayein:
+
+```bash
+# 1. Apne AWS Account ID ko variable mein save karna
+CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+
+# 2. S3 Bucket ke andar se deployment zip files delete karna
+aws s3 rm --recursive s3://ec2-owner-tag-${CURRENT_ACCOUNT}/
+
+# 3. CloudFormation Stack delete karna (Yeh Lambda, IAM Role, aur Event Rules sab delete kar dega)
+aws cloudformation delete-stack --stack-name ec2-owner-tag
+
+# 4. Deployment S3 bucket ko mukammal delete karna
+aws s3 rb s3://ec2-owner-tag-$yourname --force
+
+```
+
+> **Note:** Agar aap ne test karne ke liye koi EC2 instance launch kiya tha, toh deployment delete karne se pehle EC2 console par ja kar us instance ko **Terminate** karna mat bhooliye ga, warna uska bill aata rahega!
+
+---
