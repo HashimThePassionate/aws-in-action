@@ -203,30 +203,14 @@ Instance:
 ```
 
 * **Asaan Explanation:** 
-### 1. `!Base64`
-
-AWS ke EC2 API ko `UserData` script **Base64 encoded** format mein chahiye hoti hai. Lekin CloudFormation ka `!Base64` tag hamari zindagi aasaan bana deta hai. Hamein manual encoding ki zaroorat nahi padti; hum bas apna plain script likhte hain, aur CloudFormation usay automatically encode kar deta hai.
-
----
-
-### 2. `#!/bin/bash -ex`
-
-Yeh script ki pehli line hai jise **Shebang** kehte hain.
-
-* **`#!/bin/bash`**: Yeh OS ko batata hai ke "Is script ko run karne ke liye `/bin/bash` (Bash Shell) ka istemaal karo."
-* **`-e` (Exit on error)**: **Yeh bohot important hai.** Agar is script ke beech mein koi bhi command fail ho jati hai (error aata hai), toh script wahi ruk jayegi. Yeh humein ek broken server banne se bachata hai.
-* **`-x` (Execution trace/Debug)**: Yeh har command ko execute karne se pehle print karta hai. Jab aap server ke logs check karenge (`/var/log/cloud-init-output.log`), toh aapko saaf dikhega ke kaunsa step execute hua hai. Debugging ke liye yeh essential hai.
-
----
-
-### 3. `yum -y update`
-
-Yeh wo command hai jo server par run hogi:
-
-* **`yum`**: Yeh Amazon Linux/CentOS/RHEL ka default **package manager** hai.
-* **`-y`**: Yeh flag sabse zaroori hai. Jab hum updates run karte hain, toh system aksar puchta hai "Is it OK? [Y/N]". Kyunki yeh automated script hai aur yahan koi banda keyboard par 'Y' press karne wala nahi hai, isliye `-y` ka matlab hai: "Jo bhi ho, bina puche sab kuch 'Yes' kar do."
-* **`update`**: Yeh system ke installed packages ko latest version par update kar deta hai.
-
+* `Instance:` yeh line ek naya virtual server (EC2 instance) resource declare kar rahi hai.
+* `Type: 'AWS::EC2::Instance'` batata hai ke yeh CloudFormation template AWS ka ek EC2 virtual machine resource bana raha hai.
+* `Properties:` yeh section instance ki mukammal settings aur configurations ko define karne ke liye use hota hai.
+* `# [...]` ek placeholder ya chhupa hua hissa hai jo yeh zahir karta hai ke yahan mazeed properties (jaise ImageId, InstanceType wagera) bhi hain jinhein filhal short rakhne ke liye skip kiya gaya hai.
+* `UserData: !Base64 |` server ke pehli baar boot (start) hone par us par automatic scripts run karne ke liye hota hai, aur `!Base64` function us script ko standard Base64 format mein convert karta hai jo AWS EC2 ke liye laazmi hai, jabke `|` multiline script likhne ki ijazat deta hai.
+* `#!/bin/bash -ex` script ki shuruati (shebang) line hai jo bash shell ko activate karti hai; ismein `-e` flag ka matlab hai ke agar script ke andar koi bhi command fail ho jaye, to script foran ruk jaye, aur `-x` debugging ke liye hai jo har command ko run hone se pehle screen par print karta hai.
+* `yum -y update` woh main command hai jo server par pehle se installed saare software packages aur operating system ko latest updates ke sath upgrade kar deti hai.
+* `-y` flag automatic "yes" ke taur par kaam karta hai taake update ke dauran jab system user se confirmation mange, to script ruke nahi aur baghair kisi rukawat ke khud hi aage barh jaye.
 ---
 
 #### Option B: Sirf Security Updates Install Karna (Security Updates Only)
@@ -266,12 +250,30 @@ Inhi dono maslon se bachne ke liye hum khud se dubara koi naya system nahi banat
   <img src="./images/02.png" width="600"/>
 </div>
 
-* **Agent:** Yeh server ke andar betha ek chota sa mukhbir ya worker software hota hai. Amazon Linux 2 mein yeh pehle se install aur automatic start hota hai. Yeh har waqt AWS cloud se aane wale orders ka intezar karta hai.
-* **Document:** Yeh samajh lein ke ek aam script ka bara bhai (script on steroids) hai. Patching ke liye hum AWS ka pehle se banaya hua standard document use karte hain jiska naam hai `AWS-RunPatchBaseline`.
-* **Run Command:** Yeh cloud se baji gayi woh command hai jo bina kisi manual login (SSH) ke, direct Agent ke zariye server ke andar scripts chala deti hai.
-* **Association:** Yeh State Manager ka hissa hai. Iska kaam yeh tay karna hai ke koi command kisi schedule ke tehat ya server ke start hote hi (startup par) lazmi execute ho.
-* **Maintenance Window:** Yeh ek khas waqt ka hissa (time window) hota hai jo hum tay karte hain (jaise raat ke 3 baje). Hum AWS ko kehte hain ke jo bhi heavy maintenance ya restart ka kaam hai, woh sirf isi time window ke andar hona chahiye taake aam users ka nuksaan na ho.
-* **Patch baseline:** Yeh rules ki ek policy book hoti hai jo batati hai ke kaunse patches ko safe samajh kar install karna hai. AWS ne Amazon Linux 2 ke liye ek default patch baseline di hui hai jo un tamam security patches ko automatic approve kar deti hai jin ki severity **Critical** ya **Important** hoti hai. Isme ek **7-day waiting period** hota hai—yani jab koi naya patch market mein aata hai, toh yeh system 7 din intezar karta hai taake yeh pakka ho sake ke us patch mein koi bug nahi hai, aur phir use automatic approve kar deta hai.
+**Step 1: Document Banana (Kaam ki Blueprint)**
+
+* **Kiya hota hai:** Sab se pehle hum yeh define karte hain ke server par asal mein karna kya hai (misal ke tor par, security patches install karna ya koi software update chalana).
+* **Kaise kaam karta hai:** Iske liye SSM mein ek **Document** banaya jata hai. Yeh ek tarah ki script ya hidayat-nama (blueprint) hota hai jo batata hai ke server ke andar kaunsi commands ya actions perform kiye jayenge (jaise aik shell script run karna).
+
+**Step 2: Run Command ko Tayyar Rakhna (Execution Engine)**
+
+* **Kiya hota hai:** Jab document ban gaya, ab usko execute karne ke liye ek engine chahiye hota hai jise **Run Command** kehte hain.
+* **Kaise kaam karta hai:** Run Command hi woh central tool hai jo **Document** ki di gayi instructions ko leta hai aur unhein target server tak pohchane ki zimadari uthata hai.
+
+**Step 3: Trigger Set Karna (Command kab aur kaise chalegi?)**
+
+Run Command ko manually chalane ke bajaye automate karne ke liye do mukhtalif tareeqay (Triggers) use hote hain:
+
+1. **Maintenance Window aur Patch Manager (Time / Schedule ke mutabiq):**
+* Agar aap chahte hain ke routine ke mutabiq har hafte ya mahine ke kisi khas waqt (misal ke tor par Sunday raat 2 baje jab traffic kam ho) patching ho, toh **Patch Manager** aur **Maintenance Window** aik fix schedule par **Run Command** ko trigger kar dete hain.
+
+2. **State Manager (Event / Pehli Start par):**
+* Agar aap chahte hain ke jaise hi koi naya **EC2 instance pehli dafa start** ho (`Triggers on first start`), us par foran zaroori updates aur configurations apply ho jayein, toh **State Manager** foran Run Command ko trigger kar deta hai.
+
+**Step 4: EC2 Instance par Final Execution**
+
+* **Kiya hota hai:** Jab upar diye gaye triggers mein se koi bhi trigger active hota hai aur Run Command ko signal milta hai, toh Run Command aakhir mein **EC2 Instance** (aapke cloud server) ke andar mojood SSM Agent ko command bhejta hai.
+* **Nateeja:** Server par woh saari instructions apply ho jati hain aur aapka instance successfully patch ya update ho jata hai.
 
 ---
 
