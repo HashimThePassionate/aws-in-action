@@ -1706,6 +1706,54 @@ Resources:
       # [...] # Is resource type ke liye zaroori properties.
 ```
 
+
+CloudFormation template ke andar jo naam hum khud apni marzi se rakhte hain (jaise yahan **`VM`** rakha gaya hai), usay **Logical ID** kehte hain.
+
+Yeh Logical ID template ke andar aur deployment ke waqt bohot important hoti hai. Iske main istemal yeh hain:
+
+**1. Doosre Resources ke sath Link (Reference) karne ke liye**
+
+Agar aap ko is VM ke sath koi doosri cheez attach karni ho (jaise Elastic IP, EBS Volume, ya Security Group), toh aap usay bataate hain ke yeh kis VM ke sath attach karni hai. Wahan yehi Logical ID (`VM`) kaam aati hai.
+
+**Example:**
+
+```yaml
+Resources:
+  VM:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t3.micro
+      
+  MyEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      InstanceId: !Ref VM  # Yahan hum ne VM ki Logical ID use ki hai taake IP ishi instance ko mile
+
+```
+**2. Outputs Section mein Data Nikalne ke liye**
+
+Jab stack ban kar tayaar ho jata hai, aur aap ko VM ki `InstanceId` ya `Public IP` output screen par dekhni ho, tab bhi aap Logical ID ka hi hawala dete hain:
+
+```yaml
+Outputs:
+  ServerIP:
+    Description: "VM ka Public IP address"
+    Value: !GetAtt VM.PublicIp  # Yahan VM bata raha hai ke kis resource ka IP chahiye
+
+```
+**3. CloudFormation Deployment Logs aur Events mein Pehchan ke liye**
+
+Jab aap AWS Console par stack deploy kar rahe hotay hain, toh **Events** tab mein aap ko real-time status nazar aata hai. Wahan CloudFormation isi Logical ID (`VM`) ke zariye dikhata hai ke kaunsa resource abhi ban raha hai:
+
+* `VM (AWS::EC2::Instance) - CREATE_IN_PROGRESS`
+* `VM (AWS::EC2::Instance) - CREATE_COMPLETE`
+
+Is se aap ko foran pata chal jata hai ke agar koi error aaya hai, toh template ke kis specific resource (`VM`) mein masla hai.
+
+**4. Stack Update ya Delete karte waqt Tracking ke liye**
+
+CloudFormation is Logical ID ko backend par track karta hai. Jab aap template mein kuch change karke stack ko **Update** karte hain, toh AWS ko isi Logical ID (`VM`) se pata chalta hai ke purani VM ko hi modify karna hai ya nayi banani hai.
+
 ### Listing 4.13 CloudFormation EC2 instance resource
 
 ```yaml
@@ -1720,6 +1768,31 @@ Properties:
     - 'sg-123456'
   SubnetId: 'subnet-123456' # Iske baare mein bhi aap Chapter 5 mein seekhenge.
 ```
+
+---
+
+| Service / Resource Type | Property Name | Aasaan Urdu Explanation (Yeh property kya karti hai?) |
+| :--- | :--- | :--- |
+| **1. AWS::EC2::Instance** <br>*(Virtual Machine / Server)* | `ImageId` | Operating System ki ID (jaise Ubuntu, Windows ya Amazon Linux ka version). |
+| | `InstanceType` | Server ki taqat ya size (jaise CPU aur RAM kitni hogi, misal ke taur par `t3.micro`). |
+| | `KeyName` | Server ke andar login (SSH) karne ke liye istemal hone wali security key ka naam. |
+| | `SubnetId` | Server VPC ke kis specific network area (subnet) ke andar banega. |
+| | `SecurityGroupIds` | Server ka virtual firewall rule (kaun sa traffic andar aa sakta hai aur bahar ja sakta hai). |
+| **2. AWS::S3::Bucket** <br>*(Cloud Storage Folder)* | `BucketName` | Aap ke data storage folder ka unique naam (jo poori duniya mein alag ho). |
+| | `AccessControl` | Folder ki permissions (jaise data sirf aap ka private rahega ya sab dekh sakte hain). |
+| | `VersioningConfiguration` | Agar koi file ghalti se delete ya update ho jaye, toh purana version save rakhne ka rule. |
+| **3. AWS::RDS::DBInstance** <br>*(Relational Database)* | `Engine` | Database ki qisam jo aap chalana chahte hain (jaise `mysql`, `postgres`, ya `oracle`). |
+| | `DBInstanceClass` | Database server ki processing power aur memory ka size (jaise `db.t3.micro`). |
+| | `AllocatedStorage` | Database ke liye kitni hard drive (GBs) allocate karni hai. |
+| | `MasterUsername` | Database ke admin/main user ka naam (jaise `admin`). |
+| | `MasterUserPassword` | Database ka main password (security ke liye). |
+| **4. AWS::Lambda::Function** <br>*(Serverless Code)* | `Runtime` | Aap ka code kis programming language mein likha gaya hai (jaise `python3.10` ya `nodejs18.x`). |
+| | `Handler` | Yeh batata hai ke code kis function ya file se chalna shuru hoga. |
+| | `Code` | Aap ka likha hua asal code kahan pada hai (jaise S3 bucket ka link ya zip file). |
+| | `Role` | Is code ko AWS ki baqi services (jaise S3 ya DynamoDB) ko access karne ki ijazat ka pass. |
+| **5. AWS::SQS::Queue** <br>*(Message Queue)* | `QueueName` | Messages ko line mein lagane wali queue ka naam (jaise `order-processing-queue`). |
+| | `DelaySeconds` | Message aane ke kitni der baad process hona shuru ho. |
+| | `VisibilityTimeout` | Ek worker message par kaam kar raha ho, toh doosre worker ko woh message kitni der tak nazar na aaye. |
 
 ---
 
@@ -1752,6 +1825,15 @@ Outputs:
     Value: !GetAtt 'Server.PublicDnsName' # EC2 instance ka PublicDnsName attribute hasil karta hai.
     Description: 'Public name of the EC2 instance'
 ```
+
+### Explanations:
+* `Outputs:` yeh section CloudFormation template ke aakhir mein likha jata hai, jiska maqsad template deploy hone ke baad important values (jaise IDs, IPs, URLs) ko user ko screen par ya console mein show karna hota hai.
+* `ID:` yeh pehle output ka naam hai jo user apni marzi se rakhta hai, aur is case mein yeh instance ki shanakht (ID) display karega.
+* `Value: !Ref Server` yeh line `!Ref` function ka use karke `Server` naam ke resource ki ID (jaise `i-0123456789abcdef0`) nikal kar value ke taur par deti hai.
+* `Description: 'ID of the EC2 instance'` ek chota sa note hai jo wazeh karta hai ke yeh output kis cheez ki ID show kar raha hai.
+* `PublicName:` yeh doosra output item hai jo server ka public address ya DNS name display karne ke liye banaya gaya hai.
+* `Value: !GetAtt 'Server.PublicDnsName'` yeh line `!GetAtt` (Get Attribute) function ka use karti hai, jo `Server` instance ka specific attribute—yani uska `PublicDnsName` (public domain ya connection address)—nikal kar deti hai.
+* `Description: 'Public name of the EC2 instance'` ek descriptive text hai jo batata hai ke yeh output is server ka public web address ya naam zahir kar raha hai, taake baad mein use connect karne mein aasani ho.
 
 ---
 
