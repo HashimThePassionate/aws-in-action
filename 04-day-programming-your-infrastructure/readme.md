@@ -1627,20 +1627,67 @@ In types ke alawa, hum parameters ko mazeed secure aur bound karne ke liye mukht
 Aayein ek comprehensive parameters block ki misal dekhte hain:
 
 ```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Complete CloudFormation template with all parameter properties and types example."
+
 Parameters:
-  KeyName:
-    Description: 'Key Pair name'
-    Type: 'AWS::EC2::KeyPair::KeyName' # Sirf key-pair names ki ijazat hai.
-  NumberOfVirtualMachines:
-    Description: 'How many virtual machine do you like?'
-    Type: Number
-    Default: 1 # Default ek virtual machine hai.
-    MinValue: 1
-    MaxValue: 5 # Zyada kharche se bachne ke liye upper limit set ki gayi hai.
-  WordPressVersion:
-    Description: 'Which version of WordPress do you want?'
+  # 1. Default Property Example
+  InstanceTypeParam:
     Type: String
-    AllowedValues: ['4.1.1', '4.0.1'] # Sirf kuch specific versions tak mehdood hai.
+    Default: 'm5.large'
+    Description: "Instance ka type select karein (Default: m5.large)"
+
+  # 2. NoEcho Property Example
+  DatabasePassword:
+    Type: String
+    NoEcho: true
+    Description: "Database password (screen par stars *** se chupane ke liye)"
+
+  # 3. AllowedValues Property Example
+  EnvironmentType:
+    Type: String
+    Default: dev
+    AllowedValues: 
+      - dev
+      - test
+      - prod
+    Description: "Sirf diye gaye options mein se environment select karein"
+
+  # 4. MinLength, MaxLength & AllowedPattern Example
+  ProjectCode:
+    Type: String
+    MinLength: 3
+    MaxLength: 10
+    AllowedPattern: '^[a-zA-Z0-9]*$'
+    ConstraintDescription: "Project code 3 se 10 characters ka hona chahiye aur sirf letters/numbers allow hain."
+
+  # 5. MinValue & MaxValue Example
+  ServerCount:
+    Type: Number
+    MinValue: 1
+    MaxValue: 5
+    Default: 2
+    ConstraintDescription: "Servers ki tadad kam az kam 1 aur zyada se zyada 5 ho sakti hai."
+
+  # 6. AWS Resource Type Example (Drop-down Menu)
+  InstanceKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: "Server login karne ke liye account ki mojooda Key Pair select karein"
+
+Resources:
+  MySampleServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      # Yahan hum upar wale parameters ko '!Ref' ke zariye istemal kar rahe hain
+      InstanceType: !Ref InstanceTypeParam
+      KeyName: !Ref InstanceKeyName
+      ImageId: ami-0abcdef1234567890
+      
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentType
+        - Key: Project
+          Value: !Ref ProjectCode
 ```
 
 ---
