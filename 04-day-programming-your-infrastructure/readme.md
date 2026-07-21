@@ -423,16 +423,56 @@ Mubarak ho! Aap ka AWS CLI bilkul sahi kaam kar raha hai.
 
 ## Using the CLI
 
-Ab hum seekhte hain ke CLI ko practical use kaise karna hai. Farz karein aap check karna chahte hain ke aap ke account mein is waqt kaun se `t2.micro` size ke virtual computers (EC2 instances) chal rahe hain.
+Ab hum seekhte hain ke CLI ko practical use kaise karna hai. Farz karein aap check karna chahte hain ke aap ke account mein is waqt kaun se `t3.micro` size ke virtual computers (EC2 instances) chal rahe hain.
 
 Aap apne terminal mein yeh command run karenge:
 
 ```bash
-$ aws ec2 describe-instances --filters "Name=instance-type,Values=t2.micro"
+$ aws ec2 describe-instances --filters "Name=instance-type,Values=t3.micro"
 ```
 
-**Output:**
+### Explanations:
+* `aws` command line tool ko start karta hai taake aap terminal ya command prompt ke zariye directly AWS services ko control aur manage kar sakein.
+* `ec2` batata hai ke aap AWS ki **Elastic Compute Cloud** (yani virtual servers/machines) service ke sath kaam karna chahte hain.
+* `describe-instances` ek aisi command hai jo AWS se kehti hai ke mere account mein mojood virtual servers ki mukammal maloomat (jaise status, IP, ID wagera) la kar do.
+* `--filters` ek aisi parameter option hai jo poori list nikalne ke bajaye sirf aapki marzi ki specific cheezein dhoondne ke liye use hoti hai.
+* `"Name=instance-type,Values=t3.micro"` yeh filter ki condition hai; ismein `Name=instance-type` ka matlab hai ke hum server ke type ya size par shart laga rahe hain, aur `Values=t3.micro` ka matlab hai ke hamein sirf wahi instances chahiye jo `t3.micro` size ki hon.
+* Is poori command ka nateeja yeh hota hai ke AWS aapke poore account ko check karta hai aur sirf unhi servers ki details deta hai jo `t3.micro` hardware par chal rahe hain, baaki sab ko ignore kar deta hai.
 
+**Output 1:**
+```json
+{
+    "Reservations": [
+        {
+            "Groups": [],
+            "Instances": [
+                {
+                    "InstanceId": "i-0123456789abcdef0",
+                    "InstanceType": "t3.micro",
+                    "State": {
+                        "Code": 16,
+                        "Name": "running"
+                    }
+                },
+                {
+                    "InstanceId": "i-0987654321fedcba0",
+                    "InstanceType": "t3.medium",
+                    "State": {
+                        "Code": 16,
+                        "Name": "running"
+                    }
+                }
+            ],
+            "OwnerId": "123456789012",
+            "ReservationId": "r-0123456789abcdef0"
+        }
+    ]
+}
+```
+
+agar t3 hai toh yeh ayega
+
+**Output 2:**
 ```json
 {
     "Reservations": []
@@ -502,6 +542,20 @@ Aayein isko practical samjhein. Agar hum Amazon Linux 2 ki images list karein:
 $ aws ec2 describe-images --filters "Name=name,Values=amzn2-ami-hvm-2.0.202*-x86_64-gp2"
 ```
 
+### Explanations:
+* `aws` command line tool ko start karta hai taake aap terminal ya command prompt se directly AWS services ko manage aur control kar sakein.
+* `ec2` yeh batata hai ke aap AWS ki **Elastic Compute Cloud** (yani virtual servers/machines) service ke sath kaam karna chahte hain.
+* `describe-images` AWS se kehti hai ke hamare liye **Amazon Machine Images (AMIs)** ki maloomat talash karke laao (AMI ek tarah ki template hoti hai jisse naye servers banaye jate hain).
+* `--filters` ek aisi option hai jo be-shumaar images ki list mein se sirf wahi image dhoondne ke liye use hoti hai jo aapki zaroorat ke mutabiq ho.
+* `"Name=name,Values=amzn2-ami-hvm-2.0.202*-x86_64-gp2"` poori filter ki shart (condition) hai jo ek specific pattern wale naam ki image search karti hai.
+* Is shart ke andar `Name=name` yeh wazeh karta hai ke hum image ke naam (title) ke hisaab se search kar rahe hain.
+* Ismein `Values=amzn2-ami-hvm-2.0.202*-x86_64-gp2` woh specific format ya pattern hai jisse image ka naam match hona chahiye.
+* `amzn2-ami-hvm` yeh batata hai ke yeh **Amazon Linux 2** ki HVM (Hardware Virtual Machine) type image hai.
+* `2.0.202*` mein `*` ek wildcard hai, jiska matlab hai ke yeh saal 2020 se lekar aage ke kisi bhi version (jaise 2021, 2024, 2026 etc.) wali matching image ko utha lega.
+* `-x86_64` yeh batata hai ke processor ka architecture 64-bit standard (Intel ya AMD) hona chahiye.
+* `-gp2` yeh batata hai ke image ke sath jo storage (disk) hai woh General Purpose SSD (gp2) type ki hai.
+* Is poori command ka nateeja yeh hota hai ke AWS aapke account ya region mein mojood Amazon Linux 2 ki wahi specific images dhoond kar la deta hai jo is pattern se milti hain, jisse aapko instance banate waqt sahi AMI ID mil jati hai.
+
 Iska output bohot bada hota hai jis mein dheron details hoti hain, jaise:
 
 ```json
@@ -520,6 +574,16 @@ Humein machine chalane ke liye sirf `"ami-0ce1e3f77cd41957e"` chahiye, baqi ka k
 ```bash
 $ aws ec2 describe-images --filters "Name=name,Values=amzn2-ami-hvm-2.0.202*-x86_64-gp2" --query "Images[0].ImageId"
 ```
+
+### Explanations:
+* `aws` command line tool ko start karta hai taake aap terminal ya command prompt se directly AWS services ko manage aur control kar sakein.
+* `ec2` yeh batata hai ke aap AWS ki Elastic Compute Cloud (virtual servers) service ke sath kaam karna chahte hain.
+* `describe-images` AWS se kehti hai ke hamare liye Amazon Machine Images (AMIs) ki maloomat talash karke laao.
+* `--filters` ek aisi option hai jo be-shumaar images ki list mein se sirf wahi image dhoondne ke liye use hoti hai jo aapki zaroorat ke mutabiq ho.
+* `"Name=name,Values=amzn2-ami-hvm-2.0.202*-x86_64-gp2"` poori filter ki shart hai jo Amazon Linux 2 ki 64-bit gp2 storage wali images ko match karti hai jismein saal ka pattern (`202*`) wildcard ke sath ho.
+* `--query` AWS CLI ka ek ahem feature hai jo output data ko apni marzi ke mutabiq chhota ya specific banane ke liye istemal hota hai, taake poora lamba JSON data dekhne ke bajaye sirf kaam ki cheez mile.
+* `"Images[0].ImageId"` is query ka exact rule hai; ismein `Images` list ko represent karta hai, `[0]` ka matlab hai ke jo pehli image search result mein aaye sirf usay uthaao, aur `.ImageId` ka matlab hai ke us image ka sirf ID number (jaise `ami-061ac2e015473fbe2`) screen par dikhaao.
+* Is poori command ka nateeja yeh hota hai ke terminal par lambi-chauri details aane ke bajaye sirf ek clean AMI ID print ho kar milti hai, jise aap direct CloudFormation templates ya scripts mein use kar sakte hain.
 
 **Output:**
 
@@ -615,6 +679,22 @@ aws ec2 wait instance-terminated --instance-ids "$INSTANCEID"
 
 echo "done. Everything cleaned up successfully!"
 ```
+
+### Explanations:
+* `#!/bin/bash -e` batata hai ke yeh ek Bash script hai, aur `-e` flag ka matlab hai ke agar script ke andar koi bhi command fail ho jaye, to script wahin foran ruk jaye gi aur aage nahi chalegi.
+* `AMIID="$(aws ec2 describe-images ...)"` ek command hai jo dynamically sab se latest Amazon Linux 2 image ki ID dhoondti hai aur usay `AMIID` naam ke variable mein save kar leti hai.
+* `VPCID="$(aws ec2 describe-vpcs ...)"` aapke AWS account ka default VPC ID dhoond kar `VPCID` variable mein store karti hai taake resource sahi network mein bane.
+* `SUBNETID="$(aws ec2 describe-subnets ...)"` us default VPC ke andar mojood subnet ki ID nikal kar `SUBNETID` variable mein save karti hai jahan server deploy hoga.
+* `INSTANCEID="$(aws ec2 run-instances ...)"` sab variables (`AMIID`, `SUBNETID`) ko use karke ek naya `t2.micro` server launch karti hai aur `ec2-ssm-core` profile lagakar naye banne wale server ki ID ko `INSTANCEID` variable mein store kar leti hai.
+* `echo "Waiting for $INSTANCEID to boot up..."` terminal par ek message print karta hai ke server start ho raha hai, bara-e-karam intezar karein.
+* `aws ec2 wait instance-running --instance-ids "$INSTANCEID"` ek aisi AWS CLI command hai jo tab tak script ko roke rakhti hai jab tak woh specific instance mukammal tor par "running" state mein na aa jaye.
+* `echo "Instance is up and running!"` screen par message dikhata hai ke server ab puri tarah chal pada hai.
+* `echo "Connect to this instance..."` aur uske sath wala `echo` link wala line user ko AWS Session Manager ke zariye server se connect karne ka direct URL console par print karke deta hai.
+* `read -p "Press [Enter] key to terminate..."` script ko pause (rok) deta hai aur user ke Enter key dabane ka intezar karta hai, taake jab tak aap kaam karna chahein server chalta rahe.
+* `aws ec2 terminate-instances ... > /dev/null` jaise hi user Enter dabata hai, yeh command us server ko delete (terminate) karne ke liye bhej deti hai, aur `> /dev/null` uske aane wale extra text output ko chhipa deta hai.
+* `echo "Terminating $INSTANCEID ..."` screen par print karta hai ke server ab delete ho raha hai.
+* `aws ec2 wait instance-terminated --instance-ids "$INSTANCEID"` tab tak intezar karta hai jab tak AWS se server puri tarah khatam (terminate) na ho jaye.
+* `echo "done. Everything cleaned up successfully!"` aakhri message print karta hai ke kaam mukammal ho gaya aur sab kuch safai se band ho gaya hai.
 
 ---
 
