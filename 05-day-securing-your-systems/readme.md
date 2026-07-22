@@ -282,159 +282,178 @@ Run Command ko manually chalane ke bajaye automate karne ke liye do mukhtalif ta
 Niche diye gaye CloudFormation code ke zariye hum ek automatic Maintenance Window aur Association tay karte hain taake patching automatic aur continuous ho sake:
 
 ```yaml
-MaintenanceWindow:
-  Type: 'AWS::SSM::MaintenanceWindow'
-  Properties:
-    AllowUnassociatedTargets: false
-    Duration: 2 # Maintenance window do ghante lambi hai. Aap chahay to ek se zyada EC2 instances ko patch kar sakte hain.
-    Cutoff: 1 # Aakhri ghanta commands ko khatam karne ke liye reserved hai (saari commands pehle ghante mein shuru ho jati hain).
-    Name: !Ref 'AWS::StackName'
-    Schedule: 'cron(0 5 ? * SUN *)' # Maintenance window har Sunday subah 5 baje UTC time par scheduled hai. Syntax ke baare mein mazeed http://mng.bz/zmRZ par seekhein.
-    ScheduleTimezone: UTC
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Systems Manager Patch Management Template with Maintenance Windows and Associations'
 
-MaintenanceWindowTarget:
-  Type: 'AWS::SSM::MaintenanceWindowTarget'
-  Properties:
-    ResourceType: INSTANCE
-    Targets:
-      - Key: InstanceIds
-        Values:
-          - !Ref Instance
-    WindowId: !Ref MaintenanceWindow # Ek EC2 instance ko maintenance window assign karta hai. Aap tags ki bunyad par bhi EC2 instances assign kar sakte hain.
+Resources:
+  # 1. IAM Role for Patch Manager S3 Access
+  InstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: PatchManager
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 's3:GetObject'
+                Resource:
+                  - !Sub 'arn:aws:s3:::patch-baseline-snapshot-${AWS::Region}/*'
+                  - !Sub 'arn:aws:s3:::aws-ssm-${AWS::Region}/*'
 
-MaintenanceWindowTask:
-  Type: 'AWS::SSM::MaintenanceWindowTask'
-  Properties:
-    MaxConcurrency: '1'
-    MaxErrors: '1'
-    Priority: 0
-    Targets:
-      - Key: WindowTargetIds
-        Values:
-          - !Ref MaintenanceWindowTarget
-    TaskArn: 'AWS-RunPatchBaseline' # AWS-RunPatchBaseline document execute hota hai.
-    TaskInvocationParameters:
-      MaintenanceWindowRunCommandParameters:
-        Parameters:
-          Operation:
-            - Install
-        TaskType: 'RUN_COMMAND' # Document parameters ko support karta hai. Operation ko 'Install' ya 'Scan' par set kiya ja sakta hai. By default, agar kisi patch ke liye zaroori ho to reboot ho jata hai.
-        WindowId: !Ref MaintenanceWindow
+  # 2. IAM Instance Profile (Required to attach Role to EC2)
+  InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - !Ref InstanceRole
 
-AssociationRunPatchBaselineInstall:
-  Type: 'AWS::SSM::Association'
-  Properties:
-    Name: 'AWS-RunPatchBaseline'
-    Parameters:
-      Operation:
-        - Install
-    Targets:
-      - Key: InstanceIds
-        Values:
-          - !Ref Instance # Association yaqeeni banata hai ke patches startup par install ho jayen. Wahi document wahi parameters ke sath istemaal hota hai.
+  # 3. EC2 Instance Resource
+  Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: 'ami-0c55b159cbfafe1f0' # Note: Apni region ke mutabiq valid AMI ID yahan dein
+      InstanceType: 't2.micro'
+      IamInstanceProfile: !Ref InstanceProfile
+      Tags:
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  # 4. SSM Maintenance Window
+  MaintenanceWindow:
+    Type: 'AWS::SSM::MaintenanceWindow'
+    Properties:
+      AllowUnassociatedTargets: false
+      Duration: 2 # Maintenance window do ghante lambi hai. Aap chahay to ek se zyada EC2 instances ko patch kar sakte hain.
+      Cutoff: 1 # Aakhri ghanta commands ko khatam karne ke liye reserved hai (saari commands pehle ghante mein shuru ho jati hain).
+      Name: !Ref 'AWS::StackName'
+      Schedule: 'cron(0 5 ? * SUN *)' # Maintenance window har Sunday subah 5 baje UTC time par scheduled hai.
+      ScheduleTimezone: UTC
+
+  # 5. Maintenance Window Target
+  MaintenanceWindowTarget:
+    Type: 'AWS::SSM::MaintenanceWindowTarget'
+    Properties:
+      ResourceType: INSTANCE
+      Targets:
+        - Key: InstanceIds
+          Values:
+            - !Ref Instance
+      WindowId: !Ref MaintenanceWindow # Ek EC2 instance ko maintenance window assign karta hai.
+
+  # 6. Maintenance Window Task
+  MaintenanceWindowTask:
+    Type: 'AWS::SSM::MaintenanceWindowTask'
+    Properties:
+      MaxConcurrency: '1'
+      MaxErrors: '1'
+      Priority: 0
+      Targets:
+        - Key: WindowTargetIds
+          Values:
+            - !Ref MaintenanceWindowTarget
+      TaskArn: 'AWS-RunPatchBaseline' # AWS-RunPatchBaseline document execute hota hai.
+      TaskInvocationParameters:
+        MaintenanceWindowRunCommandParameters:
+          Parameters:
+            Operation:
+              - Install
+          TaskType: 'RUN_COMMAND' # Operation ko 'Install' ya 'Scan' par set kiya ja sakta hai.
+          WindowId: !Ref MaintenanceWindow
+
+  # 7. Association for Install on Startup
+  AssociationRunPatchBaselineInstall:
+    Type: 'AWS::SSM::Association'
+    Properties:
+      Name: 'AWS-RunPatchBaseline'
+      Parameters:
+        Operation:
+          - Install
+      Targets:
+        - Key: InstanceIds
+          Values:
+            - !Ref Instance # Association yaqeeni banata hai ke patches startup par install ho jayen.
+
+  # 8. Association for Periodic Scans
+  AssociationRunPatchBaselineScan:
+    Type: 'AWS::SSM::Association'
+    Properties:
+      ApplyOnlyAtCronInterval: true # Startup par run na karein taake conflict se bacha ja sake.
+      Name: 'AWS-RunPatchBaseline' # Wahi AWS-RunPatchBaseline document istemaal karta hai.
+      Parameters:
+        Operation:
+          - Scan # ...lekin is baar, Operation ko 'Scan' par set kiya gaya hai.
+      ScheduleExpression: 'cron(0 0/1 * * ? *)' # Har ghante run hota hai.
+      Targets:
+        - Key: InstanceIds
+          Values:
+            - !Ref Instance
 ```
 
-#### 1. Maintenance Window Define Karna
-
-```yaml
-MaintenanceWindow:
-  Type: 'AWS::SSM::MaintenanceWindow'
-  Properties:
-    AllowUnassociatedTargets: false
-    Duration: 2
-    Name: !Ref 'AWS::StackName'
-    Schedule: 'cron(0 5 ? * SUN *)'
-    Cutoff: 1
-```
-
-* **Asaan Explanation:**
-* **`Type: 'AWS::SSM::MaintenanceWindow'`**: Yeh line CloudFormation ko batati hai ke humein ek `MaintenanceWindow` resource banani hai, jo SSM ke core features mein se ek hai.
-* **`AllowUnassociatedTargets: false`**: Yeh ek control mechanism hai. Jab ise `false` rakhte hain, toh iska matlab hai ke sirf wahi EC2 instances is window par update honge jo specifically is maintenance window ke sath register (associate) kiye gaye hain. Yeh un-authorized ya ghalti se hone wale updates ko rokta hai.
-* **`Duration: 2`**: Yeh maintenance window ki lambai (duration) ko hours mein define karta hai. Is case mein, window 2 ghante tak open rahegi.
-* **`Name: !Ref 'AWS::StackName'`**: Yeh resource ka naam set kar raha hai. `!Ref` ek built-in function hai jo aapke CloudFormation stack ka naam utha kar is window ko de dega. Iska faida yeh hai ke aapko manual naam nahi likhna padta.
-* **`Schedule: 'cron(0 5 ? * SUN *)'`**: Yeh cron syntax ka istemaal karte hue time set karta hai. Is specific format ka matlab hai: "Har Sunday, subah 5 baje yeh window start hogi."
-* **`Cutoff: 1`**: Yeh "Cutoff" time define karta hai. Agar window 2 ghante ki hai, toh `1` ka matlab hai ke window khatam hone se 1 ghanta pehle yeh naye tasks accept karna band kar degi. Yeh ensure karta hai ke chal raha kaam time par complete ho jaye aur window waqt par band ho sake.
-
-
-#### 2. Target Server Select Karna
-
-```yaml
-MaintenanceWindowTarget:
-  Type: 'AWS::SSM::MaintenanceWindowTarget'
-  Properties:
-    ResourceType: INSTANCE
-    Targets:
-      - Key: 'InstanceIds'
-        Values:
-          - !Ref Instance
-    WindowId: !Ref MaintenanceWindow
-```
-
-* **Asaan Explanation:** 
-* **`Type: 'AWS::SSM::MaintenanceWindowTarget'`**: Yeh resource type hai jo SSM ko batata hai ke hum yahan target servers ki list define kar rahe hain jo maintenance window ka hissa banenge.
-* **`ResourceType: INSTANCE`**: Yeh SSM ko yeh instruction deta hai ke hum EC2 instances (jo ke "INSTANCE" type hote hain) ko target kar rahe hain. Isse SSM ko pata chalta hai ke usay kis resource ke sath interact karna hai.
-* **`Targets`**: Yeh wo section hai jahan hum filtering ya selection karte hain ke kaunse servers is maintenance mein shamil honge.
-* **`Key: 'InstanceIds'`**: Yeh filter ka method hai. Iska matlab hai ke hum "Instance ID" ki bunyad par servers ko select kar rahe hain.
-* **`Values: - !Ref Instance`**: Yeh dynamic linking hai. Yahan humne `!Ref` ka use karke us EC2 instance ko reference kiya hai jo humne template mein pehle define kiya tha. Jab stack deploy hoga, CloudFormation automatically us specific instance ki ID yahan daal dega.
-* **`WindowId: !Ref MaintenanceWindow`**: Yeh sab se zaroori line hai. Yeh hamare target group ko us "Maintenance Window" ke sath "attach" (link) kar deti hai jo humne pichle code block mein banayi thi. Iske baghair, SSM ko pata nahi chalega ke yeh server kis window ke tehat patch hona hai.
-
-
-#### 3. Task Assign Karna (What to do?)
-
-```yaml
-MaintenanceWindowTask:
-  Type: 'AWS::SSM::MaintenanceWindowTask'
-  Properties:
-    MaxConcurrency: '1'
-    MaxErrors: '1'
-    Priority: 1
-    WindowId: !Ref MaintenanceWindow
-    Targets:
-      - Key: 'WindowTargetIds'
-        Values:
-          - !Ref MaintenanceWindowTarget
-    TaskArn: 'AWS-RunPatchBaseline'
-    TaskType: 'RUN_COMMAND'
-    TaskInvocationParameters:
-      RunCommandParameters:
-        Comment: 'Patch instance'
-        OutputS3BucketName: !Ref S3Bucket
-```
-
-* **Asaan Explanation:**
-* **`Type: 'AWS::SSM::MaintenanceWindowTask'`**: Yeh resource batata hai ke hum ek specific kaam (patching) define kar rahe hain jo Maintenance Window mein execute hoga.
-* **`MaxConcurrency: '1'`**: Yeh bohot ahem safety feature hai. Iska matlab hai ke ek waqt mein sirf **1 instance** par update run hogi. Agar aapke paas 50 servers hain, toh wo ek-ek karke update honge, ek saath nahi. Yeh system load ko control mein rakhta hai.
-* **`MaxErrors: '1'`**: Agar update process ke dauran **1 error** bhi aa jaye, toh task wahi ruk jayega. Yeh tab helpful hota hai jab aap nahi chahte ke agar update ghalat ho toh wo baqi servers ko bhi kharab kar de.
-* **`Priority: 1`**: Agar aapne ek hi window mein multiple tasks rakhe hain (jaise pehle update, phir backup), toh yeh priority decide karti hai ke kaunsa kaam pehle hoga.
-* **`WindowId: !Ref MaintenanceWindow`**: Yeh is task ko us "Time Window" ke sath link karta hai jo humne pehle banayi thi.
-* **`Targets`**: Yahan humne `MaintenanceWindowTarget` ko reference diya hai. Yeh SSM ko batata hai ke "bhai, yeh task unhi servers par chalao jo humne is target group mein define kiye hain."
-* **`TaskArn: 'AWS-RunPatchBaseline'`**: Yeh **"What"** (kaam) hai. `AWS-RunPatchBaseline` AWS ka ek standard document (script) hai jo automatically patching ka sara process handle karta hai.
-* **`TaskType: 'RUN_COMMAND'`**: Yeh batata hai ke patching ka kaam kaise hoga. `RUN_COMMAND` woh feature hai jo bina SSH login kiye, SSM Agent ke zariye server ke andar scripts chala deta hai.
-* **`TaskInvocationParameters`**: Yahan humne ek `OutputS3BucketName` diya hai. Patching ke dauran jo logs generate honge (yani update successful hua ya fail), woh automatically is S3 bucket mein save ho jayenge taake aap baad mein unhein check kar saken.
-
-
-#### 4. Startup Par Checking Ke Liye Association
-
-```yaml
-MaintenanceWindowTaskAssociation:
-  Type: 'AWS::SSM::MaintenanceWindowTaskAssociation'
-  Properties:
-    Name: !Ref MaintenanceWindow
-    TaskArn: 'AWS-RunPatchBaseline'
-    Targets:
-      - Key: 'InstanceIds'
-        Values:
-          - !Ref Instance
-```
-
-* **Asaan Explanation:**
-* **`Type: 'AWS::SSM::MaintenanceWindowTaskAssociation'`**: Yeh resource ka type hai. Iska maqsad SSM ko yeh batana hai ke "Is task ko is window ke sath permanently link kar do."
-* **`Name: !Ref MaintenanceWindow`**: Yeh property us Maintenance Window ko point kar rahi hai jo aapne pehle banayi thi. Iske baghair task ko pata nahi chalega ke wo kis time schedule ke andar run hona hai.
-* **`TaskArn: 'AWS-RunPatchBaseline'`**: Yeh aapka "Action" hai. Aap ne `AWS-RunPatchBaseline` ko select kiya hai, jo ke AWS ka standard document hai. Iska kaam server par patches ko check aur install karna hai.
-* **`Targets`**: Yahan aap specify kar rahe hain ke yeh association kis par apply karni hai.
-* `Key: 'InstanceIds'`: SSM ko batata hai ke hum specific instance ID ke zariye target kar rahe hain.
-* `Values: - !Ref Instance`: Yeh aapke us specific EC2 instance ko target kar raha hai jo aapne template mein define kiya tha.
-
+### Explanations:
+* `AWSTemplateFormatVersion: '2010-09-09'` yeh line AWS ko batati hai ke yeh CloudFormation template ka kaunsa version hai, aur '2010-09-09' CloudFormation ka standard aur abhi tak ka aik hi major format version hai jo poori duniya mein istemaal hota hai.
+* `Description: ...` yeh line template ka maqsad wazeh karti hai ke yeh template AWS Systems Manager ke zariye patch management, maintenance windows, aur associations ko setup karne ke liye hai.
+* `Resources:` yeh section template ka wo bunyadi hissa hai jahan hum AWS ke tamam resources (jese IAM role, EC2 instance, SSM window waghera) ko define karte hain ke AWS ne kya kya cheezein banani hain.
+* `InstanceRole:` yeh aik IAM role create karta hai jo hamare EC2 instance ko yeh ijazat deta hai ke wo AWS Systems Manager (SSM) aur Patch Manager ke zariye kuch khaas S3 buckets se data access kar sake.
+* `AssumeRolePolicyDocument:` yeh batata hai ke is IAM role ko kaunsi AWS service istemaal kar sakti hai, aur yahan `Service: ec2.amazonaws.com` likha gaya hai jiska matlab hai ke yeh role sirf aur sirf EC2 instances ke liye hai.
+* `Version: '2012-10-17'` IAM policy language ka standard version hai jo AWS security policies likhne ke liye istemaal karta hai.
+* `Statement:` yeh policies ke rules ka aik block hai jahan bataya jata hai ke kya action ki ijazat hai aur kis resource par hai.
+* `Effect: Allow` is baat ki nishandahi karta hai ke neechay di gayi permissions ko rokna nahi hai balkay unhein manzoor (allow) karna hai.
+* `Principal:` yeh define karta hai ke yeh policy kis par laagu hogi, aur yahan ec2 service ko target kiya gaya hai.
+* `Action: 'sts:AssumeRole'` EC2 instance ko yeh haq deta hai ke wo is IAM role ki ijazat ko apne upar "assume" (laagu) kar sake.
+* `Policies:` iske andar hum custom permissions define karte hain ke role ko kya kya karne ki taqat milni chahiye.
+* `PolicyName: PatchManager` is policy ka naam rakhta hai taake AWS console mein pehchana ja sake ke yeh patch management ke liye hai.
+* `Action: 's3:GetObject'` EC2 instance ko S3 bucket se files ya objects ko download (read) karne ki ijazat deta hai.
+* `Resource:` yeh batata hai ke `s3:GetObject` ki ijazat sirf kis specific S3 bucket par hogi, har jagah par nahi.
+* `!Sub 'arn:aws:s3:::patch-baseline-snapshot-${AWS::Region}/*'` dynamic tareeqay se us region ka S3 bucket naam banata hai jahan stack deploy ho raha hai, aur uske andar mojood tamam files (`/*`) ko access karne ki ijazat deta hai jahan patch baselines ki snapshots hoti hain.
+* `!Sub 'arn:aws:s3:::aws-ssm-${AWS::Region}/*'` AWS Systems Manager ke regional S3 buckets ko access karne ki ijazat deta hai jahan patches ki maloomat aur binaries milti hain.
+* `InstanceProfile:` yeh aik `AWS::IAM::InstanceProfile` resource hai kyunke aap seedha IAM role ko EC2 instance ke sath attach nahi kar sakte, isliye Instance Profile ek pul (bridge) ka kaam karta hai jo role ko EC2 instance ke hawale karta hai.
+* `Roles:` is property ke andar hum us role ka reference dete hain jo upar banaya gaya hai (`- !Ref InstanceRole`), taake profile ko pata ho ke kis role ko instance tak pohchana hai.
+* `Instance:` yeh hamara `AWS::EC2::Instance` resource hai jo cloud mein aik virtual server (EC2 instance) create karta hai.
+* `ImageId: 'ami-0c55b159cbfafe1f0'` yeh EC2 instance ke liye operating system ka AMI (Amazon Machine Image) ID define karta hai (misaal ke taur par Ubuntu ya Amazon Linux ka image).
+* `InstanceType: 't2.micro'` instance ka size ya hardware configuration tay karta hai ke kitni CPU aur RAM hogi.
+* `IamInstanceProfile: !Ref InstanceProfile` upar banaye gaye Instance Profile ko is EC2 instance ke sath jorta hai taake instance ke andar chalne wala SSM agent S3 se patch data parh sake.
+* `Tags:` resource ko label ya naam dene ke liye istemaal hota hai.
+* `Key: Name` aur `Value: !Ref 'AWS::StackName'` instance ka naam wohi rakh dete hain jo poore CloudFormation stack ka naam hoga.
+* `MaintenanceWindow:` yeh `AWS::SSM::MaintenanceWindow` resource banata hai jo aik mukhtasir waqt ka frame (window) tay karta hai jiske andar servers par updates ya patches lagaye ja sakte hain taake production hours disturb na hon.
+* `AllowUnassociatedTargets: false` yeh batata hai ke agar koi target (EC2 instance) is maintenance window ke sath manually ya dynamically jura hua nahi hai, toh task execute nahi hoga (suraksha aur control ke liye).
+* `Duration: 2` batata hai ke yeh maintenance window poore 2 ghante tak jari rahegi, jiske andar aap apne EC2 instances ko patch kar sakte hain.
+* `Cutoff: 1` batata hai ke window ke aakhri 1 ghante mein koi naya task shuru nahi hoga, balkay pehle ghante mein shuru hone walay tasks ko khatam karne ke liye yeh time reserved rakha gaya hai.
+* `Name: !Ref 'AWS::StackName'` maintenance window ka naam stack ke naam par rakhta hai.
+* `Schedule: 'cron(0 5 ? * SUN *)'` yeh cron expression hai jo batata hai ke yeh window har hafte ke Sunday ko subah 5 baje UTC time par automatically khulegi.
+* `ScheduleTimezone: UTC` yeh wazeh karta hai ke schedule kiya gaya time UTC timezone ke lihaz se chalega.
+* `MaintenanceWindowTarget:` yeh `AWS::SSM::MaintenanceWindowTarget` resource banata hai jo yeh tay karta hai ke maintenance window kis cheez par apply hogi (yahan instance level par targets set kiye gaye hain).
+* `ResourceType: INSTANCE` batata hai ke target type aik EC2 instance hai.
+* `Targets:` iske andar hum key-value pair ke zariye batate hain ke kaunse instances target hain.
+* `Key: InstanceIds` aur `Values: - !Ref Instance` ka matlab hai ke hamara banaya gaya EC2 instance is maintenance window ka target hai.
+* `WindowId: !Ref MaintenanceWindow` is target ko uper banayi gayi maintenance window ke sath link karta hai.
+* `MaintenanceWindowTask:` yeh `AWS::SSM::MaintenanceWindowTask` resource hai jo yeh tay karta hai ke maintenance window ke doran actual mein kaunsa kaam (task) perform kiya jaye ga.
+* `MaxConcurrency: '1'` batata hai ke aik waqt mein sirf 1 hi instance par patch install hoga, saare servers ek sath patch nahi honge taake system overload na ho.
+* `MaxErrors: '1'` batata hai ke agar 1 bhi error aa gaya toh task mazeed aage nahi barhega aur ruk jayega.
+* `Priority: 0` agar is window mein aik se zyada tasks hon, toh yeh task sab se pehle (highest priority par) run hoga.
+* `Targets:` yahan `WindowTargetIds` ke zariye bataya gaya hai ke yeh task kis maintenance window target par chalna chahiye.
+* `TaskArn: 'AWS-RunPatchBaseline'` yeh AWS ka built-in Systems Manager document hai jo patches ko scan aur install karne ke liye use hota hai.
+* `TaskInvocationParameters:` task ke andar chalne walay parameters ko define karta hai.
+* `MaintenanceWindowRunCommandParameters:` run command ke zariye parameters pass karta hai.
+* `Parameters: Operation: - Install` yahan operation ko 'Install' par set kiya gaya hai, yaani window ke doran patches waqayi install kiye jayenge.
+* `TaskType: 'RUN_COMMAND'` batata hai ke yeh task ek SSM Run Command ki tarah execute hoga.
+* `AssociationRunPatchBaselineInstall:` yeh `AWS::SSM::Association` resource hai jo yeh yaqeeni banata hai ke jab bhi instance start ho ya state change ho, toh patch baseline install ho jaye.
+* `Name: 'AWS-RunPatchBaseline'` wahi standard patch baseline SSM document istemaal karta hai.
+* `Parameters: Operation: - Install` startup ke waqt patches ko install karne ka command deta hai.
+* `Targets: Key: InstanceIds Values: - !Ref Instance` yeh association hamare specific EC2 instance par laagu hoti hai.
+* `AssociationRunPatchBaselineScan:` yeh doosra `AWS::SSM::Association` resource hai jo har ghante regular intervals par sirf patches ko scan karne ke liye banaya gaya hai.
+* `ApplyOnlyAtCronInterval: true` yeh bohat ahem property hai jo batata hai ke yeh association server ke startup par run na ho, balkay sirf aur sirf diye gaye cron schedule ke waqt run ho, taake startup association ke sath koi conflict ya crash na ho.
+* `Name: 'AWS-RunPatchBaseline'` yeh bhi wahi patch baseline document istemaal karta hai.
+* `Parameters: Operation: - Scan` yahan operation ko 'Scan' par set kiya gaya hai, yaani yeh sirf check karega ke kaun kaun se patches missing hain, install nahi karega.
+* `ScheduleExpression: 'cron(0 0/1 * * ? *)'` yeh cron expression har ghante (every 1 hour) scan chalane ke liye schedule define karta hai.
+* `Targets: Key: InstanceIds Values: - !Ref Instance` yeh scan association bhi hamare specific EC2 instance par laagu hoti hai.
 
 ---
 
