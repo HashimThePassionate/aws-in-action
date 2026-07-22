@@ -761,3 +761,258 @@ aws s3 rb --force s3://awsinaction-archive-$yourname
 
 
 ---
+
+## Storing objects programmatically
+
+Ab tak aap ne dekha ke terminal (CLI) se S3 par backup kaise liya jata hai. Lekin asli software development mein applications (jaise mobile apps ya websites) S3 ke sath direct interact karti hain. Iss process ko hum **Programmatic Storage** kehte hain.
+
+S3 ki poori bunyaad **HTTPS REST API** par hai. Iska matlab hai ke duniya ki koi bhi programming language internet request bhej kar S3 se files upload ya download kar sakti hai.
+
+### AWS SDKs (Software Development Kits)
+
+Har language ke liye khud se HTTPS requests likhna mushkil aur complex hota hai. Is liye AWS mukhtalif languages ke liye tayyar-shuda toolkits deta hai jinhe **SDKs** kaha jata hai:
+
+* C++, Go, Java, JavaScript (Node.js), .NET, PHP, Python (Boto3), aur Ruby.
+
+SDK ke zariye aap apni application se yeh 3 main operations kar sakte hain:
+
+1. **Buckets aur Objects ki list dekhna** (`List`).
+2. **Objects aur Buckets ko create, read, update, aur delete karna** (`CRUD operations`).
+3. **Objects ki access permissions set karna** (`Access Control`).
+
+---
+
+### Writer Ki Di Gayi 3 Real-World Examples
+
+Writer application mein S3 integration ki 3 aam misalein deta hai:
+
+1. **User Profile Picture Upload:** User apni photo upload karta hai, app usay S3 par store karti hai aur image ko publicly accessible bana kar website par HTTPS link se dikhati hai.
+2. **Automated PDF Reports Generate Karna:** Server har mahine ka sales report PDF banata hai, usay S3 par daalta hai, aur jab user ko report chahiye hoti hai toh S3 se fetch karke download karwa deta hai.
+3. **App-to-App Data Sharing (Stateless Server Architecture):** Do alag alag applications S3 ke zariye data share karti hain. E.g., *Application A* daily sales ka data JSON format mein S3 par write karti hai, aur *Application B* us JSON file ko S3 se read karke analytics ya graph banati hai.
+
+> **Stateless Server Ka Concept (Bacho Ki Tarah Samjhein):**
+> Farz karein aap ek hotel mein kaam karte hain. Agar har waiter guests ka saman apne jeb mein rakhna shuru kar de, toh waiter ke ghar jatay hi guest ka saman ghum jayega! Is ke bajaye, har waiter guest ka saman hotel ke central safety locker (S3) mein daal deta hai. Iss tarah waiter (Server) par koi bojh nahi hota aur wo **stateless** rehta hai— server chahe crash ho jaye ya naya lag jaye, user ka data safe rehta hai.
+
+Writer iss concept ko samjhane ke liye ek simple Node.js web application **Simple S3 Gallery** ki example deta hai.
+
+---
+
+## Installing and getting started with Node.js
+
+Node.js ek aisa execution environment hai jo JavaScript ko browser se bahar (server par) chalane ki ijazat deta hai.
+
+* **Installation:** official website (`[https://nodejs.org](https://nodejs.org)`) se apne Operating System (Windows/Mac/Linux) ke mutabiq package download karke install karein.
+* **Verification:** Terminal mein yeh command chala kar check karein ke Node.js sahi install hua hai ya nahi:
+```bash
+node --version
+
+```
+
+
+Terminal output mein aap ko version dikhayi dega (jaise `v14.*` ya modern versions jaise `v18.*` / `v20.*`).
+* **Writer Ki Book Recommendations:** Agar aap Node.js ko depth mein seekhna chahte hain toh writer ne do resources recommend kiye hain:
+* Book: *Node.js in Action (Second Edition)* - Alex Young et al. (Manning, 2017).
+* Video Course: *Node.js in Motion* - PJ Evans (Manning, 2018).
+
+
+
+---
+
+## Setting up an S3 Bucket
+
+Simple S3 Gallery app ko chalane ke liye pehle S3 par ek khali bucket banana hoga. Terminal par yeh command chalayein:
+
+```bash
+aws s3 mb s3://awsinaction-sdk-$yourname
+
+```
+
+* `mb`: Make Bucket command jo `$yourname` ke sath unique bucket register kar degi.
+
+---
+
+## Installing a web application that uses S3
+
+Writer ki code repository GitHub par available hai: `[https://github.com/AWSinAction/code3](https://github.com/AWSinAction/code3)`.
+
+1. Code directory ke andar `/chapter07/gallery/` folder mein jayein.
+2. Dependencies install karne ke liye terminal mein yeh command chalayein:
+```bash
+npm install
+
+```
+
+
+3. Web application ko start karne ke liye bucket ka naam pass karke server run karein:
+```bash
+node server.js awsinaction-sdk-$yourname
+
+```
+
+
+4. Browser kholain aur URL open karein: `http://localhost:8080`.
+
+---
+
+### Figure 7.4 Ka Breakdown (Simple S3 Gallery UI)
+
+**Figure 7.4** mein Simple S3 Gallery app ka user interface (UI) dikhaya gaya hai:
+
+```
++-------------------------------------------------------------------+
+|  Simple S3 Gallery                                         _ O X  |
++-------------------------------------------------------------------+
+|  Upload                                                           |
+|  [ Choose file ] No file chosen                                   |
+|  [ Upload ]                                                       |
+|                                                                   |
+|  Images                                                           |
+|  +-------------------------------------------------------------+  |
+|  |                                                             |  |
+|  |                 [ AWS S3 Cloud Image Data ]                 |  |
+|  |                                                             |  |
+|  +-------------------------------------------------------------+  |
++-------------------------------------------------------------------+
+
+```
+
+* **Top Section (Upload Form):** User yahan se apne local computer se koi bhi photo choose karke **Upload** button par click karta hai.
+* **Backend Flow:** Node.js server AWS SDK ke zariye file le kar S3 bucket mein push kar deta hai.
+* **Bottom Section (Images Display Area):** Server S3 bucket mein parhi tamaam images ki list mangwata hai aur unhe direct S3 ke HTTPS link se browser par display karwa deta hai (jaise Figure 7.4 mein aasmaan aur badalon wali image show ho rahi hai).
+
+---
+
+## Reviewing code access S3 with SDK
+
+App ke chalne ke baad, writer code ke main hisson ko breakdown karke samjhata hai ke JavaScript SDK se S3 kaise control hota hai.
+
+---
+
+### UPLOADING AN IMAGE TO S3
+
+Image upload karne ke liye SDK ka `putObject()` function istemal hota hai.
+
+#### Listing 7.1 Uploading an image with the AWS SDK for S3
+
+```javascript
+const AWS = require('aws-sdk'); // AWS SDK library ko load karta hai
+const uuid = require('uuid');
+
+const s3 = new AWS.S3({ // S3 client object ko configuration ke sath initialize karta hai
+  'region': 'us-east-1'
+});
+
+const bucket = process.argv[2]; // Command line parameter se bucket name read karta hai
+
+async function uploadImage(image, response) {
+  try {
+    await s3.putObject({ // S3 API ko putObject call bhejta hai
+      Body: image, // Image ka raw binary data
+      Bucket: bucket, // Target S3 bucket ka naam
+      Key: uuid.v4(), // Unique random filename generate karta hai (e.g., 123e4567-e89b...)
+      ACL: 'public-read', // Object ko publically readable banata hai
+      ContentLength: image.byteCount, // Image file ka exact size in bytes
+      ContentType: image.headers['content-type'] // File type (e.g., image/png ya image/jpeg)
+    }).promise();
+    
+    response.redirect('/'); // Upload hone ke baad homepage par redirect karta hai
+  } catch (err) { // Error Handling
+    console.error(err);
+    response.status(500);
+    response.send('Internal server error.'); // Error aane par HTTP 500 status code bhejta hai
+  }
+}
+
+```
+
+#### Detailed Technical & Code Breakdown:
+
+* `require('aws-sdk')`: AWS SDK module ko script mein import karta hai.
+* `new AWS.S3({ 'region': 'us-east-1' })`: Specific AWS region (`us-east-1`) ke sath S3 API client instanciate karta hai.
+* `uuid.v4()`: Har file ke liye ek Globally Unique Identifier generate karta hai. Is se yeh faida hota hai ke do users agar same naam ki file (e.g., `photo.jpg`) upload karein, toh wo ek doosre ko overwrite nahi karti.
+* `Body: image`: File ka actual binary stream.
+* `ACL: 'public-read'`: Object Level Access Control List jo internet par har kisi ko yeh photo dekhne ki permission deti hai.
+* `.promise()`: Asynchronous request ko handle karta hai taake Node.js thread block na ho.
+
+> **2026 Modern Architectural Note:**
+> Code mein AWS SDK v2 (`aws-sdk`) use hua hai. Modern Node.js applications mein modular **AWS SDK v3** (`@aws-sdk/client-s3`) istemal hota hai jo light-weight hai aur `S3Client` + `PutObjectCommand` ka pattern use karta hai. Is ke ilawa, modern S3 buckets mein default security permissions ki wajha se `ACL: 'public-read'` ki bajaye **Bucket Policies** ya **Presigned URLs** se access diya jata hai.
+
+---
+
+### LISTING ALL THE IMAGES IN THE S3 BUCKET
+
+Bucket mein kaun kaun si images parhi hain, unki list mangwane ke liye SDK ka `listObjects()` function istemal hota hai.
+
+#### Listing 7.2 Retrieving all the image locations from the S3 bucket
+
+```javascript
+const bucket = process.argv[2]; // Command line argument se bucket ka naam nikalta hai
+
+async function listImages(response) {
+  try {
+    let data = await s3.listObjects({ // S3 bucket ke andar maujood objects ki list mangwata hai
+      Bucket: bucket // Faqat Target Bucket Name dena zaroori hai
+    }).promise();
+
+    let stream = mu.compileAndRender( // HTML template (index.html) ko data ke sath compile karta hai
+      'index.html',
+      {
+        Objects: data.Contents, // Objects ka array jismein 'Key' aur 'Size' metadata hota hai
+        Bucket: bucket
+      }
+    );
+    stream.pipe(response); // Render hue HTML page ko browser tak stream kardeta hai
+  } catch (err) { // Error Handling
+    console.error(err);
+    response.status(500);
+    response.send('Internal server error.');
+  }
+}
+
+```
+
+#### Detailed Technical & Code Breakdown:
+
+* `s3.listObjects({ Bucket: bucket })`: S3 API ko request bhejta hai. S3 response mein ek JSON object deta hai jismein `Contents` naam ka array hota hai.
+* `data.Contents`: Iss array mein bucket ke tamaam objects ke metadata (jaise Object Key, LastModified date, Size) hote hain. *Dhyan rahe ke iss list request mein actual image data (bytes) download nahi hote, sirf list aati hai.*
+* `mu.compileAndRender(...)`: Mustache templating engine ka istemal karke HTML page tayyar karta hai taake array items ko webpage par visually render kiya ja sake.
+
+---
+
+### Listing 7.3 Template to render the data as HTML
+
+HTML template file (`index.html`) mein data ko dikhane ke liye dynamic code use kiya gaya hai:
+
+```html
+<h2>Images</h2>
+{{#Objects}} <!-- S3 se aaye hue 'Objects' array par loop chalata hai -->
+  <p>
+    <img src="https://s3.amazonaws.com/{{Bucket}}/{{Key}}" width="400px" >
+  </p> <!-- Har Object ki Key aur Bucket name ko URL mein interpolate karke Direct Image URL banata hai -->
+{{/Objects}}
+
+```
+
+#### Detailed Template Breakdown:
+
+* `{{#Objects}} ... {{/Objects}}`: Loop structure. Kitni bhi images bucket mein hongi, yeh section utni baar repeat hoga.
+* `[https://s3.amazonaws.com/](https://s3.amazonaws.com/){{Bucket}}/{{Key}}`: S3 Object ka direct public HTTPS URL.
+* E.g., agar bucket `awsinaction-sdk-hashim` hai aur Key `uuid-1234.png` hai, toh browser direct `[https://s3.amazonaws.com/awsinaction-sdk-hashim/uuid-1234.png](https://s3.amazonaws.com/awsinaction-sdk-hashim/uuid-1234.png)` se image fetch karega.
+
+
+
+---
+
+### Cleaning up
+
+Application ka practical complete hone ke baad extra cost se bachne ke liye S3 bucket ko complete delete kar dein. Terminal par yeh command chalayein:
+
+```bash
+aws s3 rb --force s3://awsinaction-sdk-$yourname
+
+```
+
+* `--force` parameter bucket ke andar SDK ke zariye upload ki gayi tamaam images ko pehle automatically clear karega aur phir main bucket ko delete karega.
+
+
+---
