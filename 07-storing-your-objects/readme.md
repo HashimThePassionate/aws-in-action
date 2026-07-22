@@ -1212,3 +1212,134 @@ aws s3 rb --force s3://$BucketName
 
 
 ---
+
+## Protecting data from unauthorized access
+
+Har thode din baad khabron mein yeh sunne ko milta hai ke kisi bari company ya organization ka confidential aur sensitive data Amazon S3 se accidentally leak ho gaya.
+
+### S3 Data Leak Kyun Hota Hai?
+
+Is chapter mein aap ne dekha ke S3 do bilkul mukhtalif (opposite) kaamon ke liye istemal hota hai:
+
+1. **Private Data Store Karna:** Jaise aap ke personal computer ka sensitive backup data.
+2. **Public Data Serve Karna:** Jaise aap ki static website ka HTML, CSS, aur images.
+
+> **Bacho ki tarah samjhein:**
+> Farz karein aap ke paas ek hi ghar mein do kamre hain. Ek kamre mein aap ka private khazana (sensitive data) hai aur doosre kamre mein dukan (public website) hai. Agar aap dukan ka darwaza kholte waqt ghalti se private khazane wale kamre ka darwaza bhi khula chor dein, toh raste se guzarne wala har banda aap ka khazana nikal sakta hai! S3 mein ghalt configuration ki waja se bilkul yahi hota hai.
+
+---
+
+### Is Khatre Ko Kaise Kam Karein? (Block Public Access)
+
+Is data leak ke risk ko khatam karne ke liye AWS humein **Block Public Access** ka feature deta hai. Writer recommend karta hai ke aap apne poore AWS account level par hi public access ko block kar dein.
+
+#### Account-Level Par Block Public Access On Karne Ke 3 Steps:
+
+1. **Console Open Karein:** AWS Management Console mein jayein aur **S3** service par click karein.
+2. **Setting Select Karein:** Left navigation menu se **Block Public Access settings for this account** par click karein.
+3. **Block All Enable Karein:** **Block all public access** ke checkbox ko tick karein aur **Save Changes** button par click kar dein.
+
+---
+
+### Figure 7.5 Ka Step-by-Step Breakdown
+
+Writer ne **Figure 7.5** mein S3 Management Console ka screenshot dikha kar is poore process ko clear kiya hai:
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+
+* **Subnavigation Link:** Left menu se direct account-level settings par le jata hai.
+* **Block All Public Access Checkbox:** Is ek box ko tick karne se S3 ki chaar alag-alag public access vulnerabilities ek sath block ho jati hain.
+* **Save Changes Button:** Setting ko apply karne ke liye click karna lazmi hai, jiske baad AWS confirm karne ke liye modal dikhata hai.
+
+---
+
+### Crucial Trade-off (Ghor Talab Baat)
+
+* **Impact of Account-Level Block:** Agar aap poore account par **Block All Public Access** enable kar denge, toh aap ke account ki **tamaam S3 static websites aur public link access kaam karna band kar dengi**.
+* **Flexible Solution:** Agar aap ko apne account mein public websites bhi chalani hain aur private backups bhi rakhne hain, toh account-level par isay turn off rakhein, aur **sirf un individual buckets par Block Public Access turn on karein jin mein sensitive data hai**.
+
+> **Writer Ka Blog Link:** S3 security par mazeed deep advice ke liye writer ne apne blog ka link share kiya hai: `[https://cloudonaut.io/s3-security-best-practice/](https://cloudonaut.io/s3-security-best-practice/)` (*"How to Avoid S3 Data Leaks?"*).
+
+---
+
+## Optimizing performance
+
+By default, Amazon S3 ki performance limits bohot zabardast hoti hain:
+
+* **Max Writes:** $3,500$ writes (PUT, POST, DELETE requests) per second.
+* **Max Reads:** $5,500$ reads (GET, HEAD requests) per second.
+
+Lekin agar aap ki application ko is se bhi zyada speed/throughput chahiye (maslan high-traffic apps ya big data processing), toh aap ko object keys ke naming scheme (prefixes) par dhyan dena parega.
+
+---
+
+### Prefix Kya Hota Hai? (S3 Flat Architecture)
+
+S3 mein koi asli physical folders ya directories nahi hoti hain—tamam data ek flat structure mein hota hai. Folders ka ahsaas dilane ke liye hum key name mein slash (`/`) delimiter ka istemal karte hain. Slash se pehle wala hissa **Prefix** kehlata hai.
+
+* **Single Prefix Example:**
+* `archive/image1.png`
+* `archive/image2.png`
+* `archive/image3.png`
+* `archive/image4.png`
+
+
+
+In tamam files ka prefix **`archive/`** hai.
+
+---
+
+### Performance Bottleneck Rules
+
+AWS S3 ki **$3,500$ writes aur $5,500$ reads per second ki limit har partitioned prefix par lagu hoti hai**.
+
+* **Problem:** Agar aap ki $10,000$ applications ek hi waqt mein `archive/` prefix wali files ko read karne ki koshish karengi, toh S3 maximum $5,500$ requests per second hi handle karega, baki requests slow ya throttle ho jayengi.
+
+---
+
+### Solution: Multiple Prefixes Se Performance Double Karna
+
+Performance ko optimize karne ke liye objects ko alag alag prefixes mein distribute kar diya jata hai.
+
+* **Multi-Prefix Example:**
+* `archive/2021/image1.png` (Prefix 1: `archive/2021/`)
+* `archive/2021/image2.png` (Prefix 1: `archive/2021/`)
+* `archive/2022/image3.png` (Prefix 2: `archive/2022/`)
+* `archive/2022/image4.png` (Prefix 2: `archive/2022/`)
+
+
+
+> **Bacho ki tarah samjhein:**
+> Farz karein ek hi counter (Prefix) par 5,500 log khade hain. Aagay line bohot lamba ho jayegi. Lekin agar aap do alag counters (`2021` aur `2022`) khol dein, toh dono counters par 5,500 - 5,500 log ek sath apna kaam karwa sakte hain!
+
+---
+
+### Figure 7.6 Ka Step-by-Step Breakdown
+
+Writer ne **Figure 7.6** mein prefix partitioning se performance improve karne ka tareeqa dikhaya hai:
+
+<div align="center">
+  <img src="./images/06.png" width="600"/>
+</div>
+
+
+* **Top Box (Single Partition):** Jab tamam objects `archive` prefix share karte hain, toh S3 unhe ek hi partition par rakhta hai. Total limit **$3,500$ writes / $5,500$ reads** par ruk jati hai.
+* **Bottom Boxes (Distributed Partitions):** Jab objects ko `archive-2021/` aur `archive-2022/` (ya `archive/2021/` aur `archive/2022/`) mein baant diya jata hai, toh S3 backend par do alag partitions bana deta hai. Is se overall performance double ho kar **$7,000$ writes aur $11,000$ reads per second** tak pohanch jati hai.
+
+---
+
+## Summary
+
+Chapter 7 ke tamam main concepts ka mukammal nichod:
+
+* **Object Store Fundamentals:** Object store mein har file ek object hoti hai jiske 3 hissey hote hain: Unique Identifier (Key), Metadata (file ki properties), aur Actual Content (Data bytes). Is mein images, documents, ya executable files store ki ja sakti hain.
+* **Scalability & Pricing:** Amazon S3 virtually unlimited storage capacity deta hai jo **Pay-per-use** model par kaam karti hai. Aap se sirf data store karne aur read/write requests chalane ke paise liye jate hain.
+* **Access Methods & Archiving:** S3 sirf HTTP(S) API par kaam karta hai. Isay CLI, SDKs, ya Console se access kiya ja sakta hai. Data ko kam qeemat par lambe arse ke liye store karne ke liye **Glacier Instant Retrieval**, **Glacier Flexible Retrieval**, aur **Glacier Deep Archive** classes munasib hain.
+* **Stateless Server Architecture:** S3 ko applications mein integrate karne se server **Stateless** ban jata hai, kyun ke server ko local disk par files save nahi karni partin.
+* **Security Standards:** Data leak se bachne ke liye account-level par ya kam se kam sensitive data wali buckets par **Block Public Access** hamesha enable rakhein.
+* **Performance Optimization:** High performance aur heavy workloads ke liye hamesha unique key prefixes ka istemal karein taake requests alag alag S3 partitions par spread ho sakein.
+
+---
