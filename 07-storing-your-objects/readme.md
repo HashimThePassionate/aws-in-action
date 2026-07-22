@@ -1016,3 +1016,199 @@ aws s3 rb --force s3://awsinaction-sdk-$yourname
 
 
 ---
+
+## Using S3 for static web hosting
+
+Traditional websites chalane ke liye humein virtual machines (jaise EC2 servers) chalane parte hain. Lekin agar aap ki website **Static** hai, toh aap ko koi server chalane ya maintain karne ki bilkul zaroorat nahi hai. S3 direct aap ki static website ko host kar sakta hai.
+
+### Writer Ki Real-World Example
+
+Writer batata hai ke unhone apna mashhoor blog **Cloudonaut** (`[https://cloudonaut.io](https://cloudonaut.io)`) May 2015 mein shuru kiya tha. Un ke blog posts (jaise *"ECS vs. Fargate"*, *"Advanced AWS Networking"*, aur *"CloudFormation vs. Terraform"*) ko **2,000,000 (20 lakh) se zyada baar parha ja chuka hai**. Itne zyada traffic ke bawajood unhone koi EC2 server nahi chalaya, balkay ek Static Site Generator **Hexo** (`[https://hexo.io](https://hexo.io)`) ke zariye poori website S3 par host ki. Yeh tareeqa bohot sasta, scalable, aur bina kisi maintenance ke chalta hai.
+
+> **Static vs Dynamic Website (Bacho Ki Tarah Samjhein):**
+> * **Static Website:** Ek chapi hui kitaab ki tarah hoti hai. Jo text aur pictures HTML, CSS, JavaScript, images (PNG/JPG), ya videos mein likh di gayi hain, wo har visitor ko ek jaisi hi dikhengi. S3 aisi static files ko bina kisi server ke direct internet par dikha sakta hai.
+> * **Dynamic Website:** Ek live teacher ki tarah hoti hai jo har student ke sawal ke mutabiq board par naya jawab likhta hai. Dynamic websites mein server-side scripts (PHP, JSP, Python) chalte hain. **S3 par server-side code (jaise WordPress ya PHP) nahi chal sakta.**
+> 
+> 
+
+---
+
+### S3 Static Web Hosting Ke Main Features
+
+Writer S3 web hosting ke 3 aham features batata hai:
+
+1. **Custom Index Document aur Error Document:** Aap default home page (e.g., `index.html`) aur custom 404 error page set kar sakte hain.
+2. **URL Redirects:** Aap purane URL ko naye URL par forward kar sakte hain (e.g., `/img/old.png` ki request ko `/img/new.png` par bhej dena).
+3. **Custom Domain Linking:** Aap S3 ke ajeeb se address ke bajaye apna personal domain (e.g., `mybucket.andreaswittig.info`) S3 bucket ke sath jod sakte hain.
+
+---
+
+## Increasing speed by using a CDN
+
+Static content ki loading speed ko tez karne ke liye **CDN (Content Delivery Network)** istemal kiya jata hai.
+
+* **CDN Kaise Kaam Karta Hai?** CDN duniya bhar ke alag alag shahrion mein chote caching servers (nodes/edge locations) laga deta hai. Jab koi user aap ki website kholta hai, toh request S3 tak jane ke bajaye user ke sab se kareebi node se answer hoti hai, jis se website mili-seconds mein khul jati hai.
+* **Amazon CloudFront:** AWS ki apni CDN service ka naam **Amazon CloudFront** hai. CloudFront user aur S3 bucket ke beech mein baith kar data serve karta hai.
+
+> **Bacho Ki Tarah Samjhein:**
+> Farz karein aap ki original khilonyon ki dabba (S3) America mein hai. Pakistan ka bacha jab khilona mangwayega toh aane mein 10 din lagengi. CDN ka matlab hai ke aap ne Karachi aur Lahore mein bhi dabba ki copies rakh dein. Ab Pakistan ke bache ko 1 minute mein Karachi se hi khilona mil jayega!
+
+---
+
+## Creating a bucket and uploading a static website
+
+Step-by-step website setup karne ke liye pehle S3 bucket banayein aur file upload karein:
+
+### Step 1: Bucket Create Karna
+
+Terminal mein command chalayein:
+
+```bash
+aws s3 mb s3://$BucketName
+
+```
+
+* `$BucketName`: Apni pasand ka globally unique name likhein.
+
+---
+
+### Step 2: Placeholder HTML Download aur Upload Karna
+
+Writer ne ek test HTML file tayyar ki hai. Download karne ke baad usay S3 par upload karne ke liye yeh command chalayein:
+
+```bash
+aws s3 cp $pathToPlaceholder/helloworld.html s3://$BucketName/helloworld.html
+
+```
+
+#### Code Breakdown:
+
+* `aws s3 cp`: File copy karne ki command.
+* `$pathToPlaceholder/helloworld.html`: Aap ke computer ka local file path.
+* `s3://$BucketName/helloworld.html`: S3 bucket ka target path jahan file upload hogi.
+
+---
+
+## Configuring a bucket for static web hosting
+
+By default, S3 bucket **100% private** hoti hai aur sirf bucket owner files parh sakta hai. Website chalane ke liye zaruri hai ke dunya ka har banda aap ki HTML files ko read kar sake. Is ke liye hum **Bucket Policy** istemal karte hain.
+
+### Listing 7.4 Bucket policy allowing read-only access to every object in a bucket
+
+Writer ki di gayi JSON policy bucket ke tamaam objects ko public-read permission deti hai:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AddPerm",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::$BucketName/*"
+      ]
+    }
+  ]
+}
+
+```
+
+#### Detailed Policy Breakdown:
+
+* `"Version": "2012-10-17"`: Policy ka standard language version.
+* `"Effect": "Allow"`: Access grant/allow kar raha hai.
+* `"Principal": "*"`: Asterisk (`*`) ka matlab hai **duniya ka har insaan** (public access).
+* `"Action": ["s3:GetObject"]`: Sirf file ko read/download karne ki ijazat (`GetObject`) di ja rahi hai. Data write ya delete karne ki permission nahi hai.
+* `"Resource": ["arn:aws:s3:::$BucketName/*"]`: Is policy ka itlaaq bucket ke andar maujood tamaam objects (`/*`) par hoga.
+
+---
+
+### Policy Apply Karna aur Web Hosting Enable Karna
+
+#### Policy Put Command:
+
+```bash
+aws s3api put-bucket-policy --bucket $BucketName --policy file://$pathToPolicy/bucketpolicy.json
+
+```
+
+* `put-bucket-policy`: Is CLI command se JSON policy file bucket par attach ho jati hai.
+
+#### Web Hosting Enable Command:
+
+```bash
+aws s3 website s3://$BucketName --index-document helloworld.html
+
+```
+
+#### Command Breakdown:
+
+* `aws s3 website`: Bucket ke static web hosting feature ko TURN ON karta hai.
+* `--index-document helloworld.html`: AWS ko batata hai ke jab koi user root domain par aaye toh kaun si HTML file show karni hai.
+
+---
+
+## Accessing a website hosted on S3
+
+Configuration ke baad, aap browser ke zariye S3 website endpoint ko access kar sakte hain.
+
+* **S3 Website Endpoint Format:**
+Region `us-east-1` ke liye endpoint format yeh hota hai:
+`http://$BucketName.s3-website-us-east-1.amazonaws.com`
+* **Example:**
+Agar bucket ka naam `awesomebucket` hai, toh full URL yeh hoga:
+`[http://awesomebucket.s3-website-us-east-1.amazonaws.com](http://awesomebucket.s3-website-us-east-1.amazonaws.com)`
+
+> **System Behavior Note:**
+> Ghor karein ke S3 Static Web Hosting ka direct URL hamesha **`http://`** se shuru hota hai (HTTPS nahi hota) aur URL mein **`.s3-website-`** ka shamil hona lazmi hai.
+
+---
+
+## Linking a custom domain to an S3 bucket
+
+S3 ke lamba aur ajeeb URL ke bajaye agar aap apna domain (e.g., `awsinaction.example.com`) use karna chahte hain, toh aap ko apne DNS manager (jaise **AWS Route 53**) mein ek **CNAME record** add karna hota hai jo S3 endpoint ki taraf point kare.
+
+### CNAME Ke 2 Strict Rules (S3 Architecture Constraints)
+
+1. **Bucket Name Must Match Domain Name:**
+Bucket ka naam bilkul exact wohi hona chahiye jo aap ka CNAME record name hai.
+* *Example:* Agar domain `awsinaction.example.com` hai, toh S3 bucket ka naam bhi **`awsinaction.example.com`** hi rakhna parega.
+
+
+2. **Primary / Apex Domain Limitation:**
+CNAME record primary domains (jaise `example.com`) par kaam nahi karta. Is ke liye subdomain (jaise `[www.example.com](https://www.example.com)` ya `blog.example.com`) istemal karna padta hai. Agar primary domain (`example.com`) link karna ho, toh Route 53 ka special **Alias Record** istemal hota hai.
+
+#### Important HTTP vs HTTPS Trade-off:
+
+* **Limitations:** S3 custom domain hosting **sirf HTTP support karti hai**. Direct S3 custom domain par HTTPS SSL/TLS certificate nahi lag sakta.
+* **Modern Solution:** Production websites ke liye **AWS CloudFront** ko S3 ke aage lagaya jata hai. CloudFront browser se HTTPS connection handle karta hai aur backend par S3 se content fetch karta hai.
+
+---
+
+## 2026 Modern AWS S3 Hosting Context
+
+Modern Cloud Security standards ke mutabiq static web hosting ke liye in baaton ka dhyan rakha jata hai:
+
+* **S3 Block Public Access Override:** Pehle bucket par **Block Public Access** settings ko disable karna parta hai, warna S3 Bucket Policy apply hote waqt `Access Denied` error dega.
+* **Origin Access Control (OAC):** Modern architectures mein S3 buckets ko publically open karne ki bajaye **Private** rakha jata hai aur **CloudFront + OAC (Origin Access Control)** ke zariye securely content serve kiya jata hai, taake S3 URL direct public par expose na ho.
+
+---
+
+## Cleaning up
+
+Practical complete hone ke baad extra charges se bachne ke liye bucket ko delete kar dein:
+
+```bash
+aws s3 rb --force s3://$BucketName
+
+```
+
+* `rb`: Remove Bucket command.
+* `--force`: Bucket ke andar ki tamaam HTML/image files ko automatically delete karke bucket ko completely remove kardega.
+
+
+---
