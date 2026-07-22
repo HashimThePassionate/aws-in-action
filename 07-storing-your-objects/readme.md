@@ -503,3 +503,261 @@ Writer is maslay ka hal AWS Web Browser Dashboard (Management Console) se step-b
 7. **Delete Bucket:** Ab **Delete** button par click karein aur bucket name type karke confirm kar dein. Bucket mukammal taur par remove ho jayegi.
 
 ---
+
+## Archiving objects to optimize costs
+
+S3 par data store karne ki cost ko kam se kam karna cloud architecture ka ek bohot aham hissa hai.
+
+S3 Standard storage par **1 TB data store karne ka kharcha taqriban $23 per month** aata hai. Agar aap ke paas terabytes mein aisa data hai jise aap roz roz istemal nahi karte, toh $23 per month kafi mehnga ho sakta hai. AWS humein **S3 Glacier Storage Classes** deta hai jis se hum **storage cost ko 95% tak kam** kar sakte hain.
+
+> **Bacho ki tarah samjhein:**
+> Farz karein aap ke paas bohot purani khilonyon ki kitabein hain jinhe aap roz nahi parhte. Agar aap unhe apne kamre ke samne wale mez (S3 Standard) par rakhenge toh jagah ghiregi aur kamra mehnga parega. Lekin agar aap unhe ghar ke purane store room (Glacier Archiving) mein rakh dein, toh kamre mein jagah khali ho jayegi aur store room ka koi kharcha bhi nahi hoga. Bas jab kitaab chahiye hogi, toh store room se nikalne mein thoda waqt lagega.
+
+---
+
+### Table 7.1 Differences between storing data with S3 and Glacier
+
+Writer ne S3 Standard aur Glacier Archiving storage classes ke darmiyan farq ko samajhane ke liye yeh table diya hai:
+
+| Feature / Metric | S3 Standard | S3 Glacier Instant Retrieval | S3 Glacier Flexible Retrieval | S3 Glacier Deep Archive |
+| --- | --- | --- | --- | --- |
+| **Storage costs for 1 GB per month in US East (N. Virginia)** | $0.023 | $0.004 | $0.0036 | $0.00099 |
+| **Costs for 1,000 write requests** | $0.005 | $0.02 | $0.03 | $0.05 |
+| **Costs for retrieving data** | Low | High | High | Very High |
+| **Accessibility** | Milliseconds | Milliseconds | 1–5 minutes / 3–5 hours / 5–12 hours | 12 hours / 48 hours |
+| **Durability objective** | 99.999999999% | 99.999999999% | 99.999999999% | 99.999999999% |
+| **Availability objective** | 99.99% | 99.9% | 99.99% | 99.99% |
+
+#### Table Ka Step-by-Step Breakdown aur Trade-offs:
+
+1. **Storage Costs (Mahana Storage Ka Kharcha):**
+* **S3 Standard:** $0.023 per GB (Sab se mehnga).
+* **S3 Glacier Deep Archive:** $0.00099 per GB (Sab se sasta—taqriban 95% bachat!).
+
+
+2. **Costs for 1,000 write requests (Upload/Write Karne Ki Cost):**
+* High-tier archiving mein initial write request thodi mehngi hoti hai ($0.05 vs $0.005), lekin long-term storage itni sasti hai ke yeh cost recover ho jati hai.
+
+
+3. **Costs for retrieving data (Data Wapas Nikalne Ka Kharcha):**
+* **S3 Standard:** Low (Data download karna bohot sasta hai).
+* **Glacier Classes:** High / Very High (Data ko archive se wapas hot storage mein laana mehnga hota hai).
+
+
+4. **Accessibility (Data Milne Ka Waqt):**
+* **S3 Standard & Glacier Instant Retrieval:** Milliseconds (Palkein jhapakne mein data mil jata hai).
+* **Glacier Flexible Retrieval:** Option ke mutabiq 1–5 minutes (Expedited), 3–5 hours (Standard), ya 5–12 hours (Bulk).
+* **Glacier Deep Archive:** 12 hours se 48 hours tak ka waqt lagta hai.
+
+
+5. **Durability & Availability:**
+* Saari storage classes mein data ki safety (**Durability**) same hai: **99.999999999% (11 Nines)**. Data kabhi zaya nahi hoga.
+
+
+
+---
+
+### The Catch (Trade-offs Aur Sharaait)
+
+Aap soch rahe honge ke agar Glacier itna sasta hai toh hum sara data Glacier mein hi kyun na rakh dein? Writer is ke **do bade trade-offs (sharaait)** batata hai:
+
+1. **Retrieval Cost High Hai (Data Nikalna Mehnga Hai):**
+* **Writer ki Example:** Agar aap 1 TB data (jo 1,000 files par mushtamil hai) S3 Glacier Deep Archive mein store karte hain, toh store karne ka kharcha toh kuch cents aayega. Lekin jab aap us 1 TB data ko wapas restore/download karenge, toh aap ko taqriban **$120** ki retrieval fee deni paregi!
+
+
+2. **Access Immediate Nahi Hai (Waqt Lagta Hai):**
+* S3 Standard ki tarah aap button daba kar immediately file download nahi kar sakte. Flexible Retrieval ya Deep Archive se file nikalne mein **1 minute se le kar 48 ghante** tak intazaar karna parta hai.
+
+
+
+#### Scenario Example:
+
+Writer ek real-world scenario batata hai: Farz karein aap ko tax ya company ke legal documents 5 saal ke liye archive karne hain. Aap ko pata hai ke agle 5 saalon mein shayad 5 baar bhi is document ki zaroorat na pare. Aise scenario ke liye Glacier Archiving bilkul perfect hai.
+
+---
+
+### Example not covered by Free Tier
+
+* **Cost Warning:** Yeh practical AWS Free Tier mein shaamil nahi hai.
+* **Expected Cost:** Is example ko chalanay par aap ka **$1 se bhi bohot kam (chund cents)** kharcha aayega.
+* **Instruction:** Extra charges se bachne ke liye practical khatam karne ke baad resources ko 1-2 din ke andar delete kar dein.
+
+---
+
+### Hands-on Practical Breakdown (Step-by-Step CLI Archiving)
+
+#### Step 1: Archiving Ke Liye Naya Bucket Banana
+
+Sub se pehle terminal par ek naya S3 bucket banayein:
+
+```bash
+aws s3 mb s3://awsinaction-archive-$yourname
+
+```
+
+Writer ki example:
+
+```bash
+aws s3 mb s3://awsinaction-archive-awittig
+
+```
+
+* `aws s3 mb`: Naya S3 bucket create karta hai.
+
+---
+
+#### Step 2: File Ko GLACIER Storage Class Ke Sath Upload Karna
+
+Ab local machine se koi document S3 par upload karein aur us ki storage class `GLACIER` set karein:
+
+```bash
+aws s3 cp --storage-class GLACIER $path s3://awsinaction-archive-$yourname/
+
+```
+
+Writer ki example command:
+
+```bash
+aws s3 cp --storage-class GLACIER /Users/andreas/Desktop/taxstatement-2022-07-01.pdf s3://awsinaction-archive-awittig/
+
+```
+
+* `--storage-class GLACIER`: Yeh parameter AWS ko batata hai ke is file ko normal S3 Standard mein mat rakho, balkay isay **S3 Glacier Flexible Retrieval** storage class mein direct freeze/archive kar do.
+
+---
+
+#### Step 3: Direct Download Ki Koshish Karna (Failure Step)
+
+Jab file Glacier mein chali jati hai, toh aap usay direct download nahi kar sakte. Check karne ke liye yeh command chalayein:
+
+```bash
+aws s3 cp s3://awsinaction-archive-$yourname/$objectkey $path
+
+```
+
+Writer ki example error output:
+
+```text
+$ aws s3 cp s3://awsinaction-archive-awittig/taxstatement-2022-07-01.pdf ~/Downloads
+warning: Skipping file s3://awsinaction-archive-awittig/taxstatement-2022-07-01.pdf. Object is of storage class GLACIER. Unable to perform download operations on GLACIER objects. You must restore the object to be able to perform the operation.
+
+```
+
+#### System Error Breakdown:
+
+* **Skipping file... Object is of storage class GLACIER:** AWS CLI ne file ko download karne se inkaar kar diya kyun ke file Glacier cold storage mein parhi hai.
+* **Solution:** File ko download karne se pehle AWS ko **Restore Request** bhejni padti hai taake AWS us file ki ek temporary copy hot storage mein tayyar kare.
+
+---
+
+#### Step 4: Object Restoration Request Bhejnat (`aws s3api restore-object`)
+
+Normal mode mein Glacier Flexible Retrieval file restore karne mein **3 se 5 ghante** leta hai. Fast testing ke liye hum **Expedited Retrieval** tier use karenge (jis par chand cents extra lagte hain aur file 1 se 5 minute mein mil jati hai):
+
+```bash
+aws s3api restore-object --bucket awsinaction-archive-$yourname --key $objectkey --restore-request Days=1,,GlacierJobParameters={"Tier"="Expedited"}
+
+```
+
+Writer ki example command:
+
+```bash
+aws s3api restore-object --bucket awsinaction-archive-awittig --key taxstatement-2022-07-01.pdf --restore-request Days=1,,GlacierJobParameters={"Tier"="Expedited"}
+
+```
+
+* `aws s3api restore-object`: Low-level API command jo Glacier object ko unfreeze/restore karne ki request bhejti hai.
+* `Days=1`: Restore hui file S3 par kitne din tak download ke liye available rahegi (1 din baad temporary copy delete ho jayegi, asal archived object wahi rahega).
+* `GlacierJobParameters={"Tier"="Expedited"}`: Direct instruction ke mujhe file 1-5 minutes ke andar fast speed par chahiye.
+
+---
+
+#### Step 5: Restore Process Ka Status Check Karna (`head-object`)
+
+Restore request bhejane ke baad hum check karenge ke kya file download ke liye tayyar ho chuki hai ya nahi:
+
+```bash
+aws s3api head-object --bucket awsinaction-archive-$yourname --key $objectkey
+
+```
+
+#### Phase A: Status Jab Restoration Chal Rahi Ho (Ongoing)
+
+Jab tak file background mein restore ho rahi hoti hai, JSON output aisa dikhta hai:
+
+```json
+{
+  "AcceptRanges": "bytes",
+  "Expiration": "expiry-date=\"Wed, 12 Jul 2023 ...\"",
+  "Restore": "ongoing-request=\"true\"",
+  "LastModified": "2022-07-11T09:26:12+00:00",
+  "ContentLength": 112,
+  "ETag": "\"c25fa1df1968993d8e647c9dcd352d39\"",
+  "ContentType": "binary/octet-stream",
+  "Metadata": {},
+  "StorageClass": "GLACIER"
+}
+
+```
+
+* `"Restore": "ongoing-request=\"true\""`: Is key ka matlab hai ke AWS abhi backend par file ko cold storage se nikal kar hot storage par la raha hai. Abhi download nahi kar sakte.
+
+#### Phase B: Status Jab Restoration Complete Ho Jaye
+
+1 se 5 minute baad jab aap dobara command chalayenge, toh JSON output change ho jayega:
+
+```json
+{
+  "AcceptRanges": "bytes",
+  "Expiration": "expiry-date=\"Wed, 12 Jul 2023 ...\"",
+  "Restore": "ongoing-request=\"false\", expiry-date=\"...\"",
+  "LastModified": "2022-07-11T09:26:12+00:00",
+  "ContentLength": 112,
+  "ETag": "\"c25fa1df1968993d8e647c9dcd352d39\"",
+  "ContentType": "binary/octet-stream",
+  "Metadata": {},
+  "StorageClass": "GLACIER"
+}
+
+```
+
+* `"Restore": "ongoing-request=\"false\""`: Is ka matlab hai ke restoration process khatam ho chuka hai aur temporary copy download ke liye bilkul tayyar hai!
+
+---
+
+#### Step 6: Restored Object Ko Download Karna
+
+Ab aap normal `aws s3 cp` command se file download kar sakte hain:
+
+```bash
+aws s3 cp s3://awsinaction-archive-$yourname/$objectkey $path
+
+```
+
+File ba-aasaani aap ke local folder (e.g., `~/Downloads`) mein download ho jayegi.
+
+---
+
+### Writer Ki Real-World Example Summary
+
+Writer batata hai ke woh aur unki team apne **MacBooks ka remote backup S3 Glacier Deep Archive par store karte hain**.
+
+* **Reasoning:** Woh apne data ka pehla backup ek local external hard drive par rakhte hain. Is liye AWS cloud se data wapas restore karne ki naubat shayad hi kabhi aaye (sirf tab jab ghar/office mein koi bohot badi aafat aaye aur local hard disk bhi tabaah ho jaye).
+* **Design Decision:** Kyun ke data wapas nikalne ke chances $1\%$ se bhi kam hain, is liye S3 Glacier Deep Archive sab se sasta aur behtareen solution hai.
+
+---
+
+### Cleaning up
+
+Practical khatam hone ke baad extra charges se bachne ke liye bucket ko tamam objects ke sath delete kar dein:
+
+```bash
+aws s3 rb --force s3://awsinaction-archive-$yourname
+
+```
+
+* `rb`: Remove Bucket.
+* `--force`: Pehle andar parhe hue sabhi objects ko delete karta hai aur phir bucket ko mita deta hai.
+
+
+---
