@@ -1804,227 +1804,97 @@ Outputs:
     Description: 'Backend public IP address'
 ```
 
-* **Detail Breakdown & Trade-off:**:
-Is CloudFormation template ke mukammal code ki section-by-section aur line-by-line tafseel neechay di gayi hai:
+* **Detail Breakdown**:
+Is CloudFormation template ke mukammal code ki line-by-line aur section-by-section tafseel bullet points mein neechay di gayi hai:
 
----
+### Template Header aur Parameters Section
 
-### Template Header
-
-* **`AWSTemplateFormatVersion: '2010-09-09'`**
-* Yeh CloudFormation template ka standard grammar version set karta hai.
-
-
-* **`Description: 'AWS in Action: chapter 5 (firewall 5)'`**
-* Is template ka taaruf aur maqsad wazeh karta hai ke yeh AWS in Action ke chapter 5 ka firewall example hai.
-
-
-
----
-
-### Parameters Section
-
-* **`Parameters:`**
-* Yahan se template ke andar aise inputs define kiye jate hain jo stack deploy karte waqt user se mange jate hain.
-
-
-* **`VPC:`**
-* User ko default VPC select karne ka option deta hai, jiska type `AWS::EC2::VPC::Id` hai.
-
-
-* **`Subnet:`**
-* User ko available subnets mein se koi ek Subnet ID select karne ka kehta hai, jiska type `AWS::EC2::Subnet::Id` hai.
-
-
+* **`AWSTemplateFormatVersion: '2010-09-09'`** : Yeh CloudFormation template ka standard version define karta hai jo grammar rules set karta hai.
+* **`Description: 'AWS in Action: chapter 5 (firewall 5)'`** : Is template ka taaruf aur maqsad wazeh karta hai ke yeh chapter 5 ka firewall example hai.
+* **`Parameters:`** : Stack deploy karte waqt user se input lene ke liye variables define karne ka block hai.
+* **`VPC:`** : User ko default VPC select karne ke liye prompt karta hai (`Type: 'AWS::EC2::VPC::Id'`).
+* **`Subnet:`** : User ko available subnets mein se koi ek Subnet ID select karne ka kehta hai (`Type: 'AWS::EC2::Subnet::Id'`).
 
 ---
 
 ### Mappings Section
 
-* **`Mappings:`**
-* Mukhtalif AWS regions ke lihaz se data (jaise AMI IDs) map karne ke liye istemal hota hai.
-
-
-* **`RegionMap:`**
-* Har region (`eu-north-1`, `ap-south-1`, `us-east-1` waghera) ke mukable mein wahan ki sahi aur authorized Amazon Machine Image (AMI) ID define ki gayi hai taake template jis region mein bhi chalaye, wahan ki sahi AMI utha le.
-
-
+* **`Mappings:`** : Mukhtalif regions ke lihaz se data (jaise AMI IDs) map karne ke liye istemal hota hai.
+* **`RegionMap:`** : Har region ke mukable mein wahan ki sahi Amazon Machine Image (AMI) ID define karta hai taake template jis region mein bhi chale, wahan ki correct AMI utha le.
 
 ---
 
 ### Resources: Security Groups
 
-#### 1. Proxy Security Group (`SecurityGroupProxy`)
-
-* **`SecurityGroupProxy:`**
-* Proxy server ke liye firewall (security group) ka logical naam hai.
-
-
-* **`Type: 'AWS::EC2::SecurityGroup'`**
-* CloudFormation ko batata hai ke ek EC2 Security Group create ki ja rahi hai.
-
-
-* **`GroupDescription: 'Allowing incoming HTTP and ICPM from anywhere.'`**
-* Is security group ka taaruf hai ke yeh HTTP aur ICMP traffic ko allow karti hai.
-
-
-* **`VpcId: !Ref VPC`**
-* Yeh firewall us VPC ke andar banegi jo user ne parameters mein select kiya hai.
-
-
-* **`SecurityGroupIngress:`**
-* Andar aane wale traffic (Inbound rules) ki list yahan shuru hoti hai.
-
-
-* **`- Description: 'allowing inbound ICMP traffic'`**
-* Pehle rule ki wazahat jo ping/ICMP traffic allow karta hai.
-* **`IpProtocol: icmp`**: Protocol ICMP set hai.
-* **`FromPort: '-1'` / `ToPort: '-1'**`: ICMP ke liye ports ki pabandi nahi hai.
-* **`CidrIp: '0.0.0.0/0'`**: Poori duniya (internet) se yeh traffic allow hai.
-
-
-* **`- Description: 'allowing inbound HTTP traffic'`**
-* Doosre rule ki wazahat jo web traffic allow karta hai.
-* **`IpProtocol: tcp`**: TCP protocol ka istemal.
-* **`FromPort: '80'` / `ToPort: '80'**`: Web traffic ke liye standard HTTP port 80.
-* **`CidrIp: '0.0.0.0/0'`**: Internet ke kisi bhi IP se port 80 par access khula hai.
-
-
-* **`Tags:`**
-* Is security group ka naam `Proxy` set karta hai.
-
-
-
-#### 2. Backend Security Group (`SecurityGroupBackend`)
-
-* **`SecurityGroupBackend:`**
-* Backend server ke liye firewall ka naam hai.
-
-
-* **`GroupDescription: 'Allowing incoming HTTP from the proxy.'`**
-* Wazahat karta hai ke yeh sirf proxy se aane wale HTTP traffic ko allow karegi.
-
-
-* **`VpcId: !Ref VPC`**
-* VPC reference.
-
-
-* **`SecurityGroupIngress:`**
-* Inbound traffic ka rule.
-* **`IpProtocol: tcp` / `FromPort: '80'` / `ToPort: '80'**`: Port 80 par HTTP traffic.
-* **`SourceSecurityGroupId: !Ref SecurityGroupProxy`**: **(Sab se ahem point)** Yeh rule kehta hai ke traffic sirf aur sirf `SecurityGroupProxy` se aa sakta hai, internet ya kisi aur jagah se direct backend tak nahi pahunch sakta.
-
-
-* **`Tags:`**
-* Name tag `Backend` set karta hai.
-
-
+* **`SecurityGroupProxy:`** : Proxy server ke liye firewall (security group) ka logical naam hai.
+* **`Type: 'AWS::EC2::SecurityGroup'`** : Ek naya EC2 Security Group create karta hai.
+* **`GroupDescription: 'Allowing incoming HTTP and ICPM from anywhere.'`** : Is security group ka taaruf hai.
+* **`VpcId: !Ref VPC`** : Parameter se mili hui VPC ID yahan assign hoti hai.
+* **`SecurityGroupIngress:`** : Inbound rules ki list yahan shuru hoti hai.
+* **`- Description: 'allowing inbound ICMP traffic'`** : Pehla rule jo ping/ICMP traffic allow karta hai (`IpProtocol: icmp`, `FromPort: '-1'`, `ToPort: '-1'`, `CidrIp: '0.0.0.0/0'`).
+* **`- Description: 'allowing inbound HTTP traffic'`** : Doosra rule jo port 80 par web traffic allow karta hai (`IpProtocol: tcp`, `FromPort: '80'`, `ToPort: '80'`, `CidrIp: '0.0.0.0/0'`).
+* **`Tags:`** : Is security group ka naam `Proxy` set karta hai.
+* **`SecurityGroupBackend:`** : Backend server ke liye doosri firewall ka logical naam hai.
+* **`GroupDescription: 'Allowing incoming HTTP from the proxy.'`** : Backend firewall ka taaruf.
+* **`SecurityGroupIngress:`** : Backend ka inbound rule.
+* **`- Description: 'allowing inbound HTTP traffic from proxy'`** : Port 80 par TCP traffic allow karta hai, lekin isme `SourceSecurityGroupId: !Ref SecurityGroupProxy` diya gaya hai jo yeh ensure karta hai ke traffic sirf aur sirf Proxy security group se aa sakta hai, poori duniya se nahi.
+* **`Tags:`** : Name tag `Backend` set karta hai.
 
 ---
 
 ### Resources: IAM Role aur Instance Profile
 
-* **`InstanceRole:`**
-* Ek IAM Role banata hai.
-* **`AssumeRolePolicyDocument:`** Trust policy hai jo batati hai ke yeh role sirf `ec2.amazonaws.com` service ke liye hai.
-* **`ManagedPolicyArns:`** Isme `AmazonSSMManagedInstanceCore` policy attach hai taake Systems Manager ke zariye instance ko manage kiya ja sake.
-
-
-* **`InstanceProfile:`**
-* `AWS::IAM::InstanceProfile` resource hai jo `InstanceRole` ko apne andar wrap karti hai taake EC2 instance is role ko apne sath link kar sake.
-
-
+* **`InstanceProfile:`** : Instance profile ka logical naam hai (`Type: 'AWS::IAM::InstanceProfile'`).
+* **`Roles:`** : Is profile ke sath jude hue roles ki list jisme `- !Ref InstanceRole` ke zariye role refer kiya gaya hai.
+* **`InstanceRole:`** : Ek naya IAM Role banata hai (`Type: 'AWS::IAM::Role'`).
+* **`AssumeRolePolicyDocument:`** : Trust policy hai jo batati hai ke yeh role sirf `ec2.amazonaws.com` service ke liye hai (`Action: 'sts:AssumeRole'`).
+* **`ManagedPolicyArns:`** : AWS ki official managed policy `AmazonSSMManagedInstanceCore` attach karta hai taake Systems Manager ke zariye instance ko manage kiya ja sake.
 
 ---
 
-### Resources: Proxy EC2 Instance (`Proxy`)
+### Resources: Proxy EC2 Instance
 
-* **`Proxy:`**
-* Proxy virtual machine ka logical naam hai.
-
-
-* **`Type: 'AWS::EC2::Instance'`**
-* Ek EC2 instance create karta hai.
-
-
-* **`ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]`**
-* Mappings ka istemal kar ke current region ki sahi AMI ID automatically uthata hai.
-
-
-* **`InstanceType: 't3.micro'`**
-* Instance ka hardware size (t3.micro) set karta hai.
-
-
-* **`IamInstanceProfile: !Ref InstanceProfile`**
-* Upar banayi gayi instance profile ko is instance ke sath jorti hai.
-
-
-* **`SecurityGroupIds: [- !Ref SecurityGroupProxy]`**
-* Proxy security group ko instance par apply karta hai.
-
-
-* **`SubnetId: !Ref Subnet`**
-* Selected subnet ke andar instance ko launch karta hai.
-
-
-* **`UserData:`**
-* Instance pehli dafa start hone par chalne wali script hai:
-* `trap ... ERR`: Agar script mein koi error aaye toh CloudFormation ko failure signal bhej dega.
+* **`Proxy:`** : Proxy virtual machine ka logical naam hai (`Type: 'AWS::EC2::Instance'`).
+* **`ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]`** : Mappings ka istemal kar ke current region ki sahi AMI ID automatically uthata hai.
+* **`InstanceType: 't3.micro'`** : Instance ka hardware size set karta hai.
+* **`IamInstanceProfile: !Ref InstanceProfile`** : Upar banayi gayi instance profile ko is instance ke sath jorti hai.
+* **`SecurityGroupIds: [- !Ref SecurityGroupProxy]`** : Proxy security group ko is instance par apply karta hai.
+* **`SubnetId: !Ref Subnet`** : Selected subnet ke andar instance launch karta hai.
+* **`UserData:`** : Instance pehli dafa start hone par chalne wali script hai:
+* `trap ... ERR`: Agar script mein koi error aaye toh CloudFormation ko failure signal bhejta hai.
 * `amazon-linux-extras install haproxy2`: HAProxy 2 load balancer install karta hai.
-* `cat <<"EOF" ...`: HAProxy ki configuration file (`haproxy2.cfg`) create karta hai jisme round-robin load balancing set hoti hai aur backend server ke taur par `${Backend.PrivateIp}:80` diya jata hai (yani proxy sara traffic backend ki private IP par bhejega).
+* `cat <<"EOF" ...`: HAProxy ki configuration file likhta hai jisme round-robin load balancing set hoti hai aur backend server ke taur par `${Backend.PrivateIp}:80` diya jata hai (yani proxy sara traffic backend ki private IP par bhejega).
 * `systemctl start haproxy2`: HAProxy service ko start karta hai.
-* `/opt/aws/bin/cfn-signal -e 0 ...`: CloudFormation ko success signal bhejta hai ke deployment mukammal ho gayi hai.
+* `cfn-signal -e 0 ...`: CloudFormation ko success signal bhejta hai ke deployment mukammal ho gayi hai.
 
 
-
-
-* **`CreationPolicy:`**
-* **`ResourceSignal: Timeout: PT5M`**: CloudFormation ko signals ka 5 minute tak intezar karne ka kehta hai.
-
-
+* **`CreationPolicy:`** : `ResourceSignal` ke zariye CloudFormation ko signals ka 5 minute (`PT5M`) tak intezar karne ka kehta hai.
 
 ---
 
-### Resources: Backend EC2 Instance (`Backend`)
+### Resources: Backend EC2 Instance
 
-* **`Backend:`**
-* Backend virtual machine ka logical naam hai.
-
-
-* **`ImageId`, `InstanceType`, `IamInstanceProfile`, `SubnetId**`: Proxy ki tarah region mapping, t3.micro size, instance profile, aur subnet use karta hai.
-* **`SecurityGroupIds: [- !Ref SecurityGroupBackend]`**
-* Is par backend security group lagi hoti hai jo sirf proxy se traffic allow karti hai.
-
-
-* **`UserData:`**
-* Backend server ki initial setup script:
-* `yum -y install httpd`: Apache web server (httpd) install karta hai.
+* **`Backend:`** : Backend virtual machine ka logical naam hai (`Type: 'AWS::EC2::Instance'`).
+* **`ImageId`, `InstanceType`, `IamInstanceProfile`, `SubnetI`d**: Proxy ki tarah region mapping, t3.micro size, instance profile, aur subnet use karta hai.
+* **`SecurityGroupIds: [- !Ref SecurityGroupBackend]`**: Is par backend security group lagi hoti hai jo sirf proxy se traffic allow karti hai.
+* **`UserData:`** : Backend server ki initial setup script:
+* `yum -y install httpd`: Apache web server install karta hai.
 * `systemctl start httpd`: Web server ko start karta hai.
 * `echo '...' > /var/www/html/index.html`: Ek simple web page (`Hello AWS in Action!`) server ki root directory mein save karta hai.
 * `cfn-signal`: CloudFormation ko success signal bhejta hai.
 
 
-
-
-* **`CreationPolicy:`**
-* 5 minutes ka timeout signal ke liye set karta hai.
-
-
+* **`CreationPolicy:`** : Signal ke liye 5 minutes ka timeout set karta hai.
 
 ---
 
 ### Outputs Section
 
-* **`Outputs:`**
-* Stack banne ke baad AWS Console mein kuch ahem values screen par dikhane ke liye.
+* **`Outputs:`** : Stack banne ke baad AWS Console mein ahem values screen par dikhane ke liye block hai.
+* **`ProxyPublicIpAddress:`** : Proxy instance ka public IP address display karta hai (`!Sub ${Proxy.PublicIp}`).
+* **`BackendPublicIpAddress:`** : Backend instance ka public IP address display karta hai (`!Sub ${Backend.PublicIp}`).
 
-
-* **`ProxyPublicIpAddress:`**
-* Proxy instance ka public IP address display karta hai (`!Sub ${Proxy.PublicIp}`).
-
-
-* **`BackendPublicIpAddress:`**
-* Backend instance ka public IP address display karta hai (`!Sub ${Backend.PublicIp}`).
+---
 
 #### Verification With Curl:
 
