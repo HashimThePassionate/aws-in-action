@@ -509,3 +509,260 @@ $ aws cloudformation delete-stack --stack-name ebs
 * **Line 3:** `delete-stack` hamare CloudFormation stack ko urha dega, jisse asal mein pehli drive aur EC2 server automatically delete ho jayenge. (Poora infrastructure clean-up!)
 
 ---
+
+## Instance store: Temporary block-level storage
+
+Pichle section mein hum ne EBS ke baare mein parha tha jo ke network ke zariye connect hota hai. Lekin **Instance Store** bilkul mukhtalif hai. Isay aap aise samjhein ke yeh woh hard drive hai jo us **physical computer (Host Machine)** ke motherboard ke andar direct lagi hoti hai jis par aap ka EC2 server (virtual machine) chal raha hota hai.
+
+Kyunki yeh drive physical machine ke andar directly lagi hoti hai, is liye iski speed bohot tez hoti hai. Lekin iska ek bada nuqsan (trade-off) yeh hai ke yeh **temporary (aarzi)** hoti hai. Agar aap apna EC2 instance stop (band) karte hain ya terminate (delete) karte hain, toh is drive ka data hamesha ke liye ghaib ho jata hai.
+
+EBS ke bar-aks (jiska alag se bill aata hai), Instance Store ki ek achi baat yeh hai ke iske **koi alag se paise nahi dene parte**. Iski cost aap ke EC2 instance ki hourly price ke andar hi shamil hoti hai.
+
+### Figure 8.2 ka Mukammal Breakdown
+
+Writer ne jo image Figure 8.2 di hai, us mein ek bohot hi clear architectural concept samjhaya gaya hai. Aayein isay asaan alfaz mein samajhte hain:
+
+<div align="center">
+  <img src="./images/02.png" width="600"/>
+</div>
+
+* **Host machine (Sab se neeche wali layer):** Yeh AWS ke data center mein rakha hua asal physical server (lohay ka dabba) hai. Is machine ke andar direct HDDs ya SSDs (hard drives) lagi hui hain. Inhi drives ko "Instance Store" kaha jata hai.
+* **Hypervisor (Darmiyani layer):** Yeh ek software hai jo is physical machine ke upar chalta hai aur is hardware ko chote chote hisson mein taqseem karta hai. Iska kaam yeh hai ke yeh ensure kare ke ek Virtual Machine doosri Virtual Machine ke data ya hardware mein dakhal andazi na kare.
+* **Virtual machines (Sab se upar wali layer):** Yeh aap ke EC2 instances hain. Image mein dikhaya gaya hai ke **Virtual machine 2** ko physical host machine ki hard drive (Instance store) tak direct rasta (line) diya gaya hai. Jabke baqi machines (1 aur 3) shayad EBS use kar rahi hain.
+
+**Kab Istemal Karein aur Kab Nahi?**
+
+* **Nahi karna:** Aisa data jo aap ke liye bohot qeemti hai aur jise aap khona nahi chahte (jaise user accounts, financial records), usay kabhi bhi instance store par na rakhein.
+* **Karna chahiye:** Aisa data jo temporary ho (jaise Caches ya Buffers). Misal ke tor par, agar aap kisi video ko process kar rahe hain, toh processing ke doran file ko instance store par rakhein. Agar machine band bhi ho jaye toh koi masla nahi, aap original video dobara utha kar process kar sakte hain.
+
+> **Expert Level Use-Case (Distributed Systems):**
+> Writer batata hai ke kuch bari NoSQL databases (jaise Cassandra ya MongoDB) data ko ek hi waqt mein bohot saari machines (cluster) par copy karti rehti hain. Aise modern systems mein Instance Store ka istemal hota hai kyunki inki speed (low latency) bohot tez hoti hai. Agar ek machine ka instance store udh (delete ho) bhi jaye, toh doosri machine ke paas pehle se data ki copy mojood hoti hai. Lekin writer warn karta hai ke yeh kaam sirf distributed systems ke experts (DevOps/Cloud Architects) ko karna chahiye. Agar aap ko doubt ho, toh chup chaap EBS istemal karein.
+
+> **WARNING:** Agar aap ne EC2 instance ko AWS console se Stop ya Terminate kiya, toh Instance Store hamesha ke liye urh jayega. Data restore karne ka koi tareeqa nahi hoga!
+
+### Table 8.3 Instance families with instance stores
+
+AWS ke har EC2 server ke andar yeh free Instance Store wali hard drive nahi hoti. Yeh sirf kuch khaas instance families mein milti hai (jaise jin ke naam mein `d` ya `i` aata hai, jo disk aur I/O ko zahir karte hain).
+
+| Use case | Instance type | Instance store type | Instance store size in GB |
+| --- | --- | --- | --- |
+| **General purpose** | m6id.large<br>
+
+<br>m6id.32xlarge | SSD | 118<br>
+
+<br>7600 |
+| **Compute optimized** | c6id.large<br>
+
+<br>c6id.32xlarge | SSD | 118<br>
+
+<br>7600 |
+| **Memory optimized** | r6id.large<br>
+
+<br>r6id.32xlarge | SSD | 118<br>
+
+<br>7600 |
+| **Storage optimized** | i4i.large<br>
+
+<br>i4i.32xlarge | SSD | 468<br>
+
+<br>30000 |
+| **Storage optimized** | d3.xlarge<br>
+
+<br>d3.8xlarge | HDD | 5940<br>
+
+<br>47520 |
+| **Storage optimized** | d3en.xlarge<br>
+
+<br>d3en.12xlarge | HDD | 27960<br>
+
+<br>335520 |
+
+**Table ko Asaan Kar ke Samajhna:**
+
+* **General/Compute/Memory (m6id, c6id, r6id):** In naye 2026 ke instances mein 'd' ka matlab hai inke paas local disk hai. Yeh fast SSDs (Solid State Drives) use karte hain jo chote sizes (118 GB se 7600 GB) tak milti hain.
+* **Storage optimized (i4i):** Yeh I/O intensive hain aur inme bari SSDs lagi hoti hain (30,000 GB tak).
+* **Storage optimized (d3, d3en):** Yeh 'Dense Storage' hote hain. Inke andar purani lekin massive capacity wali HDDs (Hard Disks) lagi hoti hain. Aap dekhein `d3en.12xlarge` mein aap ko lag bhag **335,520 GB (yani 335 TB)** ki muft hard drive space milti hai! Yeh massive Big Data projects ke liye hoti hai.
+
+---
+
+## Listing 8.1 Using an instance store with CloudFormation
+
+Neeche diya gaya CloudFormation code dikhata hai ke instance store wala EC2 kaise launch hota hai. Yaad rakhein, Instance Store ko EBS ki tarah alag se banaya aur attach nahi kiya jata, balke yeh us makhsoos EC2 type (jaise `m6id.large`) ke chun'ne par khud ba khud uske andar lag kar aata hai.
+
+```yaml
+Instance:
+  Type: 'AWS::EC2::Instance'
+  Properties:
+    IamInstanceProfile: 'ec2-ssm-core'
+    ImageId: 'ami-061ac2e015473fbe2'
+    InstanceType: 'm6id.large' # Ye aik aisi instance type select karta hai jis mein instance store ho
+    SecurityGroupIds:
+      - !Ref SecurityGroup
+    SubnetId: !Ref Subnet
+
+```
+
+**Code ki deep details:**
+
+* `Instance:` Yeh aap ke server ka logical naam hai.
+* `Type: 'AWS::EC2::Instance'`: AWS ko bataya ja raha hai ke mujhe ek EC2 server chahiye.
+* `IamInstanceProfile: 'ec2-ssm-core'`: Yeh server ko permission (IAM Role) de raha hai ke hum bina SSH keys ke, browser (SSM Session Manager) se hi is server ke andar login kar sakein.
+* `ImageId: 'ami-061ac2e015473fbe2'`: Yeh Amazon Machine Image hai (yani konsa OS dalna hai, jaise Linux).
+* `InstanceType: 'm6id.large'`: **Yeh sab se main line hai!** Kyunki hum ne `m6id.large` chuna hai, is liye AWS is server ke motherboard par ek 118 GB ki chamchamati hui free local SSD laga kar dega.
+* `SecurityGroupIds` & `SubnetId`: Yeh server ke firewall aur network (VPC) ki settings hain.
+
+---
+
+## Using an instance store
+
+Jab aap instance ko launch kar lete hain aur SSM ke zariye uske terminal (black screen) par aate hain, toh hum sab se pehle apni lagayi hui hard drives ko dekhte hain.
+
+> **WARNING (Writer ki taraf se):** `m6id.large` chalane par credit card se paise katenge (yeh Free Tier mein nahi aata). Aur doosri warning yeh hai ke zaroori nahi har Availability Zone (Data center) mein yeh modern `m6id` server mojood ho. Agar error aaye toh subnet change kar ke try karein.
+
+Chaliye Linux mein list block devices (`lsblk`) command chalate hain:
+
+```bash
+$ lsblk
+NAME          MAJ:MIN RM    SIZE RO TYPE MOUNTPOINT
+nvme1n1       259:0    0  109.9G  0 disk  # Ye instance store device hai
+nvme0n1       259:1    0      8G  0 disk  # Ye EBS root volume device hai
+├─nvme0n1p1   259:2    0      8G  0 part /
+└─nvme0n1p128 259:3    0      1M  0 part
+
+```
+
+**Output ko asaan karte hain:**
+
+* Aaj kal ke naye AWS servers mein hard drives ka naam `xvda` ke bajaye `nvme` hota hai (jo ke modern super-fast drives hoti hain).
+* `nvme0n1` aap ka 8 GB wala **EBS root volume** hai jahan Linux OS chal raha hai (Note karein yeh `/` par mounted hai).
+* `nvme1n1` hamari **110 GB ki Instance Store** hard drive hai. Yeh khali `disk` hai aur abhi is ke agay koi MOUNTPOINT nahi likha, yani OS ko nahi pata isay kaise use karna hai.
+
+Agar `df -h` command chalayen toh yeh storage abhi folder form mein kahin dastyab nahi hogi:
+
+```bash
+$ df -h
+Filesystem     Size Used Avail Use% Mounted on
+devtmpfs       3.9G    0  3.9G   0% /dev
+tmpfs          3.9G    0  3.9G   0% /dev/shm
+tmpfs          3.9G 348K  3.9G   1% /run
+tmpfs          3.9G    0  3.9G   0% /sys/fs/cgroup
+/dev/nvme0n1p1 8.0G 1.5G  6.6G  19% / # Ye EBS root volume OS ko contain karta hai
+
+```
+
+### Instance Store ko Qabil-e-Istemal Banana (Format aur Mount)
+
+Ab hum is kachi aur khali Instance Store drive par **Filesystem** banayenge (roads aur blocks banayenge) aur usay ek folder ke sath jodenge:
+
+```bash
+$ sudo mkfs -t xfs /dev/nvme1n1 # XFS filesystem create karke format karta hai
+$ sudo mkdir /data # Ek folder banata hai jis par device ko mount kiya jaye
+$ sudo mount /dev/nvme1n1 /data # Device ko mount karta hai
+
+```
+
+**Detail:**
+
+1. `mkfs -t xfs`: Humne local super-fast drive `/dev/nvme1n1` par XFS format mar diya.
+2. `mkdir /data`: Linux OS ke andar ek khali folder banaya jiska naam `data` rakha.
+3. `mount`: Us physical drive ko is virtual folder ke sath connect kar diya. Ab main jo bhi file `/data` folder mein copy karunga, woh direct server ki host machine wali tez tareen hard drive mein ja kar giregi!
+
+Ab agar hum `df -h` chalayen toh nateeja badal chuka hoga:
+
+```bash
+$ df -h
+Filesystem     Size Used Avail Use% Mounted on
+[...]
+/dev/nvme1n1   110G 145M  110G   1% /data # 110 GB dastyab hain
+
+```
+
+* Dekhein! Ab OS bata raha hai ke `/data` folder par 110 GB ki fast drive access ke liye bilkul tayar hai.
+
+> **Windows Note:** Agar aap Windows Server (EC2) chala rahe hain, toh aap ko yeh `mkfs` ya `mount` wala lamba process nahi karna parta. Windows mein instance store pehle se hi NTFS format hota hai aur khud ba khud D: ya E: drive ke tor par nazar aane lagta hai.
+
+---
+
+## Testing performance
+
+Ab sab se mazedar hissa: hum check karenge ke Instance Store (jo computer ke andar laga hai) aur EBS (jo lambi taar ke zariye door data center se araha hai) ki speed mein kitna faraq hai.
+
+Writer yahan `dd` command (disk dump) se speed check karta hai:
+
+**Write Test (Data Likhna):**
+
+```bash
+$ sudo dd if=/dev/zero of=/data/tempfile bs=1M count=1024 \
+    conv=fdatasync,notrunc
+1024+0 records in
+1024+0 records out
+1073741824 bytes (1.1 GB) copied, 13.3137 s, 80.6 MB/s # Section 8.1.3 ke EBS ke muqablay mein 18% tez
+
+```
+
+* **Maqsad:** 1 GB ka data is local drive mein likha gaya.
+* **Nateeja:** Speed 80.6 MB/s aayi. Pichle EBS test ki 67.8 MB/s ke muqablay mein yeh **18% tez** likha gaya.
+
+**Cache Clear Karna:**
+
+```bash
+$ echo 3 | sudo tee /proc/sys/vm/drop_caches
+3
+
+```
+
+* **Maqsad:** Read test se pehle OS ki RAM ko clear karna taake asli hard drive ki speed nap sakein.
+
+**Read Test (Data Parhna):**
+
+```bash
+$ sudo dd if=/data/tempfile of=/dev/null bs=1M count=1024
+1024+0 records in
+1024+0 records out
+1073741824 bytes (1.1 GB) copied, 5.83715 s, 184 MB/s # Section 8.1.3 ke EBS ke muqablay mein 170% tez
+
+```
+
+* **Maqsad:** Wahi 1 GB file drive se parhi gayi aur null (khatam) ki gayi.
+* **Nateeja:** Speed 184 MB/s aayi! Yeh purane EBS test (68 MB/s) ke muqablay mein **170% tez** parha gaya!
+
+**Yeh itna tez kyun hai?**
+Kyunki Instance Store wali drive aur aap ke server ka CPU ek hi hardware ke andar mojood hain. Inke darmiyan koi external network traffic, taarein, ya internet ka overload nahi hai.
+Lekin phir se writer yaad dila raha hai ke speed is cheez par depend karti hai ke files kitni badi ya choti hain (Workload nature).
+
+---
+
+## Cleaning up
+
+Is test ke baad AWS Console se apna CloudFormation stack foran delete kar dein. Agar aap bhool gaye toh is `m6id.large` server ka bara bill aa jayega!
+
+---
+
+## Backing up your data
+
+Kyunki Instance Store temporary hota hai, iska EBS jaisa apna koi "Snapshot" ka jaadui button nahi hota. Agar aap ko kisi majboori mein iska data mehfooz rakhna hi hai, toh aap ko manually scripts (Schedules/Cron jobs) likhne parenge jo data ko pakar kar **Amazon S3** (Object Storage) par phekain.
+
+```bash
+$ aws s3 sync /path/to/data s3://$YourCompany-backup/instancestore-backup
+
+```
+
+* **Command detail:** `aws s3 sync` command folder ko scan karti hai aur naye data ko utha kar S3 bucket (`$YourCompany-backup`) mein copy kar deti hai. Yeh kaam hum Linux cron jobs ke zariye har ghante ya raat ko automatically bhi karwa sakte hain.
+
+Lekin writer ka clear rule yeh hai: **Agar data ka backup lena itna hi zaroori hai, toh Instance Store use hi kyun kar rahe ho? EBS use karo!** Instance Store sirf "ephemeral" (thori dair zinda rehne wale) aur aarzi kaam ke liye hai.
+
+---
+
+## Summary (Mukammal Nichor)
+
+Chaliye pure chapter mein parhi gayi cheezon ko aasan points mein revise kar lete hain:
+
+* **OS ki zaroorat:** Block-level storage (chahay EBS ho ya Instance store) ko hamesha EC2 (virtual machine) ke sath hi attach karke istemal kiya ja sakta hai kyunki Filesystem aur Read/Write calls chalane ke liye Operating System laazmi hota hai.
+* **EBS ki Billing:** EBS banate waqt aap jitne GB space mangenge (provision karenge), AWS aap se un sab GBs ke paise charge karega. Chahe aap us space ko khali rakhein. Agar mustaqbil mein jagah kam parh jaye, toh aap size ko bada (increase) bhi kar sakte hain.
+* **Network connection:** EBS drives ek waqt mein kisi ek EC2 server ke sath network ke through judti hain. Speed aur data transfer (bandwidth) aap ke us server ke network hardware par depend karti hai.
+* **EBS Volume ki Iqsam:** AWS mukhtalif types deta hai. Maslan `gp3` (General purpose SSD, sasta aur best), `io2` (Heavy databases ke liye provisioned SSD), `st1` (Bari data files ke liye optimized HDD) aur `sc1` (Cold aur archive data ke liye sasti HDD).
+* **Backups (Snapshots):** EBS ka backup lena bohot taqatwar aur asaan hai jise Snapshot kehte hain. Yeh incremental hota hai (yani sirf nayi changing ka backup leta hai taake space bache).
+* **Instance Store ki Taqat:** Yeh aap ke EC2 ke physically andar laga hota hai jis se "low latency" (kam delay) aur "high throughput" (tez data speed) milti hai. Lekin nuqsan yeh hai ke agar machine Stop ya Terminate hui, saara data udh jayega.
+* **Kahan Istemal karein?** Instance store ko sirf Temporary (aarzi) aur aise data ke liye istemal karna chahiye jiski life choti ho aur usay asani se kahin aur se wapas laya ja sake.
+
+---
