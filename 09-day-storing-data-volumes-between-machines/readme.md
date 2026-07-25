@@ -279,3 +279,132 @@ Poore ek mahine ke liye 5 GB data EFS par rakhne ka kul kharcha sirf **$1.50 (US
 ---
 
 
+## Creating a mount target
+
+Mount target ek aisa zariya (Network Endpoint / IP address) hai jo kisi makhsoos Subnet ke andar banta hai aur aap ke EC2 instances ko **NFSv4.1 protocol** ke zariye EFS filesystem se connect hone deta hai. EC2 instance aur mount target ke darmiyan saari baat-cheet standard TCP/IP network connection ke zariye hoti hai.
+
+Security Groups ka istemal kar ke hum yeh control karte hain ke mount target ke andar konsa network traffic aa sakta hai. **NFS protocol** hamesha **Port 2049** ka istemal karta hai, is liye humein security group mein port 2049 ko allow karna parta hai.
+
+---
+
+### Dynamic Security Group Pattern (Security Groups Ki Chaining)
+
+Kisi specific IP address ko allow karne ke bajaye, hum do alag alag security groups banate hain. Yeh AWS ka ek bohot hi taqatwar aur safe design pattern hai:
+
+1. **EFS Client Security Group:** Yeh security group un tamam EC2 instances par lagaya jata hai jinhein EFS filesystem se connect hona hota hai. Is security group mein koi khas Inbound Rule (ijazat) nahi hoti, yeh sirf EC2 instances par ek **"Identity Card"** ya **"Badge"** ka kaam karta hai.
+2. **Mount Target Security Group:** Yeh security group EFS Mount Target par lagaya jata hai. Is mein hum rule banate hain ke: *"Port 2049 par sirf wahi traffic andar aa sakta hai jiske paas 'EFS Client Security Group' ka badge ho!"*
+
+#### Iska Bara Faida Kya Hai?
+
+Aap ko kabhi bhi IP addresses manually add ya remove nahi karne parenge. Agar aap Auto Scaling ke zariye 10 naye EC2 servers bhi launch kar dete hain, toh jab tak un par Client Security Group laga hoga, woh automatically EFS se connect ho sakenge.
+
+---
+
+> ### 💡 EFS IS NOT ONLY ACCESSIBLE FROM EC2 INSTANCES
+> 
+> 
+> Is chapter mein hum EFS ko EC2 instances par mount kar rahe hain kyunki yeh sab se aam use-case hai. Lekin EFS ko in jagahon par bhi istemal kiya ja sakta hai:
+> * **Containers:** Amazon ECS (Elastic Container Service) aur Amazon EKS (Kubernetes)
+> * **Serverless Functions:** AWS Lambda
+> * **On-Premises Servers:** Aap ke apne office ke physical servers (AWS Direct Connect ya VPN ke zariye)
+> 
+> 
+
+---
+
+### Figure 9.3 Ka Visual Breakdown
+
+Book mein di gayi image (Figure 9.3) is poore security concept ko wazeh karti hai. Aayein isay ek structural diagram se samajhte hain:
+
+<div align="center">
+  <img src="./images/03.png" width="600"/>
+</div>
+
+**Diagram ki Wazahat:**
+
+* **Client Security Group:** Dono Availability Zones (AZ A aur AZ B) ke EC2 instances ke gird ek boundary (badge) bana hua hai.
+* **Mount Target Security Group:** Yeh protection layer Mount Target ke upar lagi hui hai jo keh rahi hai: *"Main sirf Client Security Group wale servers se aane wali Port 2049 requests ko hi EFS tak jaane dunga."*
+
+---
+
+### Listing 9.2 CloudFormation snippet of an EFS mount target and security groups
+
+Is snippet mein hum CloudFormation ke zariye do security groups aur **Subnet A** ke liye EFS mount target define kar rahe hain:
+
+```yaml
+Resources:
+  [...]
+EFSClientSecurityGroup: # Is security group ko kisi rule ki zaroorat nahi hoti. Ye sirf EC2 instances se bahar jane wale traffic ko mark karne ke liye istemal hoti hai
+  Type: 'AWS::EC2::SecurityGroup'
+  Properties:
+    GroupDescription: 'EFS Mount target client'
+    VpcId: !Ref VPC
+
+MountTargetSecurityGroup: # Ye security group mount target ke sath linked hoti hai
+  Type: 'AWS::EC2::SecurityGroup'
+  Properties:
+    GroupDescription: 'EFS Mount target'
+    SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 2049 # Port 2049 par traffic ki ijazat deta hai
+        ToPort: 2049
+        SourceSecurityGroupId: !Ref EFSClientSecurityGroup # Ye sirf us security group se traffic ki ijazat deta hai jo EC2 instances ke sath linked ho
+    VpcId: !Ref VPC
+
+MountTargetA:
+  Type: 'AWS::EFS::MountTarget'
+  Properties:
+    FileSystemId: !Ref FileSystem # Mount target ko filesystem ke sath attach karta hai
+    SecurityGroups:
+      - !Ref MountTargetSecurityGroup # Security group assign karta hai
+      - SubnetId: !Ref SubnetA # Mount target ko subnet A ke sath link karta hai
+
+```
+
+#### Code Ki Har Detail (Deep Breakdown)
+
+* **`EFSClientSecurityGroup:`** Is resource ka naam client security group rakha gaya hai.
+* **`Type: 'AWS::EC2::SecurityGroup'`**: AWS ko batata hai ke hum ek Security Group bana rahe hain.
+* **`GroupDescription: 'EFS Mount target client'`**: Is security group ki choti si wazahat.
+* **`VpcId: !Ref VPC`**: Batata hai ke yeh security group kis Virtual Private Cloud (VPC) ke andar banega. *(Is Security Group mein koi `SecurityGroupIngress` rules nahi hain kyunki iska kaam sirf EC2 servers ko mark karna hai).*
+* **`MountTargetSecurityGroup:`** Yeh mount target ko protect karne wala doosra security group hai.
+* **`SecurityGroupIngress:`** Inbound rules ki list (yani kaun andar aa sakta hai).
+* **`IpProtocol: tcp`**: Traffic TCP protocol istemal karega.
+* **`FromPort: 2049` & `ToPort: 2049**`: Port number 2049 ko allow kar raha hai (jo NFS protocol ki default port hai).
+* **`SourceSecurityGroupId: !Ref EFSClientSecurityGroup`**: **Sab se eham line!** Yeh IP address ke bajaye keh raha hai ke *"Sirf wahi servers allow hain jin par `EFSClientSecurityGroup` laga ho."*
+* **`MountTargetA:`** Subnet A ke andar EFS Mount Target banane ka main block.
+* **`Type: 'AWS::EFS::MountTarget'`**: Batata hai ke hum EFS Mount Target bana rahe hain.
+* **`FileSystemId: !Ref FileSystem`**: Is mount target ko pehle se banaye gaye EFS Filesystem ke sath jod deta hai.
+* **`SecurityGroups:`**: Is mount target par `MountTargetSecurityGroup` wali security firewall apply kar deta hai.
+* **`SubnetId: !Ref SubnetA`**: Is mount target ko **Subnet A** (Availability Zone A) mein rakhta hai taake us subnet ke EC2 instances is se connect ho sakein.
+
+---
+
+### Listing 9.3 CloudFormation snippet of an EFS mount target and security groups
+
+High Availability (99.99% uptime) haasil karne ke liye zaroori hai ke hum ek mount target **Subnet B** (doosre data center/AZ) mein bhi banayen. Code ka snippet yeh raha:
+
+```yaml
+Resources:
+  [...]
+MountTargetB:
+  Type: 'AWS::EFS::MountTarget'
+  Properties:
+    FileSystemId: !Ref FileSystem
+    SecurityGroups:
+      - !Ref MountTargetSecurityGroup
+    SubnetId: !Ref SubnetB # Ye mount target ko subnet B ke sath attach karta hai
+
+```
+
+#### Code Ki Har Detail (Deep Breakdown)
+
+* **`MountTargetB:`** Resource ka naam `MountTargetB` rakha gaya hai taake yeh `MountTargetA` se alag pehchana ja sake.
+* **`Type: 'AWS::EFS::MountTarget'`**: AWS resource type define kar raha hai.
+* **`FileSystemId: !Ref FileSystem`**: Yeh bhi wahi same main EFS Filesystem istemal karega jo `MountTargetA` kar raha tha.
+* **`SecurityGroups: - !Ref MountTargetSecurityGroup`**: Wahi same security firewall istemal ho gi jo Port 2049 par client traffic ko check karti hai.
+* **`SubnetId: !Ref SubnetB`**: **Main Faraq!** Yeh mount target **Subnet B** (Availability Zone B) ke andar banega.
+
+Is tarah hamara EFS filesystem ab dono Subnets (A aur B) ke EC2 instances ke liye fully accessible aur Highly Available ho chuka hai!
+
+---
