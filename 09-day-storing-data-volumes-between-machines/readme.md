@@ -408,3 +408,257 @@ MountTargetB:
 Is tarah hamara EFS filesystem ab dono Subnets (A aur B) ke EC2 instances ke liye fully accessible aur Highly Available ho chuka hai!
 
 ---
+
+## Mounting the EFS filesystem on EC2 instances
+
+AWS EFS har filesystem ke liye ek khas DNS naam (Domain Name) banata hai jiska format yeh hota hai:
+
+$$\text{\$FileSystemID.efs.\$Region.amazonaws.com}$$
+
+Jab aap kisi EC2 instance se is DNS naam ko call karte hain, toh AWS ka DNS server auto-detect karta hai ke request kis subnet se aa rahi hai, aur usay usi subnet mein bane hue **Mount Target ke IP address** par bhej deta hai.
+
+### EFS Mount Helper (`amazon-efs-utils`)
+
+EFS filesystem ko mount karne ke liye AWS **EFS Mount Helper** tool istemal karne ki sifarish karta hai. Is tool ke do sab se bade faide hain:
+
+* **TLS Encryption (Security):** EC2 aur EFS ke darmiyan raste mein (in transit) saare data ko encrypt karta hai.
+* **IAM Authentication:** AWS IAM roles ke zariye check karta hai ke kya is EC2 server ko EFS access karne ki ijazat hai.
+
+Amazon Linux 2 par is tool ko install karna bohot aasan hai:
+
+```bash
+$ sudo yum install amazon-efs-utils
+
+```
+
+#### Manual Mount Command
+
+Tool install hone ke baad, aap niche di gayi command se EFS ko kisi bhi local folder par mount kar sakte hain:
+
+```bash
+$ sudo mount -t efs -o tls,iam $FileSystemID $EFSMountPoint
+
+```
+
+Real-world example:
+
+```bash
+$ sudo mount -t efs -o tls,iam fs-123456 /home
+
+```
+
+* `mount`: Linux ki drive/filesystem jodney wali command.
+* `-t efs`: Operating system ko batata hai ke hum EFS type ka filesystem mount kar rahe hain.
+* `-o tls,iam`: Options set kar raha hai:
+1. `tls`: EC2 se EFS tak ek secure TLS tunnel banata hai taake network par data koi chori na kar sake.
+2. `iam`: EC2 instance ke sath jurhe hue IAM Role ka istemal kar ke identity verify karta hai.
+
+
+* `fs-123456`: Hamara EFS Filesystem ID.
+* `/home`: EC2 instance ka woh local folder jahan hum EFS ko attach kar rahe hain.
+
+---
+
+### Boot par Automatically Mount Karna (`/etc/fstab`)
+
+Agar aap chahte hain ke jab bhi EC2 instance restart (reboot) ho, toh EFS filesystem khud ba khud mount ho jaye, toh aap ko Linux ki `/etc/fstab` configuration file mein yeh entry daalni parti hai:
+
+```text
+$FileSystemID:/ $EFSMountPoint efs _netdev,noresvport,tls,iam 0 0
+
+```
+
+#### Extra Options ki Detail
+
+Aap `tls` aur `iam` ko samajhte hain, baqi do options ka matlab yeh hai:
+
+* `_netdev`: Linux OS ko batata hai ke yeh ek **Network Filesystem** hai. OS reboot hote waqt pehle internet/network card ko chalu karega, uske baad is drive ko mount karne ki koshish karega.
+* `noresvport`: Agar kabhi network mein koi masla aaye aur connection toot jaye, toh dobara connect hone ke liye ek naya TCP source port istemal karega. Yeh network recovery ke liye bohot zaroori hai.
+
+---
+
+### Listing 9.4 Using CloudFormation to launch an EC2 instance and mount an EFS filesystem
+
+Ab hum CloudFormation template mein pehla EC2 server (`EC2InstanceA`) add karenge jo **Subnet A** mein hoga aur EFS ko apne `/home` directory par mount karega.
+
+**Chunauti (Challenge):** Linux mein pehle se `/home/ec2-user` ka folder mojood hota hai. Jab aap kisi folder par naya EFS mount karte hain, toh purana local data chhup (hide ho) jata hai. Is liye hum script mein pehle purane `/home` data ka backup `/oldhome` mein banayenge, EFS mount karenge, aur phir backup data ko EFS mein copy wapas karenge!
+
+```yaml
+Resources:
+  [...]
+EC2InstanceA: # Ye aik EC2 instance banata hai
+  Type: 'AWS::EC2::Instance'
+  Properties:
+    ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+    InstanceType: 't2.micro'
+    IamInstanceProfile: !Ref IamInstanceProfile # Ye IAM role EFS filesystem tak access deta hai
+    NetworkInterfaces:
+      - AssociatePublicIpAddress: true
+        DeleteOnTermination: true
+        DeviceIndex: 0
+        GroupSet:
+          - Ref: EFSClientSecurityGroup # Security group attach karta hai, jo filesystem ki taraf jane wale outgoing traffic ki pehchan ke liye istemal hoti hai
+        SubnetId: !Ref SubnetA # EC2 instance ko subnet A mein rakhta hai
+    UserData:
+      'Fn::Base64': !Sub |
+        #!/bin/bash -ex
+        trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource EC2InstanceA --region ${AWS::Region}' ERR
+
+        # install dependencies
+        yum install -y nc amazon-efs-utils
+        pip3 install botocore
+
+        # copy existing /home to /oldhome # Tamam home directories ka backup /oldhome mein bana deta hai
+        mkdir /oldhome
+        cp -a /home/. /oldhome
+
+        # wait for EFS mount target # Naya filesystem banane ke baad, iske DNS name ko mount targets tak resolve hone mein kuch minute lagte hain
+        while ! (echo > /dev/tcp/${FileSystem}.efs.${AWS::Region}.amazonaws.com/2049) >/dev/null 2>&1; do sleep 5; done
+
+        # mount EFS filesystem
+        echo "${FileSystem}: /home efs _netdev,noresvport,tls,iam 0 0" >> /etc/fstab # Fstab mein aik entry add karta hai, jo ye yakeeni banati hai ke har boot par filesystem khud-ba-khud mount ho jaye
+        mount -a # System ko reboot kiye baghair fstab mein define shuda tamam entries (sab se aham EFS filesystem) ko mount karta hai
+
+        # copy /oldhome to new /home # Purani home directories ko /home ke tehet mount kiye gaye EFS filesystem par copy karta hai
+        cp -a /oldhome/. /home
+
+        /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2InstanceA --region ${AWS::Region} # CloudFormation ko kamyabi ka signal bhejta hai
+    Tags:
+      - Key: Name
+        Value: 'efs-a'
+    CreationPolicy: # CloudFormation ko batata hai ke tab tak intezar kare jab tak EC2 instance se kamyabi ka signal nahi mil jata
+      ResourceSignal:
+        Timeout: PT10M
+    DependsOn: # EC2 instance ko internet connectivity aur mount target dono ki zaroorat hoti hai. Kyunki ye dono dependencies CloudFormation ko wazeh tor par nazar nahi aatin, isliye hum unhein yahan khud manual add karte hain
+      - VPCGatewayAttachment
+      - MountTargetA
+
+```
+
+#### Code Ki Deep Breakdown
+
+* `EC2InstanceA:` Pehle EC2 instance ka logical naam.
+* `Type: 'AWS::EC2::Instance'`: EC2 Virtual Machine create kar raha hai.
+* `InstanceType: 't2.micro'`: Free-tier eligible small instance.
+* `IamInstanceProfile: !Ref IamInstanceProfile`: Instance ko IAM permissions de raha hai taake woh EFS aur SSM Session Manager use kar sake.
+* `GroupSet: - Ref: EFSClientSecurityGroup`: **EFS Client Security Group** attach kar raha hai taake Mount Target isay pehchan sake.
+* `SubnetId: !Ref SubnetA`: Is server ko **Subnet A** (Data Center A) mein rakh raha hai.
+
+#### UserData Bash Script Breakdown (Line-by-Line)
+
+* `#!/bin/bash -ex`: Script shuru hotay hi har command ko execution logs mein print karega (`-x`) aur kisi bhi error par script roke ga (`-e`).
+* `trap '... cfn-signal -e 1 ...' ERR`: Agar script mein koi bhi error aaya, toh CloudFormation ko **Failure (-e 1)** ka signal bhej do taake stack hang na ho.
+* `yum install -y nc amazon-efs-utils` & `pip3 install botocore`: `netcat` (nc) tool aur EFS mount utilities install kar raha hai.
+* `mkdir /oldhome && cp -a /home/. /oldhome`: Local `/home` folder ka mukammal backup (permissions ke sath `-a`) `/oldhome` mein bana raha hai.
+* `while ! (echo > /dev/tcp/.../2049) ... sleep 5; done`: **Loop Check!** Jab naya EFS banta hai, toh DNS ko active hone mein thora waqt lagta hai. Yeh command har 5 second baad Port 2049 par packet bhej kar check karti hai ke Mount Target tayar hua ya nahi. Jab tak reply nahi aata, script ruki rehti hai.
+* `echo "${FileSystem}: /home efs ... " >> /etc/fstab`: `/etc/fstab` file ke aakhir mein EFS ki mount configuration line daal raha hai.
+* `mount -a`: System ko reboot kiye bina `/etc/fstab` ki sari configuration run kar ke EFS ko `/home` folder par mount kar deta hai.
+* `cp -a /oldhome/. /home`: Pehle banaya gaya backup dubara naye EFS shared volume par copy kar raha hai taake purane users (jaise `ec2-user`) ghaib na hon.
+* `/opt/aws/bin/cfn-signal -e $? ...`: CloudFormation ko **Success (0)** ka signal bhejta hai.
+* `CreationPolicy:` CloudFormation 10 minute (`PT10M`) tak EC2 ke signal ka wait karega.
+* `DependsOn:` Yeh batata hai ke jab tak Internet Gateway (`VPCGatewayAttachment`) aur `MountTargetA` ban na jayein, tab tak yeh EC2 server banana shuru na karna.
+
+---
+
+### Listing 9.5 Mounting an EFS filesystem from a second EC2 instance
+
+Ab hum doosra EC2 server (`EC2InstanceB`) **Subnet B** mein banayenge taake yeh sabit kar sakein ke dono alag alag data centers ke servers ek hi EFS `/home` folder ko share kar sakte hain.
+
+```yaml
+Resources:
+  [...]
+  EC2InstanceB:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      InstanceType: 't2.micro'
+      IamInstanceProfile: !Ref IamInstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: 0
+          GroupSet:
+            - !Ref EFSClientSecurityGroup
+          SubnetId: !Ref SubnetB # Ye EC2 instance ko subnet B mein rakhta hai
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -ex
+          trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource EC2InstanceB --region ${AWS::Region}' ERR
+
+          # install dependencies
+          yum install -y nc amazon-efs-utils
+          pip3 install botocore # Purana /home folder yahan copy nahi hota. Ye pehle hi subnet A ke pehle EC2 instance par ho chuka hai
+
+          # wait for EFS mount target
+          while ! (echo > /dev/tcp/${FileSystem}.efs.${AWS::Region}.amazonaws.com/2049) >/dev/null 2>&1; do sleep 5; done
+
+          # mount EFS filesystem
+          echo "${FileSystem}: /home efs _netdev,noresvport,tls,iam 0 0" >> /etc/fstab
+          mount -a
+
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2InstanceB --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: 'efs-b'
+      CreationPolicy:
+        ResourceSignal:
+          Timeout: PT10M
+      DependsOn:
+        - VPCGatewayAttachment
+        - MountTargetB
+
+```
+
+#### Main Faraq (EC2InstanceA vs EC2InstanceB):
+
+1. **Subnet Location:** `EC2InstanceB` Subnet B mein hai.
+2. **DependsOn:** Yeh `MountTargetB` par depend karta hai.
+3. **No `/oldhome` Backup Needed:** Iss script mein `/oldhome` wala copy step **nahi hai**! Kyunki pehle EC2 server ne pehle hi data EFS par daal diya tha. Doosra server bus direct EFS ko mount karega aur usay sara data ready milega.
+
+---
+
+### Template Outputs
+
+Stack banne ke baad dono EC2 servers ki IDs aasani se dekhne ke liye hum template ke end par `Outputs` section add karte hain:
+
+```yaml
+Outputs:
+  EC2InstanceA:
+    Value: !Ref EC2InstanceA
+    Description: 'Id of EC2 Instance in AZ A (connect via Session Manager)'
+  EC2InstanceB:
+    Value: !Ref EC2InstanceB
+    Description: 'Id of EC2 Instance in AZ B (connect via Session Manager)'
+
+```
+
+---
+
+### Where is the template located?
+
+Is complete CloudFormation template ka setup S3 aur GitHub par pada hua hai:
+
+* **GitHub Download:** `[https://github.com/AWSinAction/code3/archive/main.zip](https://github.com/AWSinAction/code3/archive/main.zip)` (File path: `chapter09/efs.yaml`)
+* **S3 Direct URL:** `[https://s3.amazonaws.com/awsinaction-code3/chapter09/efs.yaml](https://s3.amazonaws.com/awsinaction-code3/chapter09/efs.yaml)`
+
+---
+
+### Deploying the CloudFormation Stack
+
+AWS CLI ka istemal karte hue is poore infrastructure ko create karne ki command:
+
+```bash
+$ aws cloudformation create-stack --stack-name efs \
+    --template-url https://s3.amazonaws.com/awsinaction-code3/chapter09/efs.yaml \
+    --capabilities CAPABILITY_IAM
+
+```
+
+* `aws cloudformation create-stack`: Naya stack banane ki command.
+* `--stack-name efs`: Stack ka naam `efs` rakh raha hai.
+* `--template-url`: S3 par majood tayar template file ka rasta.
+* `--capabilities CAPABILITY_IAM`: AWS ko permission de raha hai ke yeh template naye IAM Roles aur Profiles bana sakta hai.
+
+Jab stack ka status **CREATE_COMPLETE** ho jayega, toh aap ke account mein 2 EC2 instances, 2 Mount Targets, aur 1 EFS Filesystem successfully tayar ho chukay honge!
+
+---
