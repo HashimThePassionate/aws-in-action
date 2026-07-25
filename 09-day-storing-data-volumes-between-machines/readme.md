@@ -118,3 +118,164 @@ Is se yeh hoga ke saare users ke home folders EFS par chale jayenge. Michael jis
 
 ---
 
+## Creating a filesystem
+
+Filesystem woh asal jagah (resource) hoti hai jahan aap ki saari files, directories (folders), aur symbolic links mehfooz hote hain.
+
+EFS ki sab se khoobsurat baat yeh hai ke yeh **Amazon S3 ki tarah khud ba khud barhta (grow karta) hai**. Aap ko pehle se yeh guess nahi karna parta ke "mujhe 100 GB chahiye ya 500 GB". Aap jitna data dalte jayenge, storage space khud ba khud utni hi barhti jayegi.
+
+Yeh filesystem ek makhsoos **AWS Region** (maslan `us-east-1`) mein banta hai, aur AWS background mein aap ke data ko automatically ek se ziada data centers (Availability Zones) mein copy (replicate) karta rehta hai taake data hamesha safe rahe.
+
+---
+
+### Using CloudFormation to describe a filesystem
+
+Hum EFS filesystem ko manually AWS Console par ja kar clicking ke bajaye **CloudFormation** ke zariye (Infrastructure as Code) configure karenge.
+
+Niche **Listing 9.1** ka CloudFormation code aur uski **har ek line ki deep explanation** di gayi hai:
+
+```yaml
+Resources: # Ye stack ke resources aur unki properties ko specify karta hai
+  [...]
+FileSystem:
+  Type: 'AWS::EFS::FileSystem'
+  Properties:
+    Encrypted: true # Hum ye recommend karte hain ke by default encryption at rest enable rakhein
+    ThroughputMode: bursting # Default throughput mode ko bursting kaha jata hai. Hum I/O intensive workloads ke liye throughput mode par aagay mazeed baat karein ge
+    PerformanceMode: generalPurpose # Default performance mode general purpose hai. Hum performance mode par aagay mazeed baat karein ge
+    FileSystemPolicy: # Data in transit ko encrypt karna security ki best practice hai. Filesystem policy ye yakeeni banati hai ke tamam access secure transport istemal karein
+      Version: '2012-10-17'
+      Statement:
+        - Effect: 'Deny'
+          Action: '*'
+          Principal:
+            AWS: '*'
+          Condition:
+            Bool:
+              'aws:SecureTransport': 'false'
+
+```
+
+#### Code Ki Line-by-Line Breakdown
+
+* **`Resources:`** CloudFormation template ka main section jahan hum batate hain ke konsi AWS services banani hain.
+* **`FileSystem:`** Yeh hamare EFS resource ka logical naam (nickname) hai.
+* **`Type: 'AWS::EFS::FileSystem'`**: Yeh line AWS ko batati hai ke hum ek **Amazon EFS Filesystem** banana chahte hain.
+* **`Properties:`** Yahan se EFS ki tamam settings aur configuration shuru hoti hai.
+* **`Encrypted: true`**: **Encryption at Rest** ko enable karta hai. Iska matlab hai ke jab aap ka data disk par pada hoga, woh AWS KMS (Key Management Service) ke zariye encrypted hoga. Agar koi physical drive chori bhi kar le, toh data nahi parh sakta.
+* **`ThroughputMode: bursting`**: Throughput ka matlab hai data ke aane jaane ki speed. Default mode `bursting` hota hai, jisme aap ke filesystem ka size jitna bada hoga, uski speed utni hi ziada hogi. *(Note: Chote data size ke waqt yeh extra burst credits use karke tez speed deta hai).*
+* **`PerformanceMode: generalPurpose`**: Performance mode do qisam ke hote hain. `generalPurpose` default hai jo web servers, content management systems, aur home directories ke liye best hai kyunki is mein latency (delay) bohot kam milti hai.
+* **`FileSystemPolicy:`** Yeh EFS ki apni resource-based security policy hai jo access control karti hai.
+* **`Version: '2012-10-17'`**: IAM policy language ka standard version.
+* **`Statement:`** Security rules ki list.
+* **`Effect: 'Deny'`**: Is rule ka maqsad access ko **rokna (block karna)** hai.
+* **`Action: '*'`**: Tamam operations par (parhna, likhna, delete karna, wagera).
+* **`Principal: AWS: '*'`**: Har user, server, ya request par yeh rule apply hoga.
+* **`Condition:`** Condition tabhi sach hogi jab...
+* **`Bool: 'aws:SecureTransport': 'false'`**: ...connection unencrypted ho (yani TLS/SSL encryption ke bina plain network par data bheja ja raha ho).
+* **Is Policy Ka Aasan Matlab:** "Agar koi bhi user ya EC2 server EFS ke sath bina encryption (Encryption in Transit) ke connect hone ki koshish karega, toh EFS usay **Deny (block)** kar dega!" Yeh security ki sab se behtareen practice hai.
+
+---
+
+## Pricing
+
+EFS ki pricing ko samajhna bohot aasan hai. Iska bill mukhya roop se **3 factors** par depend karta hai:
+
+1. **Stored Data ki Taadad (GB per Month):** Aap ne kitne Gigabytes data store kiya hua hai.
+2. **Access Frequency (Kitni Baar Data Parha/Likha Gaya):** Data rozaana access hota hai ya mahine mein ek do dafa.
+3. **Availability vs Cost (Multi-AZ vs Single Zone):** Kya aap ko 99.99% High Availability chahiye ya aap saste bill ke liye ek single data center (99.9%) par raazi hain.
+
+---
+
+### Storage Classes Aur Unka Maqsad
+
+AWS EFS mein 4 main Storage Classes milti hain jinhein aap apni zaroorat ke hisab se chunte hain:
+
+```
+                          ┌──────────────────────────────────────────┐
+                          │            EFS Storage Classes           │
+                          └─────────────────────┬────────────────────┘
+                                                │
+             ┌──────────────────────────────────┴──────────────────────────────────┐
+             ▼                                                                     ▼
+┌───────────────────────────┐                                         ┌───────────────────────────┐
+│     Multi-AZ (Standard)   │                                         │   Single-AZ (One Zone)    │
+│    Availability: 99.99%   │                                         │    Availability: 99.9%    │
+├───────────────────────────┤                                         ├───────────────────────────┤
+│ • Standard Storage        │                                         │ • One Zone Storage        │
+│   (Rozaana frequent access│                                         │   (Frequent access,       │
+│    ke liye)               │                                         │    sasta option)          │
+│                           │                                         │                           │
+│ • Standard-IA Storage     │                                         │ • One Zone-IA Storage     │
+│   (Kambhar access karne   │                                         │   (Kambhar access,        │
+│    wale data ke liye)     │                                         │    sab se sasta option)   │
+└───────────────────────────┘                                         └───────────────────────────┘
+
+```
+
+#### 1. Standard Storage (Frequent Access + Multi-AZ)
+
+* **Kiske Liye Hai?** Aisa data jise rozaana ya bar bar access kiya jata hai.
+* **Faida:** Sab se kam latency (fast response) aur high availability (**99.99%**), kyunki data multiple data centers mein replicate hota hai.
+
+#### 2. Standard–Infrequent Access (IA) Storage
+
+* **Kiske Liye Hai?** Aisa data jise mahine mein ek do baar hi dekha jata hai (kambhar access).
+* **Faida:** Data storage ki keemat bohot kam ho jati hai ($0.025 per GB).
+* **Trade-off:** Jab bhi aap data access (read/write) karenge, toh **Access Request Fee** alag se lagegi, aur pehli byte aane mein thora sa delay (latency) ho sakta hai.
+
+#### 3. One Zone Storage
+
+* **Kiske Liye Hai?** Aisa data jo frequent access hota hai, lekin agar thori dair ke liye unavailable bhi ho jaye toh company ko bara nuqsan na ho.
+* **Trade-off:** Yeh data ko multiple data centers mein copy nahi karta, balke **ek hi data center** mein rakhta hai. Availability kam ho kar **99.9%** reh jati hai, lekin storage price lag bhag aadhi ($0.16 per GB) ho jati hai.
+
+#### 4. One Zone–Infrequent Access (IA) Storage
+
+* **Kiske Liye Hai?** Aisa data jo na toh ziada access hota hai aur na hi uske liye Multi-AZ ki zaroorat hai.
+* **Faida:** Yeh EFS ka **sab se sasta** storage option hai ($0.0133 per GB).
+
+> **Durability Note:** Sub Storage Classes ki **Durability 99.999999999% (11 nines)** hoti hai! Durability ka matlab hai data ke khud ba khud corrupt ya lose na hone ki guarantee. Lekin agar aap One Zone use kar rahe hain, toh us data center par koi qudrati aafat aane ki surat mein data bachane ke liye backup zaroor rakhein.
+
+---
+
+### EFS Pricing Table
+
+Niche di gayi Table 9.1 US East (N. Virginia - `us-east-1`) region ke rates ko zahir karti hai:
+
+**Table 9.1 EFS storage classes affect the monthly costs for storing data.**
+
+| Storage class | Price per GB/month | Access requests per GB transferred |
+| --- | --- | --- |
+| **Standard Storage** | $0.30 | $0.00 |
+| **Standard–Infrequent Access Storage** | $0.025 | $0.01 |
+| **One Zone Storage** | $0.16 | $0.00 |
+| **One Zone–Infrequent Access Storage** | $0.0133 | $0.01 |
+
+#### Table ki Aasan Wazahat:
+
+* **Standard Storage:** $0.30 per GB har mahine. Access par koi extra charge nahi ($0.00).
+* **Standard-IA:** Storage aam Standard se 12 guna sasti ($0.025), lekin har 1 GB data access karne par $0.01 ka extra request fee lagega.
+* **One Zone Storage:** Storage rate $0.16 per GB. Access fee $0.00.
+* **One Zone-IA:** Storage rate $0.0133 per GB. Access fee $0.01.
+
+---
+
+### Cost Estimation Example (5 GB Data Ka Hisab)
+
+Aayein 5 GB data ko EFS par rakhne ka mahana kharcha (cost) calculate karte hain:
+
+* **Scenario:** Data rozaana din mein kai baar access hota hai aur high availability (Multi-AZ) laazmi chahiye.
+* **Storage Class Selection:** Hum **Standard Storage** class chunenge.
+* **Calculation:**
+
+$$\text{Total Cost} = 5\text{ GB} \times \$0.30/\text{GB} = \$1.50\text{ per month}$$
+
+
+
+Poore ek mahine ke liye 5 GB data EFS par rakhne ka kul kharcha sirf **$1.50 (USD)** banta hai.
+
+> **AWS Free Tier Benefit:** Agar aap ka AWS account naya hai (pehlay 12 mahine mein hai), toh AWS Free Tier ke tehat har mahine **5 GB (Standard Storage)** bilkul **MUFT (Free)** milti hai!
+
+---
+
+
