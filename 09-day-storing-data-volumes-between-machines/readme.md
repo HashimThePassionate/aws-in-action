@@ -662,3 +662,135 @@ $ aws cloudformation create-stack --stack-name efs \
 Jab stack ka status **CREATE_COMPLETE** ho jayega, toh aap ke account mein 2 EC2 instances, 2 Mount Targets, aur 1 EFS Filesystem successfully tayar ho chukay honge!
 
 ---
+
+## Sharing files between EC2 instances
+
+Ab hum apna tajarba (practical test) karenge jisse yeh saaf sabit ho jayega ke EFS ki wajah se alag alag servers ke darmiyan files real-time mein share ho rahi hain.
+
+Sab se pehle humein AWS CLI ke zariye apne dono EC2 servers ki Instance IDs chahiye hongi taake hum SSM Session Manager ke zariye un se connect ho sakein.
+
+---
+
+### Step 1: EC2 Instances Ki IDs Nikalna
+
+AWS Terminal / CLI par yeh command chalayen:
+
+```bash
+$ aws cloudformation describe-stacks --stack-name efs \
+    --query "Stacks[0].Outputs"
+[
+  {
+    "Description": "[...]",
+    "OutputKey": "EC2InstanceA",
+    "OutputValue": "i-011a050b697d12e7a"
+  },
+  {
+    "Description": "[...]",
+    "OutputKey": "EC2InstanceB",
+    "OutputValue": "i-a22b67b2a4d25a2b"
+  }
+]
+
+```
+
+#### Command Aur Output ki Line-by-Line Breakdown
+
+* **`aws cloudformation describe-stacks`**: Yeh CloudFormation ko hukum deta hai ke bane hue stacks ki details lao.
+* **`--stack-name efs`**: Makhsoos `efs` naam ke stack ki jankari maang raha hai.
+* **`--query "Stacks[0].Outputs"`**: Yeh command poori lambi details ke bajaye sirf pehle stack (`Stacks[0]`) ke `Outputs` section ko filter kar ke screen par dikhati hai.
+
+**JSON Output Breakdown:**
+
+* **`OutputKey: "EC2InstanceA"`**: Pehle server ka naam.
+* **`OutputValue: "i-011a050b697d12e7a"`**: Subnet A mein bane hue pehle server ki unique **Instance ID**.
+* **`OutputKey: "EC2InstanceB"`**: Doosre server ka naam.
+* **`OutputValue: "i-a22b67b2a4d25a2b"`**: Subnet B mein bane hue doosre server ki unique **Instance ID**.
+
+---
+
+### Step 2: Servers Mein Login Hona Aur Home Directory Check Karna
+
+Ab AWS Management Console par ja kar **SSM Session Manager** ke zariye dono servers (`EC2InstanceA` aur `EC2InstanceB`) ke terminals alag alag tabs mein open kar lein.
+
+> **Aham Baat (User Concept):** Aam tor par Amazon Linux 2 par default user `ec2-user` hota hai. Lekin jab aap AWS Console ke Session Manager se login karte hain, toh aap `ssm-user` naam ke account se login hote hain. Kyunki hum ne poore `/home` folder par EFS ko mount kar diya hai, is liye har user (chahay `ssm-user` ho ya `ec2-user`) EFS storage hi istemal karega.
+
+**Doosre Server (`EC2InstanceB`) par Terminal Command Chalayen:**
+
+```bash
+$ cd $HOME
+
+```
+
+* **Maqsad:** `$HOME` environment variable hai jo aap ko aap ke apne user ke home folder (jaise `/home/ssm-user`) mein le jata hai.
+
+```bash
+$ ls
+
+```
+
+* **Maqsad:** Check karna ke kya abhi home directory mein koi file ya folder pada hai?
+* **Nateeja:** Screen par kuch nazar nahi aata (khali output), jiska matlab hai ke abhi tak koi file nahi bani aur directory bilkul clean hai.
+
+---
+
+### Step 3: Magic Experiment (Ek Server Par File Banana, Doosre Par Dekhna)
+
+Ab hum yeh jaadu check karenge ke ek server par banai gayi file foran doosre server par kaise dikhti hai.
+
+**Pehle Server (`EC2InstanceA`) par ja kar yeh command chalayen:**
+
+```bash
+$ touch i-was-here
+
+```
+
+* **Detail:** `touch` command Linux mein ek khali (empty) file banane ke liye use hoti hai. Yahan hum ne `i-was-here` naam ki ek khali file `EC2InstanceA` par bana di.
+
+**Ab Doosre Server (`EC2InstanceB`) ke terminal par wapas aayein aur chalayen:**
+
+```bash
+$ cd $HOME
+$ ls
+i-was-here
+
+```
+
+**Kamal Ho Gaya! (Voilà!):**
+`EC2InstanceB` par bina koi file banaye, sirf `ls` command chalane se humein `i-was-here` file nazar aa gayi!
+
+Yeh chota sa practical test yeh sabit karta hai ke dono servers bilkul alag alag data centers (Availability Zones) mein hote hua bhi **bilkul same `/home` directory** share kar rahe hain.
+
+---
+
+### Real-World Real Life Scenarios (Yeh Kahan Kahan Kaam Aata Hai?)
+
+Isi tareeqay se aap sirf 2 nahi balke **sainkdon (hundreds) EC2 servers** ko ek sath ek hi EFS storage se jod sakte hain. Real world mein iske do mashhoor use-cases yeh hain:
+
+```text
+                               ┌───────────────────────────┐
+                               │   Fleet of Web Servers    │
+                               └─────────────┬─────────────┘
+                                             │
+                  ┌──────────────────────────┴──────────────────────────┐
+                  ▼                                                     ▼
+┌───────────────────────────────────┐                 ┌───────────────────────────────────┐
+│           EC2 Server 1            │                 │           EC2 Server 2            │
+│    (Mounts /var/www/html)         │                 │    (Mounts /var/www/html)         │
+└─────────────────┬─────────────────┘                 └─────────────────┬─────────────────┘
+                  │                                                     │
+                  └──────────────────────────┬──────────────────────────┘
+                                             │
+                                  ┌──────────▼──────────┐
+                                  │   EFS Filesystem    │
+                                  │  (Single Web Code)  │
+                                  └─────────────────────┘
+
+```
+
+1. **Web Server Fleet (`/var/www/html`):**
+Agar aap ki website par lakho visitors aa rahe hain aur aap ne 50 web servers chalaye hue hain. Har server par alag se website ka code upload karne ke bajaye aap website ka code EFS par rakhte hain aur tamaam servers par `/var/www/html` folder ko EFS se mount kar dete hain. Ek jaga code update hoga, tamaam 50 servers par website instant update ho jayegi!
+2. **Highly Available Jenkins CI/CD Server (`/var/lib/jenkins`):**
+Jenkins automated deployment ke liye use hota hai. Agar aap Jenkins ka main folder (`/var/lib/jenkins`) EFS par rakh dein, toh agar Jenkins wala server crash bhi ho jaye, aap foran ek naya EC2 server bana kar EFS mount karenge aur aap ka poora Jenkins setup (history, jobs, pipelines) bina kisi data loss ke minutes mein dubara Zinda (Up and Running) ho jayega.
+
+---
+
