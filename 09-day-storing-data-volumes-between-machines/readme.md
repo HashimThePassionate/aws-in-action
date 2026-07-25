@@ -1029,3 +1029,211 @@ Performance ko effect karne wali teesri aur aakhri cheez **Storage Class** hai.
 * Lekin agar aap paise bachane ke liye **One Zone storage class** chunte hain, toh latency barh kar **double-digit milliseconds** (yani 10ms se 99ms tak) ho jati hai. Kuch sensitive applications ko is delay ki wajah se masla aa sakta hai. Is liye hamesha apne workload ke hisab se storage class choose karein.
 
 ---
+
+## Backing up your data
+
+AWS EFS mein data rakhne par aap ko **99.999999999% (11 9s)** durability ki guarantee milti hai. Iska matlab hai ke AWS ke hardware failure ki wajah se aap ka data kabhi zaya nahi hoga kyunki Standard storage class mein EFS aap ke data ki copies ek se ziada data centers mein khud ba khud banata rehta hai.
+
+Lekin, is sab ke bawajood backup lena be-had zaroori hai. Kyun? Kyunki agar koi insaan (maslan aap khud ya aap ka koi team member) ghalti se EFS se koi zaroori file delete kar de, toh AWS usay wapas nahi laa sakta. Aise haadsat (accidental deletions) se bachne ke liye backups kaam aate hain.
+
+Khush qismati se, AWS is maqsad ke liye ek centralized (markazi) service deta hai jise **AWS Backup** kaha jata hai. Yeh service na sirf EFS, balke EC2, EBS, S3, RDS, aur DynamoDB sab ka backup lene ke liye istemal hoti hai.
+
+AWS Backup ke zariye EFS ka snapshot (backup) banane ke liye 3 bunyadi components (hisson) ki zaroorat hoti hai:
+
+* **Vault:** Yeh ek container ya safe (tijori) hai jahan aap ke tamam backups jama kiye jate hain.
+* **Plan:** Yeh ek schedule (time-table) aur rules ka set hai jo batata hai ke backup *kab* aur *kaise* lena hai.
+* **Recovery Point:** Yeh aap ka asal backup data (snapshot) hota hai jis se baad mein data ko wapas restore kiya ja sakta hai.
+
+### Figure 9.4 aur `image_114be6.png` ka Mukammal Breakdown
+
+Writer ne `image_114be6.png` (Figure 9.4) mein AWS Backup ka poora architecture bohot asaan tarah se dikhaya hai. Aayein isay ek plain-text structural diagram se samajhte hain:
+
+```text
+  [ Backup Plan ] 
+         │
+         │ (Triggers backup every day at 00:00 UTC)
+         │
+         ▼
+[ EFS Filesystem ] 
+         │
+         │ (Persists recovery point)
+         │
+         ▼
+ [ Backup Vault ]
+
+```
+
+**Image ki Wazahat (Diagram Breakdown):**
+
+1. Sab se upar hamara **Backup Plan** hota hai. Is mein hum ne ek rule set kiya hai ke har raat thik 00:00 UTC (raat 12 baje) EFS ka backup lena hai.
+2. Jaise hi waqt hota hai, yeh Plan ja kar hamare **EFS Filesystem** ko trigger karta hai aur uske us waqt ke data ki ek tasveer (snapshot) le leta hai.
+3. Us snapshot ko **Recovery Point** kaha jata hai, jise le ja kar hamesha ke liye neechay mojood **Backup Vault** (tijori) mein mehfooz kar diya jata hai.
+
+---
+
+### Enbling Backups with CloudFormation
+
+Apne EFS par backups ko on (enable) karne ke liye humein apne mojooda CloudFormation stack ko update karna hoga. Is ke liye hum CLI par yeh command chalate hain:
+
+```bash
+$ aws cloudformation update-stack --stack-name efs \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/\
+  chapter09/efs-backup.yaml --capabilities CAPABILITY_IAM
+
+```
+
+* **Maqsad:** Yeh command purane `efs` stack ko naye template `efs-backup.yaml` se update kar degi. `--capabilities CAPABILITY_IAM` is liye laazmi hai kyunki naya template ek naya IAM Role banayega.
+
+> **Where is the template located?**
+> Yeh naya CloudFormation template aap yahan se hasil kar sakte hain:
+> * **GitHub:** `[https://github.com/AWSinAction/code3/archive/main.zip](https://github.com/AWSinAction/code3/archive/main.zip)` (Path: `chapter09/efs-backup.yaml`)
+> * **S3 URL:** `[https://s3.amazonaws.com/awsinaction-code3/chapter09/efs-backup.yaml](https://s3.amazonaws.com/awsinaction-code3/chapter09/efs-backup.yaml)`
+> 
+> 
+
+---
+
+### Listing 9.10 Backing up an EFS filesystem with AWS Backup
+
+Ab hum dekhte hain ke CloudFormation code ke andar AWS Backup ke components (Vault, Plan, aur Selection) kaise banaye jate hain:
+
+```yaml
+BackupVault: # Recovery points ko persist karne ke liye backup vault banata hai
+  Type: 'AWS::Backup::BackupVault'
+  Properties:
+    BackupVaultName: !Ref 'AWS::StackName' # Aik backup vault ko unique naam ki zaroorat hoti hai; isliye hum yahan CloudFormation stack ka naam istemal kar rahe hain
+
+BackupPlan: # Backup plan banata hai
+  Type: 'AWS::Backup::BackupPlan'
+  Properties:
+    BackupPlan:
+      BackupPlanName: 'efs-daily'
+      BackupPlanRule: # Har backup plan mein kam az kam aik rule shamil hota hai
+        - RuleName: 'efs-daily'
+          TargetBackupVault: !Ref BackupVault # Rule ye define karta hai ke backups ko store karne ke liye kaunsa backup vault istemal hona chahiye
+          Lifecycle: # Lifecycle ko is tarah configure kiya gaya hai ke 30 din se purane backups delete ho jayein
+            DeleteAfterDays: 30
+          ScheduleExpression: 'cron(0 5 ? * * *)' # Backup plan har roz 05:00 UTC par backup schedule karta hai
+          CompletionWindowMinutes: 1440 # Backup 24 ghantay ke andar mukammal hona chahiye; warna ye cancel ho jaye ga
+
+BackupSelection: # Backup mein shamil karne ke liye resources ko select karta hai
+  Type: 'AWS::Backup::BackupSelection'
+  Properties:
+    BackupPlanId: !Ref BackupPlan # Backup plan ka reference deta hai
+    BackupSelection:
+      SelectionName: 'efs'
+      IamRoleArn: !GetAtt 'BackupRole.Arn' # EFS tak access grant karne ke liye aik IAM role ki zaroorat hoti hai
+      Resources:
+        - !GetAtt 'FileSystem.Arn' # Filesystem ke ARN ka istemal karke isay backup selection mein add karta hai
+
+```
+
+#### Code ki Deep Detail
+
+* **`BackupVault:`** Yeh block tijori (Vault) banata hai. `BackupVaultName` ko `AWS::StackName` (yani 'efs') ka naam diya gaya hai.
+* **`BackupPlan:`** Yeh block backup ke asool tay karta hai.
+* **`TargetBackupVault:`** Batata hai ke saare backups upar banaye gaye tijori mein jayenge.
+* **`Lifecycle: DeleteAfterDays: 30`**: Yeh bohot eham hai! Agar aap purane backups delete nahi karenge toh storage ka bill bohot ziada aayega. Yeh rule har backup ko 30 din ke baad khud ba khud delete kar dega.
+* **`ScheduleExpression: 'cron(0 5 ? * * *)'`**: Yeh cron job hai jo har roz Subah 05:00 UTC par automatically backup lene ka hukum deti hai.
+* **`CompletionWindowMinutes: 1440`**: Iska matlab hai ke AWS ko backup shuru kar ke mukammal karne ke liye zyada se zyada 24 ghante (1440 minute) ka waqt diya gaya hai. Agar 24 ghante mein backup poora na hua toh process fail/cancel ho jayega.
+* **`BackupSelection:`** AWS Backup ko kaise pata chalega ke kis cheez ka backup lena hai? Yahan `Resources` ke andar humne apne EFS `FileSystem.Arn` (Amazon Resource Name) ka pata de diya hai taake sirf hamare EFS ka backup bane. Aur `IamRoleArn` ke zariye usay is kaam ko karne ki chaabi (permission) di gayi hai.
+
+---
+
+### Listing 9.11 The IAM role granting AWS Backup access to EFS
+
+Security ke asoolon ke mutabiq, AWS Backup khud se aap ke EFS ke andar nahi ghus sakta. Humein usay ek IAM Role (chaabi) bana kar deni parti hai:
+
+```yaml
+BackupRole:
+  Type: 'AWS::IAM::Role'
+  Properties:
+    AssumeRolePolicyDocument:
+      Version: '2012-10-17'
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'backup.amazonaws.com' # Sirf AWS Backup service ko hi is IAM role ko assume karne ki ijazat hai
+          Action: 'sts:AssumeRole'
+    Policies:
+      - PolicyName: backup
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'elasticfilesystem:Backup' # Ye role EFS filesystems ke backups create karne ki access deta hai...
+                - 'elasticfilesystem:DescribeTags' # ...aur aapko EFS filesystems ke tags ko describe karne ki ijazat deta hai
+              Resource: !Sub 'arn:${AWS::Partition}:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/${FileSystem}' # Ye policy us filesystem tak access ko restrict karti hai
+
+```
+
+#### Code ki Deep Detail
+
+* **`AssumeRolePolicyDocument:`** Yeh hissa tay karta hai ke yeh role kaun pehen sakta hai. Yahan `Service: 'backup.amazonaws.com'` likha hai, jiska matlab hai yeh role sirf AWS Backup service hi istemal kar sakti hai, koi insaan ya EC2 nahi.
+* **`Policies (Permissions):`** Yeh hissa batata hai ke AWS Backup EFS ke sath kya kya kar sakta hai.
+* `elasticfilesystem:Backup`: Ijazat deta hai ke data ko copy/backup kar sake.
+* `elasticfilesystem:DescribeTags`: EFS par lage hue tags (chits) ko parhne ki ijazat deta hai.
+* **`Resource:`** Strict security! Humne wazeh kar diya hai ke AWS Backup sirf aur sirf is makhsoos `${FileSystem}` ke sath hi chher chhar kar sakta hai, kisi doosre customer ya account ke EFS ko haath nahi laga sakta.
+
+### Restoring and Pricing (Data Wapas Lana aur Keemat)
+
+Pehla backup banne mein kuch waqt lag sakta hai. Agar aap 24 ghante baad Console mein AWS Backup service par ja kar apna "efs" naam ka Vault kholenge, toh aap ko apna pehla **Recovery Point** dastyab milega. Wahan se aap chahain toh kisi ek folder ko ya poore EFS ko kisi emergency mein wapas (restore) laa sakte hain. Aap is data ko same EFS drive mein ya ek bilkul nayi EFS drive mein restore kar sakte hain.
+
+**Kharcha (Costs):**
+N. Virginia (us-east-1) region mein AWS Backup ki keemat yeh hai:
+
+* **Storage (Backup rakhne ka kharcha):** $0.05 per GB har mahine.
+* **Restore (Data wapas nikalne ka kharcha):** $0.02 per GB.
+
+---
+
+## Cleaning up
+
+Chapter ke practicals mukammal hone ke baad bill se bachne ke liye resources ko saaf (delete) karna laazmi hai. EFS stack tab tak delete nahi hoga jab tak uske andar backups (recovery points) mojood hain.
+
+Sab se pehle apne saare recovery points dhoondein:
+
+```bash
+$ aws backup list-recovery-points-by-backup-vault --backup-vault-name efs \
+  --query "RecoveryPoints[].RecoveryPointArn"
+
+```
+
+* **Maqsad:** Yeh command `efs` naam ke vault mein se saare backups ki IDs (ARNs) dhoond kar aap ko de gi.
+
+Us ke baad un ARNs ko ek ek kar ke is command se delete karein:
+
+```bash
+$ aws backup delete-recovery-point --backup-vault-name efs \
+  --recovery-point-arn $RecoveryPointArn
+
+```
+
+* **Maqsad:** `$RecoveryPointArn` ki jagah upar mili hui ID dalein aur backup delete karein.
+
+Jab Vault khali ho jaye, toh aakhir mein apna poora CloudFormation stack urha dein:
+
+```bash
+$ aws cloudformation delete-stack --stack-name efs
+
+```
+
+* **Maqsad:** Yeh aap ke banaye gaye dono EC2 instances, Mount targets, EFS Filesystem aur Security groups sab kuch hamesha ke liye delete kar dega aur aap ke account ko saaf kar dega.
+
+---
+
+## Summary
+
+Chaliye Chapter 9 mein parhi gayi saari baton ka jaldi se mukammal nichor (revision) kar lete hain:
+
+* EFS ek **NFSv4.1 protocol** par mabni shared network filesystem hai jise alag alag Availability Zones mein rakhe hue bohot saare Linux EC2 instances ek hi waqt mein istemal kar sakte hain.
+* EFS tak pohanchne ke liye subnet mein **Mount Targets** banaye jate hain aur inein **Security Groups** (Firewalls) ke zariye protect kiya jata hai.
+* EFS (Standard class) ka sab se bara faida yeh hai ke data khud ba khud **multi-AZ (multiple data centers)** mein copy hota rehta hai, jis se High Availability milti hai.
+* Is ke 2 Performance Modes hain: Agar chhoti chhoti beshumar files hain (jaise `/home` directory) toh **General Purpose** chunein. Aur agar heavy data analytics karni hai jahan latency ka issue nahi, toh **Max I/O** chunein.
+* Throughput (Speed) by default **Bursting** hoti hai (yani kam speed, par zaroorat padne par short time ke liye high speed). Agar aap ko 24 ghante constant tez speed chahiye toh aap **Provisioned Throughput** khareed sakte hain.
+* System ko kabhi down na hone dene (High Availability) ke liye laazmi hai ke aap ke EFS ke kam az kam **2 Mount Targets** alag alag data centers mein bane hon.
+* Data ko raste mein chori hone se bachane ke liye **TLS (Encryption in Transit)** aur kon access kar sakta hai uske liye **IAM Authentication** ka istemal hota hai.
+* Aakhir mein, EFS ka snapshot/backup lene aur data hamesha mehfooz rakhne ke liye **AWS Backup** service ka istemal kiya jata hai.
+
+---
