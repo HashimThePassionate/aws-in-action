@@ -794,3 +794,238 @@ Jenkins automated deployment ke liye use hota hai. Agar aap Jenkins ka main fold
 
 ---
 
+## Tweaking performance
+
+EFS bohot zabardast hai kyunki yeh humein ek hi network filesystem ko bohot saari machines (servers) ke sath connect karne ki ijazat deta hai. Lekin, practically real-world mein EFS ki **performance (speed)** ke maslay aksar aate hain. Is section mein hum un tareeqon ko parhenge jin se hum EFS se maximum speed aur behtareen performance nikal sakte hain.
+
+EFS ki latency (data aane mein delay), throughput (data transfer ki speed), aur I/O operations (read/write requests) in **teen (3)** khaas factors par depend karte hain:
+
+* **The performance mode** — General Purpose ya Max I/O
+* **The throughput mode** — Bursting ya Provisioned
+* **The storage class** — Standard ya One Zone
+
+Aayein in sab ko deep detail mein samajhte hain.
+
+---
+
+## Performance mode
+
+EFS banate waqt aap ko do (2) performance modes mein se ek chunna hota hai:
+
+* **General Purpose mode:** Yeh ek second mein **35,000 IOPS** (Input/Output Operations Per Second) tak bardasht kar sakta hai.
+* **Max I/O mode:** Yeh ek second mein **500,000+ IOPS** tak bardasht kar sakta hai.
+
+> **IOPS kya hota hai? (Bachon ki tarah samajhna):**
+> IOPS ka matlab hai ke aap ki hard drive 1 second mein kitni dafa koi file parh (read) ya likh (write) sakti hai. EFS mein ek I/O operation ka size kam az kam 4 KB hota hai.
+
+**Kaunsa Mode Kab Chunein?**
+
+* **General Purpose:** Agar aap ka data choti choti files (jaise documents, web pages, ya `/home` directory) par mushtamil hai aur aap chahte hain ke file click karte hi **foran (low latency)** khul jaye, toh yeh mode best hai. Ziada tar log yahi use karte hain.
+* **Max I/O:** Jab aap ko Data Analytics karni ho jahan Gigabytes (GBs) ya Terabytes (TBs) ka bara data process karna ho. Aise kamo mein humein is baat se farq nahi parta ke pehli file khulne mein 1 millisecond laga ya 100 milliseconds (Latency aham nahi hoti). Humein sirf yeh chahiye ke data **tezi se (high throughput)** transfer ho.
+*(Misaal ke tor par: 1 TB data agar 100 MB/s ki speed se analyze ho toh 3 ghante lagenge, is liye yahan speed ziada zaroori hai).*
+
+**Sab se Eham Baat (WARNING):**
+Aap ek dafa EFS filesystem bana lein, toh uska Performance Mode **badal (change) nahi sakte**. Agar mode change karna ho, toh naya EFS banana parega. Is liye agar aap ko samajh na aaye, toh hamesha **General Purpose** se shuru karein.
+
+CloudWatch ke zariye hum check kar sakte hain ke hamara filesystem apni limit tak pohanch raha hai ya nahi. Is ke liye hum `PercentIOLimit` metric dekhte hain. Jab limit poori ho jaye, toh Max I/O par jana behtar hota hai, magar yaad rakhein Max I/O par files khulne mein thora sa zyada delay (single-digit milliseconds) aata hai.
+
+### Listing 9.6 Monitoring the PercentIOLimit metric using a CloudWatch alarm
+
+Agar `PercentIOLimit` 100% ho jaye, iska matlab aap 35,000 read/write limit cross kar rahe hain. Isay monitor karne ke liye yeh CloudWatch alarm ka code hai:
+
+```yaml
+PercentIOLimitTooHighAlarm: # CloudWatch alarm banata hai
+  Type: 'AWS::CloudWatch::Alarm'
+  Properties:
+    AlarmDescription: 'I/O limit has been reached, consider ...'
+    Namespace: 'AWS/EFS' # EFS apne tamam metrics ke liye AWS/EFS istemal karta hai
+    MetricName: PercentIOLimit
+    Statistic: Maximum # Alarm maximum ka istemal karke PercentIOLimit metric ka jaiza leta hai
+    Period: 600 # Alarm 600 seconds ke period ki nigrani karta hai
+    EvaluationPeriods: 3 # Alarm pichlay teen periods ko mad-e-nazar rakhta hai, jo ke 3x 600 seconds banta hai
+    ComparisonOperator: GreaterThanThreshold # Agar maximum PercentIOLimit threshold se zyada ho, toh alarm trigger ho jaye ga
+    Threshold: 95 # Threshold 95% par set kiya gaya hai
+    Dimensions:
+      - Name: FileSystemId # Har filesystem apna PercentIOLimit metric report karta hai.
+        Value: !Ref FileSystem # Filesystem ki ID ka reference deta hai
+
+```
+
+**Code ki Detail:**
+
+* `Type: 'AWS::CloudWatch::Alarm'`: AWS ko batata hai ke ek naya alarm banana hai.
+* `MetricName: PercentIOLimit`: EFS ki I/O usage check karne wala parameter.
+* `Period: 600` & `EvaluationPeriods: 3`: Alarm har 10 minute (600 seconds) ka data check karega, aur lagatar 3 dafa (yani 30 minute tak) check karega.
+* `Threshold: 95`: Agar aap ki EFS disk ki I/O capacity lagatar 30 minute tak **95% se upar** rehti hai, toh yeh alarm baj jaye ga (trigger ho jaye ga)!
+
+---
+
+## Throughput mode
+
+EFS ki data transfer speed (throughput) do tarah se control hoti hai:
+
+* **Bursting Throughput mode:** Is mein normal speed (baseline) thori kam hoti hai, lekin waqt aane par yeh thori dair ke liye bohot tez (burst) ho sakti hai. Is mode mein speed aap ke EFS mein majood data ke size ke hisab se automatically barhti hai.
+* **Provisioned Throughput mode:** Is mein aap AWS ko kehte hain ke "Mujhe musalsal (constant) 100 MB/s speed chahiye, main iske alag se paise dunga." Iski limit 1 GiB/s hoti hai aur charge $6.00 per MB/s per month hota hai.
+
+### BURSTING THROUGHPUT MODE
+
+Is mode ko aap apne **"Mobile Data ya Energy Bar"** ki tarah samjhein.
+EFS ka asool yeh hai: Agar aap ne 1 TiB (Lag bhag 1 TB) data rakha hai, toh AWS aap ko **50 MiB/s ki normal speed (Baseline)** dega. Lekin agar aap ko achanak ziada speed chahiye, toh yeh burst ho kar **100 MiB/s** tak chali jayegi.
+
+**Table 9.2 EFS throughput depends on the storage size.**
+
+| Filesystem size | Baseline throughput | Bursting throughput | Explanation |
+| --- | --- | --- | --- |
+| **<=20 GiB** | 1 MiBps | 100 MiBps | EFS ki sab se kam speed 1 MiB/s hoti hai, par burst speed 100 MiB/s hoti hai. |
+| **1 TiB** | 50 MiBps | 100 MiBps | 1 TiB data hone par normal speed 50 aur burst 100 hoti hai. |
+| **30 TiB** | 1500 MiBps | 3000 MiBps | N. Virginia region mein max burst speed 3000 MiB/s (3 GiBps) tak ja sakti hai. |
+| **>=60 TiB** | 3000 MiBps | 3000 MiBps | Bara data hone par normal aur burst speed dono full maximum par pohanch jati hain. |
+
+> **Burst Credits Kaise Kaam Karte Hain? (Asaan Misal):**
+> Jab aap ki EFS disk normal speed (baseline) se kam speed istemal kar rahi hoti hai, toh woh bachi hui taqat ko **"Credits"** (jaise mobile ka bacha hua balance) ki shakal mein jama karti rehti hai. Har 1 TiB par din mein 50 MiBps credits jama hote hain.
+> Jab aap ko kisi heavy kaam ke liye achanak tez speed (Burst) chahiye hoti hai, toh EFS un jama shuda credits ko kharach kar ke speed ko 100 MiB/s ya is se bhi ziada kar deta hai. Lekin agar aap ki "Energy" (Credits) khatam ho jaye, toh speed wapas gir kar normal (Baseline) ho jati hai.
+
+EFS ke andar Data Read karne (parhne) par discount hai. US East region mein aap writing ke muqablay mein 1.66 guna tez data read kar sakte hain (lekin file size 4KB se bara hona chahiye). Yaad rahay, "Infrequent Access" (IA) class mein rakha data in credits ko barhane mein koi madad nahi karta.
+
+### Listing 9.7 Monitoring the PercentIOLimit metric using a CloudWatch alarm
+
+*Writer ne yahan heading PercentIOLimit ki di hai par asal code BurstCreditBalance ka hai.*
+
+Agar credits khatam ho jayein toh website/app bohot slow ho sakti hai. Is liye hum Credits ko monitor karte hain:
+
+```yaml
+BurstCreditBalanceTooLowAlarm:
+  Type: 'AWS::CloudWatch::Alarm'
+  Properties:
+    AlarmDescription: 'Average burst credit balance over last ...'
+    Namespace: 'AWS/EFS'
+    MetricName: BurstCreditBalance # Ye alarm BurstCreditBalance metric ki nigrani karta hai
+    Statistic: Average
+    Period: 600
+    EvaluationPeriods: 1
+    ComparisonOperator: LessThanThreshold
+    Threshold: 19200000000 # 19200000000 bytes ka threshold 192 GB banta hai
+    Dimensions:
+      - Name: FileSystemId
+        Value: !Ref FileSystem
+
+```
+
+**Code ki Detail:**
+
+* `MetricName: BurstCreditBalance`: Hamare bache hue credits ka hisab rakhta hai.
+* `ComparisonOperator: LessThanThreshold`: Yeh check karta hai ke kya credits hamari set ki gayi limit se **kam (Less)** ho gaye hain?
+* `Threshold: 19200000000`: Yeh bytes hain jo lag bhag 192 GB bante hain. Iska matlab hai, "Agar mere EFS ki jama shuda energy 192 GB se kam reh jaye (yani sirf 30 minute ka burst baqi ho), toh foran alarm baja do!"
+
+### PROVISIONED THROUGHPUT MODE
+
+Agar aap ki application ko 24 ghante bohot tez speed chahiye aur aap credits khatam hone ka risk nahi le sakte, toh aap **Provisioned Throughput Mode** par switch kar sakte hain. Is mein aap limit fix kar dete hain (maslan mujhe 200 MiBps speed hamesha chahiye) aur max limit 1 GiBps tak jati hai.
+
+**Keemat (Billing) ka Hisab:**
+Aap ko $6.00 per MB/s har mahine dena parta hai. Lekin achi baat yeh hai ke AWS aap se sirf **Extra** speed ka paisa leta hai. Agar 1 TiB data ki wajah se aap ki free Baseline speed pehle se 50 MiBps hai, aur aap ne 200 MiBps provision ki hai, toh aap ko sirf baqi ke 150 MiBps (200 - 50 = 150) ke paise dene parenge!
+
+CLI se stack update karne ka command:
+
+```bash
+$ aws cloudformation update-stack --stack-name efs \ 
+    --template-url https://s3.amazonaws.com/awsinaction-code3/\ 
+    chapter09/efs-provisioned.yaml --capabilities CAPABILITY_IAM 
+
+```
+
+### Listing 9.8 EFS filesystem with provisioned throughput
+
+Provisioned mode ko enable karne ke liye CloudFormation ka code thora sa change hota hai:
+
+```yaml
+FileSystem:
+  Type: 'AWS::EFS::FileSystem'
+  Properties:
+    Encrypted: true
+    ThroughputMode: provisioned # Throughput mode ko bursting se tabdeel karke provisioned par set karta hai
+    ProvisionedThroughputInMibps: 1 # Provisioned throughput ko MiBps mein configure karta hai. 1 MiBps bilkul muft (free) hota hai
+    PerformanceMode: generalPurpose
+    FileSystemPolicy:
+      # [Policy details wahi same hain]
+
+```
+
+**Code ki Detail:**
+
+* `ThroughputMode: provisioned`: Mode change kar diya gaya.
+* `ProvisionedThroughputInMibps: 1`: Yahan hum ne demand ki hai ke humein 1 MiBps lagatar chahiye. Kyunki EFS ko wese hi min 1 MiBps free milta hai, is liye iska koi charge nahi lagega.
+
+### Listing 9.9 Monitoring using a CloudWatch alarm and metric math
+
+Provisioned mode mein humein yeh check karna hota hai ke jo speed humne kharidi hai, kya hum usay poora istemal kar pa rahe hain ya nahi? Is ke liye hum **Metric Math (Riyazi ke Formulas)** ka istemal kar ke alarm banate hain.
+
+```yaml
+PermittedThroughputAlarm:
+  Type: 'AWS::CloudWatch::Alarm'
+  Properties:
+    AlarmDescription: 'Reached 80% of the permitted throughput ...'
+    Metrics: # Multiple metrics ko combine karne ke liye metric math istemal karta hai
+      - Id: m1
+        Label: MeteredIOBytes # Pehlay metric ko ID m1 assign karta hai
+        MetricStat:
+          Metric:
+            Namespace: 'AWS/EFS'
+            MetricName: MeteredIOBytes # Liye jane wala pehla metric MeteredIOBytes hai, jo mojooda utilization ko zahir karta hai
+            Dimensions:
+              - Name: FileSystemId
+                Value: !Ref FileSystem
+          Period: 60
+          Stat: Sum
+          Unit: Bytes
+        ReturnData: false
+      - Id: m2
+        Label: PermittedThroughput # Doosra metric PermittedThroughput hai, jo maximum throughput ko batata hai
+        MetricStat:
+          Metric:
+            Namespace: 'AWS/EFS'
+            MetricName: PermittedThroughput
+            Dimensions:
+              - Name: FileSystemId
+                Value: !Ref FileSystem
+          Period: 60
+          Stat: Sum
+          Unit: 'Bytes/Second'
+        ReturnData: false
+      - Expression: '(m1/1048576)/PERIOD(m1)' # Pehla metric (m1) 60 seconds ke andar transfer hone wale bytes ka sum return karta hai. Ye expression isay MiBps mein convert karta hai
+        Id: e1 # Agli line mein reference dene ke liye metric ko ID e1 assign karta hai
+        Label: e1
+        ReturnData: false
+      - Expression: 'm2/1048576' # Doosray metric ko bytes/second se MiBps mein convert karta hai
+        Id: e2
+        Label: e2
+        ReturnData: false
+      - Expression: '((e1)*100)/(e2)' # Throughput utilization ko percent mein calculate karta hai
+        Id: e3
+        Label: 'Throughput utilization (%)'
+        ReturnData: true # Teesray expression ka output hi woh wahid metric/expression hai jo alarm ke liye data return karta hai
+    EvaluationPeriods: 10
+    DatapointsToAlarm: 6
+    ComparisonOperator: GreaterThanThreshold
+    Threshold: 80 # Agar throughput utilization 80% se zyada ho, toh alarm trigger ho jata hai
+
+```
+
+**Metric Math Code ki Bilkul Aasan Detail:**
+
+1. **`Id: m1` (Metric 1 - MeteredIOBytes):** Yeh dekhta hai ke asal mein kitna data (Bytes mein) EFS mein in/out ho raha hai.
+2. **`Id: m2` (Metric 2 - PermittedThroughput):** Yeh batata hai ke aap ne kitni max speed AWS se kharidi hui hai.
+3. **`Id: e1` (Expression 1):** Yeh `m1` ki value ko pakad kar `1048576` se divide karta hai taake Bytes badal kar **MiB (Megabytes)** ban jayein.
+4. **`Id: e2` (Expression 2):** Yeh `m2` ki value ko bhi Bytes/sec se badal kar MiB/sec mein le aata hai.
+5. **`Id: e3` (Expression 3):** Sab se main formula! Yeh dekhta hai: `(Istemaal Shuda Speed x 100) / Khareedi Gayi Total Speed`. Is se humein **Percentage (%)** mil jati hai ke hum apni kharidi hui limit ka kitna hissa use kar rahe hain. `ReturnData: true` batata hai ke sirf isi percentage ko final result manna hai.
+6. **`Threshold: 80`**: Agar aap apni kharidi hui speed ka 80% hissa istemal karne lag jayen, toh alarm baja do taake aap waqt par aur ziada speed khareed sakein!
+
+---
+
+## Storage class affects performance
+
+Performance ko effect karne wali teesri aur aakhri cheez **Storage Class** hai.
+
+* Agar aap EFS ka default **Standard Storage Class** istemal karte hain, toh data ko parhne (Read) mein sirf **600 microseconds** (yani ek second ka hazaarwaan hissa) lagte hain. Aur likhne (Write) mein kuch milliseconds. Yeh bohot zyada tez hai.
+* Lekin agar aap paise bachane ke liye **One Zone storage class** chunte hain, toh latency barh kar **double-digit milliseconds** (yani 10ms se 99ms tak) ho jati hai. Kuch sensitive applications ko is delay ki wajah se masla aa sakta hai. Is liye hamesha apne workload ke hisab se storage class choose karein.
+
+---
