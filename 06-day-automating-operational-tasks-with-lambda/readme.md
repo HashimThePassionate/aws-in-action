@@ -1,9 +1,5 @@
 # Automating operational tasks with Lambda
 
-Yeh text **AWS Lambda** aur **Serverless Architecture** ka ek bohat aasan aur mazeedarchhed (introduction) hai. Aayein is pooray text ke ek ek point, concept, aur real-world misaal ko bacho ki tarah bilkul aasan Roman Urdu mein samajhte hain:
-
----
-
 Is section mein writer humein AWS ke sab se zabardast aur mashhoor tool se milwa raha hai, jiska naam hai **AWS Lambda**.
 
 ### AWS Lambda: Aap ki Toolbox Ka Swiss Army Knife
