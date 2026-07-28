@@ -1,6 +1,26 @@
 # Automating operational tasks with Lambda
 
+<details style="margin: 1rem 0 1.5rem;">
+  <summary style="cursor: pointer; font-weight: 700; color: #0f172a;">📚 Table of Contents</summary>
+  <div style="margin-top: 10px; padding: 12px 14px; border: 1px solid #dbeafe; border-left: 4px solid #2563eb; border-radius: 10px; background: #f8fbff;">
+    <ul style="margin: 0; padding-left: 18px; line-height: 1.7;">
+      <li><a href="#aws-lambda-aap-ki-toolbox-ka-swiss-army-knife">AWS Lambda: Aap ki Toolbox Ka Swiss Army Knife</a></li>
+      <li><a href="#aws-infrastructure-ko-automate-karna">AWS Infrastructure Ko Automate Karna</a></li>
+      <li><a href="#zero-maintenance-aur-high-availability">Zero Maintenance aur High Availability</a></li>
+      <li><a href="#billing-model-jitna-chalaoge-sirf-usi-ka-paisa-dena-hai-pay-per-invocation">Billing Model: “Jitna Chalaoge, Sirf Usi Ka Paisa Dena Hai”</a></li>
+      <li><a href="#executing-your-code-with-aws-lambda">Executing your code with AWS Lambda</a></li>
+      <li><a href="#what-is-serverless">What is serverless?</a></li>
+      <li><a href="#running-your-code-on-aws-lambda">Running your code on AWS Lambda</a></li>
+      <li><a href="#comparing-aws-lambda-with-virtual-machines-amazon-ec2">Comparing AWS Lambda with virtual machines (Amazon EC2)</a></li>
+      <li><a href="#table-61-aws-lambda-compared-to-amazon-ec2">Table 6.1 AWS Lambda compared to Amazon EC2</a></li>
+      <li><a href="#building-a-website-health-check-with-aws-lambda">Building a website health check with AWS Lambda</a></li>
+    </ul>
+  </div>
+</details>
+
 Is section mein writer humein AWS ke sab se zabardast aur mashhoor tool se milwa raha hai, jiska naam hai **AWS Lambda**.
+
+<a id="aws-lambda-aap-ki-toolbox-ka-swiss-army-knife"></a>
 
 ### AWS Lambda: Aap ki Toolbox Ka Swiss Army Knife
 
@@ -25,6 +45,8 @@ Is ke baad aap ka kaam khatam! Aap ka code ek **Fully Managed Computing Environm
 
 ---
 
+<a id="aws-infrastructure-ko-automate-karna"></a>
+
 ### AWS Infrastructure Ko Automate Karna
 
 AWS Lambda poore AWS system ke sath bohat gehre tarike se mila hua (integrated) hai. Is ka sab se bara fayda yeh hai ke aap apni infrastructure ke daily repetitive (baar baar hone wale) kaam automatic karwa sakte hain.
@@ -38,6 +60,8 @@ Writer apni company mein Lambda ko do bare kaamon ke liye use karta hai:
 
 ---
 
+<a id="zero-maintenance-aur-high-availability"></a>
+
 ### Zero Maintenance aur High Availability
 
 Lambda aap ko ek aisa environment deta hai jahan aap ko koi maintenance (dekh-bhal) nahi karni parti aur yeh **Highly Available** hota hai (matlab kabhi band nahi hota).
@@ -47,6 +71,8 @@ Lambda aap ko ek aisa environment deta hai jahan aap ko koi maintenance (dekh-bh
 * **No Remote Access Management:** Admin log-in ke liye SSH keys ya RDP (Remote Desktop) manage karne ka koi jhanjhat nahi.
 
 ---
+
+<a id="billing-model-jitna-chalaoge-sirf-usi-ka-paisa-dena-hai-pay-per-invocation"></a>
 
 ### Billing Model: "Jitna Chalaoge, Sirf Usi Ka Paisa Dena Hai" (Pay-per-Invocation)
 
@@ -77,6 +103,8 @@ Chapter ke aakhir mein aap seekhein ge ke Lambda se Web Applications, Internet o
 ---
 
 
+<a id="executing-your-code-with-aws-lambda"></a>
+
 ## Executing your code with AWS Lambda
 
 Cloud mein computing power alag-alag layers (jaise pyaz ke chilke hote hain) mein milti hai, jinhein hum **layers of abstraction** kehte hain:
@@ -86,6 +114,8 @@ Cloud mein computing power alag-alag layers (jaise pyaz ke chilke hote hain) mei
 * **Functions (AWS Lambda):** Yeh sab se choti aur barik layer (**fine-grained manner**) hai. Yahan aap ko koi poora computer ya container nahi sambhalna parta, balki yeh sirf chote-chote code snippet (functions) chalane ki jagah hai.
 
 ---
+
+<a id="what-is-serverless"></a>
 
 ## What is serverless?
 
@@ -109,6 +139,8 @@ Writer ke mutabaq koi bhi system tabhi **Serverless** kehlayega jab us mein yeh 
 AWS Lambda in teeno sharton par poora utarta hai. Is ke alawa market mein doosri companies ke bhi serverless products hain, jaise Google ka **Google Cloud Functions** aur Microsoft ka **Azure Functions**.
 
 ---
+
+<a id="running-your-code-on-aws-lambda"></a>
 
 ## Running your code on AWS Lambda
 
@@ -151,6 +183,8 @@ Lambda filhal in languages ko natively support karta hai:
 
 ---
 
+<a id="comparing-aws-lambda-with-virtual-machines-amazon-ec2"></a>
+
 ## Comparing AWS Lambda with virtual machines (Amazon EC2)
 
 Aayein dekhte hain ke AWS Lambda aur Traditional EC2 Virtual Machine mein kya farq hai:
@@ -172,6 +206,8 @@ Maan lijiye aap ko har 5 minute baad apni website check karne ke liye ek script 
 
 ---
 
+<a id="table-61-aws-lambda-compared-to-amazon-ec2"></a>
+
 ## Table 6.1 AWS Lambda compared to Amazon EC2
 
 Pehlay writer ka diya gaya table dekhein, phir is ki ek ek feature ko aasan urdu mein samajhte hain:
@@ -185,6 +221,8 @@ Pehlay writer ka diya gaya table dekhein, phir is ki ek ek feature ko aasan urdu
 | **Deployment ki Mehnat** | Aik behtareen API ki wajah se taqreeban zero effort lagti hai. | Virtual machines ke fleet par apni application rollout karna ek challenge hai jis ke liye tools aur know-how ki zaroorat hoti hai. |
 | **Pricing Model** | Har request, execution time, aur allocated memory ke hisab se payment hoti hai. | Virtual machines ke chalne ke ghanton (operating hours) ke hisab se pese dene parte hain, jo per second bill hote hain. |
 ---
+
+<a id="building-a-website-health-check-with-aws-lambda"></a>
 
 ## Building a website health check with AWS Lambda
 
@@ -1508,7 +1546,6 @@ Lambda ka sab se common use case Modern Web ya Mobile Application backend banana
 
 ```
 [ User / Frontend ] ──(HTTPS)──> [ Amazon API Gateway ] ──> [ AWS Lambda ] ──> [ S3 / DynamoDB ]
-
 ```
 
 ### Figure 6.21 Breakdown (Serverless Web App):
@@ -1530,7 +1567,6 @@ Ek aur zabardast use case **Event-Driven Data Processing** hai. Jab bhi naya dat
 
 ```
 [ Load Balancer ] ──(Upload Logs)──> [ Object Store (S3) ] ──(Trigger Event)──> [ AWS Lambda ] ──> [ Elasticsearch Analytics ]
-
 ```
 
 ### Figure 6.22 Breakdown (Log Analytics Pipeline):
@@ -1553,7 +1589,6 @@ Internet of Things (IoT) devices (jaise smart sensors, cars, ya home automation)
 
 ```
 [ IoT Device / Thing ] ──(MQTT Protocol)──> [ Message Broker ] ──(IoT Rule)──> [ AWS Lambda ] ──> [ Business Logic ]
-
 ```
 
 ### Figure 6.23 Breakdown (IoT Event Processing):
