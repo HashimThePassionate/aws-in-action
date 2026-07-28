@@ -118,7 +118,6 @@ Writer ne **Figure 6.1** ke zariye code chalane ke 4 aasan steps dikhaye hain:
 
 ```
 [1. Write Code] ──> [2. Upload Code + Dependencies] ──> [3. Create Function & Runtime] ──> [4. Execute in Cloud]
-
 ```
 
 ### Figure 6.1 Ka mukammal breakdown:
@@ -178,48 +177,13 @@ Maan lijiye aap ko har 5 minute baad apni website check karne ke liye ek script 
 Pehlay writer ka diya gaya table dekhein, phir is ki ek ek feature ko aasan urdu mein samajhte hain:
 
 | Comparison Feature | AWS Lambda | Amazon EC2 |
-| --- | --- | --- |
-| **Granularity of virtualization** | Small piece of code (a function). | An entire operating system. |
-| **Scalability** | Scales automatically. A throttling limit prevents you from creating unwanted charges accidentally and can be increased by AWS support if needed. | As you will learn in chapter 17, using an Auto Scaling group allows you to scale the number of EC2 instances serving requests automatically, but configuring and monitoring the scaling activities is your responsibility. |
-| **High availability** | Fault tolerant by default. The computing infrastructure spans multiple machines and data centers. | Virtual machines are not highly available by default. Nevertheless, as you will learn in chapter 13, it is possible to set up a highly available infrastructure based on EC2 instances as well. |
-| **Maintenance effort** | Almost zero. You need only to configure your function. | You are responsible for maintaining all layers between your virtual machine’s operating system and your application’s runtime environment. |
-| **Deployment effort** | Almost zero due to a well-defined API | Rolling out your application to a fleet of virtual machines is a challenge that requires tools and know-how. |
-| **Pricing model** | Pay per request as well as execution time and allocated memory | Pay for operating hours of the virtual machines, billed per second |
-
----
-
-### Table 6.1 Ka Aasan Breakdown:
-
-* **1. Granularity of virtualization (Kaam ka size):**
-* **Lambda:** Bohot chota code ka tukda (sirf 1 function).
-* **EC2:** Ek poora ka poora Operating System (jaise aap ka apna computer).
-
-
-* **2. Scalability (Load ke hisab se bara/chota hona):**
-* **Lambda:** Yeh **automatically** scale hota hai. Agar 1 user aaye toh 1 function jagega, agar 10,000 users ek sath aa jayein toh Lambda khud 10,000 instances bana dega. Bill achanak bohot ziyada na badh jaye, is ke liye ek safety limit (**Throttling Limit**) hoti hai jise zaroorat parne par badhaya ja sakta hai.
-* **EC2:** EC2 mein aap ko **Auto Scaling Group** khud set karna parta hai, rules khud likhne parte hain, aur khud monitor karna parta hai.
-
-
-* **3. High availability (System ka crash hone se bachna):**
-* **Lambda:** Yeh **by default fault-tolerant** hai. AWS is ke code ko alag-alag data centers (Availability Zones) aur alag-alag machines par khud phailata hai taake ek jagah kharab ho toh doosri jagah se chalta rahe.
-* **EC2:** EC2 by-default highly available nahi hota. Agar wo single server kharab hua toh app band ho jayegi. Isay highly available banane ke liye aap ko multiple EC2 instances aur Load Balancer khud setup karna parta hai.
-
-
-* **4. Maintenance effort (Dekh-bhal ki mehnat):**
-* **Lambda:** Almost **Zero**. Aap ko sirf apne function ki settings configure karni hain.
-* **EC2:** Bohot mehnat hai. Operating System ke patches, security updates, aur runtime dependencies ki zimmedari aap ki hai.
-
-
-* **5. Deployment effort (Code ko upload karna):**
-* **Lambda:** Almost **Zero**. Ek simple API call ya CLI command se naya code deploy ho jata hai.
-* **EC2:** Bohot mushkil task hai. Ek se ziyada servers (fleet) par app deploy karne ke liye alag se deployment tools aur knowledge ki zaroorat hoti hai.
-
-
-* **6. Pricing model (Paisa kis baat ka Dena hai):**
-* **Lambda:** Sirf utni baar ka paisa jitni baar function call hua (**Pay per request**), jitna time chala (**Execution time**), aur jitni RAM select ki (**Allocated memory**).
-* **EC2:** Server jitne ghante ya seconds on raha, utna kiraya Dena parega—chahe server par koi kaam ho raha ho ya wo khali baitha ho.
-
-
+| :--- | :--- | :--- |
+| **Virtualization ki Bariki (Granularity)** | Code ka aik chhota sa hissa (aik function). | Aik mukammal operating system. |
+| **Scalability** | Khud ba khud scale ho jata hai. Aik throttling limit hoti hai jo ghalti se unwanted charges se bachati hai, aur zaroorat parne par AWS support se barhai ja sakti hai. | Jesa ke ap chapter 17 mein seekhenge, Auto Scaling group use karke aap EC2 instances ko automatically scale kar sakte hain, lekin scaling activities ko configure aur monitor karna aap ki zimmedari hoti hai. |
+| **High Availability** | By default fault tolerant hota hai. Iska computing infrastructure mukhtalif machines aur data centers par phaila hota hai. | Virtual machines by default highly available nahi hoti hain. Phir bhi, jesa ke ap chapter 13 mein seekhenge, EC2 instances par mabni highly available infrastructure banana mumkin hai. |
+| **Maintenance ki Mehnat** | Taqreeban zero. Aap ko sirf apna function configure karna parta hai. | Virtual machine ke operating system se le kar aap ke application ke runtime environment tak ki tamam layers ko maintain karne ki zimmedari aap ki hoti hai. |
+| **Deployment ki Mehnat** | Aik behtareen API ki wajah se taqreeban zero effort lagti hai. | Virtual machines ke fleet par apni application rollout karna ek challenge hai jis ke liye tools aur know-how ki zaroorat hoti hai. |
+| **Pricing Model** | Har request, execution time, aur allocated memory ke hisab se payment hoti hai. | Virtual machines ke chalne ke ghanton (operating hours) ke hisab se pese dene parte hain, jo per second bill hote hain. |
 ---
 
 ## Building a website health check with AWS Lambda
@@ -457,7 +421,7 @@ Tamam configurations aur Environment Variables set karne ke baad, screen ke aakh
 
 ## Use CloudWatch to search through your Lambda function’s logs
 
-Aap ko kaise pata chalega ke aap ka website health check sahi tareeqe se kaam kar raha hai? Ya aap ko kaise pata chalega ke aap ka Lambda function असल mein chal bhi raha hai ya nahi?
+Aap ko kaise pata chalega ke aap ka website health check sahi tareeqe se kaam kar raha hai? Ya aap ko kaise pata chalega ke aap ka Lambda function sahi mein chal bhi raha hai ya nahi?
 
 Ab waqt aa gaya hai ke hum seekhein ke Lambda function ki **Monitoring** kaise ki jaati hai. Sab se pehle hum seekhein ge ke Lambda function ke bhejey gaye **Log Messages** ko kaise dekha jata hai, aur is ke baad hum ek **Alarm** banana seekhein ge jo function fail hone par aap ko alert karega.
 
@@ -576,12 +540,12 @@ AWS Lambda by default har execution ke data points (statistics) ko **Metrics** k
 
 Pehle book ka yeh table dekhein, phir is ki har metric ko bacho ki tarah aasan zaban mein samajhte hain:
 
-| Name | Description |
-| --- | --- |
-| **Invocations** | Counts the number of times a function is invoked. Includes successful and failed invocations. |
-| **Errors** | Counts the number of times a function failed due to errors inside the function, for example, exceptions or timeouts. |
-| **Duration** | Measures how long the code takes to run, from the time when the code starts executing to when it stops executing. |
-| **Throttles** | As discussed at the beginning of the chapter, there is a limit for how many copies of your Lambda function can run at one time. This metric counts how many invocations have been throttled due to reaching this limit. Contact AWS support to increase the limit, if needed. |
+| Name | Description (Roman Urdu) |
+| :--- | :--- |
+| **Invocations** | Yeh count karta hai ke function kitni baar chalaya gaya hai. Isme kamyab (successful) aur nakam (failed) dono invocations shamil hoti hain. |
+| **Errors** | Yeh count karta hai ke function ke andar errors (misal ke taur par exceptions ya timeouts) ki wajah se kitni baar fail hua hai. |
+| **Duration** | Yeh measure karta hai ke code ko chalne mein kitna waqt laga, jab code shuru hota hai wahan se le kar jab tak code chalna band hota hai. |
+| **Throttles** | Jaisa ke chapter ke shuru mein bataya gaya tha, is baat ki limit hoti hai ke ek waqt mein aap ke Lambda function ki kitni copies chal sakti hain. Yeh metric count karta hai ke limit tak pounchne ki wajah se kitni invocations throttle hui hain. Agar zaroorat ho toh limit barhane ke liye AWS support se rabta karein. |
 
 ---
 
@@ -936,7 +900,6 @@ Jab aap naya EC2 instance banate hain, toh aap AWS ko ek API call bhejte hain (`
 
 ```
 [ User Launches EC2 ] ──> [ CloudTrail Logs API Call ] ──> [ EventBridge ] ──> [ EventBridge Rule ] ──> [ Lambda Target ]
-
 ```
 
 #### Figure 6.18 Detail Breakdown:
@@ -1052,10 +1015,10 @@ Yeh Filter Ek Channi (Sieve) Ki Tarah Kaam Karta Hai:
 
 ### Listing 6.2 Filter Pattern Ka Breakdown:
 
-* **`source`: `["aws.ec2"]**` ──> Sirf EC2 service se aane wale events ko pass hone do.
-* **`detail-type`: `["AWS API Call via CloudTrail"]**` ──> Sirf un events ko pakro jo CloudTrail ne API calls se record kiye hon.
-* **`detail.eventSource`: `["ec2.amazonaws.com"]**` ──> Double confirm karta hai ke API call EC2 service ke liye hi thi.
-* **`detail.eventName`: `["RunInstances"]**` ──> Sirf aur sirf `RunInstances` call par filter lagata hai. Agar koi EC2 stop ya terminate karega, toh yeh filter usay rok dega aur Lambda trigger nahi hoga.
+* **source: ["aws.ec2"]** ──> Sirf EC2 service se aane wale events ko pass hone do.
+* **detail-type: ["AWS API Call via CloudTrail"]** ──> Sirf un events ko pakro jo CloudTrail ne API calls se record kiye hon.
+* **detail.eventSource: ["ec2.amazonaws.com"]** ──> Double confirm karta hai ke API call EC2 service ke liye hi thi.
+* **detail.eventName: ["RunInstances"]** ──> Sirf aur sirf `RunInstances` call par filter lagata hai. Agar koi EC2 stop ya terminate karega, toh yeh filter usay rok dega aur Lambda trigger nahi hoga.
 
 ---
 
@@ -1108,7 +1071,7 @@ def lambda_handler(event, context):
 
 Book ka tamam code official GitHub repository par maujood hai:
 
-* **Repository Link:** `[https://github.com/AWSinAction/code3](https://github.com/AWSinAction/code3)`
+* **Repository Link:** `https://github.com/AWSinAction/code3`
 * **Directory:** `chapter06` folder mein is example ke liye saari zaroori files maujood hain.
 
 ---
@@ -1166,37 +1129,23 @@ def lambda_handler(event, context):
 ---
 
 ### Code Ka Step-by-Step Breakdown
-
-Aayein is code ki ek ek line aur logic ko bacho ki tarah aasan karke samajhte hain:
-
-#### 1. SDK Client Initialization (`import boto3` & `ec2 = boto3.client('ec2')`)
-
-* Pehle hum ne `boto3` library import ki.
-* `ec2 = boto3.client('ec2')` ke zariye hum ne EC2 service ke sath connection banane ka ek client tayyar kiya.
-* **Design Decision:** Hum ne client ko `lambda_handler` function ke **bahar** banaya hai. Is ka fayda yeh hota hai ke jab Lambda baar baar chalta hai (**Warm Start**), toh client ko dobara initialize nahi karna parta, jis se execution fast ho jati hai.
-
-#### 2. User Name Extract Karne Ka Logic
-
-AWS mein har user ka ek unique **ARN (Amazon Resource Name)** hota hai, jaise:
-`arn:aws:iam::123456789012:user/Hashim`
-
-* **`user_arn = event['detail']['userIdentity']['arn']`**: Code event JSON ke andar ja kar user ka ARN read karta hai.
-* **`if "/" in user_arn:`**: ARN mein `/` hota hai. Code check karta hai ke agar slash maujood hai, toh `split('/')[1]` ke zariye slash ke baad waala hissa yani sirf clean naam (`Hashim`) alag kar leta hai.
-* **`else`**: Agar ARN mein slash na ho (jaise root user case mein), toh poora ARN hi `user_name` variable mein save kar leta hai.
-
-#### 3. Instance ID Extract Karne Ka Logic
-
-CloudTrail ka JSON data bohot gehra (nested) hota hai. Instance ID tak pahunche ke liye code step-by-step path follow karta hai:
-`event['detail']['responseElements']['instancesSet']['items'][0]['instanceId']`
-
-* Yeh logic specific path par ja kar naye banne wale EC2 instance ka ID number (e.g., `i-07a3c0d78dclcb505`) chun leta hai.
-
-#### 4. Tag Lagane Ka Action (`ec2.create_tags(...)`)
-
-User Name aur Instance ID milne ke baad, Boto3 SDK ka `create_tags` function call hota hai:
-
-* **`Resources=[instance_id]`**: Batata hai ke kis specific EC2 instance par tag lagana hai.
-* **`Tags=[{'Key': 'Owner', 'Value': user_name}]`**: Batata hai ke tag ki Key `'Owner'` honi chahiye aur Value extract kiya gaya user name (e.g., `'Hashim'`) hona chahiye.
+* `import boto3`: Python ka AWS SDK import karta hai taake code ke zariye AWS services (jaise EC2) ko control kiya ja sake.
+* `ec2 = boto3.client('ec2')`: AWS EC2 service ke sath baat karne ke liye aik client object banata hai jis se hum EC2 par actions perform kar sakein.
+* `def lambda_handler(event, context):`: AWS Lambda function ka main entry point define karta hai, jahan `event` mein AWS event ka data aur `context` mein execution ki details aati hain.
+* `print(event)`: Debugging ke maqsad ke liye anay walay EventBridge/CloudTrail event ko CloudWatch Logs mein print karta hai.
+* `user_arn = event['detail']['userIdentity']['arn']`: Event ke andar se us user ya role ka ARN (Amazon Resource Name) nikalta hai jis ne instance launch kiya hai.
+* `if "/" in user_arn:`: Check karta hai ke ARN mein forward slash (`/`) mojood hai ya nahi (jaise standard IAM users ya roles ke ARN mein hota hai).
+* `user_name = user_arn.split('/')[1]`: Agar slash mojood ho, toh ARN ko `/` ki base par split kar ke usme se sirf actual user ya role ka naam alag kar leta hai.
+* `else:`: Agar upar wali condition galat ho (yani slash mojood na ho), toh ye block chalay ga.
+* `user_name = user_arn`: Agar slash na ho, toh poore ARN ko hi `user_name` ke tor par assign kar deta hai.
+* `instance_id = event['detail']['responseElements']['instancesSet']['items'][0]['instanceId']`: Event data ke nested structure ke andar se naye banne walay EC2 instance ki unique ID ko extract karta hai.
+* `print(f"Adding owner tag {user_name} to instance {instance_id}.")`: CloudWatch logs ke andar aik status message print karta hai jo batata hai ke kis user ka naam kis instance par tag hone ja raha hai.
+* `ec2.create_tags(`: AWS EC2 client ki method ko call karta hai jo kisi bhi resource (jaise instance) par tags lagane ke kaam aati hai.
+* `Resources=[instance_id],`: Yeh specify karta hai ke kis specific EC2 instance ki ID par tag apply karna hai.
+* `Tags=[`: Tags ki list ko shuru karta hai jahan key-value pairs define kiye jate hain.
+* `'Key': 'Owner',`: Tag ki key ka naam **'Owner'** set karta hai.
+* `'Value': user_name`: Tag ki value mein us user ka naam set kar deta hai jo humne upar event se extract kiya tha.
+* `return`: Lambda function ki execution ko yahan successfully khatam kar deta hai.
 
 ---
 
@@ -1248,7 +1197,6 @@ Resources:
                   - 'ec2.amazonaws.com'
                 eventName:
                   - 'RunInstances'
-
 ```
 
 ---
@@ -1332,7 +1280,6 @@ EC2OwnerTagFunction:
           - Effect: Allow # Explicit ijazat dena
             Action: 'ec2:CreateTags' # EC2 par Tag banane ki command
             Resource: '*' # Tamam EC2 instances ke liye
-
 ```
 
 #### Listing 6.6 Breakdown:
@@ -1350,7 +1297,6 @@ SAM aur AWS CLI ke zariye apne Lambda function aur us ke tamam resources ko clou
 
 ```
 [ Step 1: Create S3 Bucket ] ──> [ Step 2: Package Code (`aws cloudformation package`) ] ──> [ Step 3: Deploy Stack (`aws cloudformation deploy`) ]
-
 ```
 
 ---
@@ -1361,10 +1307,19 @@ Lambda ke code (.zip file) ko store karne ke liye pehle ek S3 bucket banayi jaat
 
 ```bash
 aws s3 mb s3://ec2-owner-tag-$yourname
-
 ```
 
 *(Yahan `$yourname` ko apne naam se replace karein taake bucket name unique rahe).*
+
+Yeh command AWS CLI (Command Line Interface) ke zariye Amazon S3 mein aik naya storage bucket banane ke liye istemal hoti hai. Iske mukhtalif hissay yeh hain:
+
+* **`aws`**: Yeh AWS CLI ka main command start karta hai jisse aap terminal ya command prompt se AWS ko control karte hain.
+* **`s3`**: Yeh specify karta hai ke aap AWS ki kis service ke sath kaam karna chahte hain—yahan yeh **Amazon S3 (Simple Storage Service)** cloud storage ko target kar raha hai.
+* **`mb`**: Iska matlab **"Make Bucket"** hota hai. Yeh command AWS ko hukam deti hai ke aik naya S3 bucket create kiya jaye.
+* **`s3://ec2-owner-tag-$yourname`**: Yeh us naye banne walay bucket ka unique address (URI) hai.
+* `s3://` protocol hai.
+* `ec2-owner-tag-` bucket ke naam ka agla hissa hai.
+* `$yourname` ki jagah aap apna naam ya koi unique text likhein ge (misal ke tor par `ec2-owner-tag-hashim`), kyunke AWS mein har S3 bucket ka naam poori dunya ke AWS users ke darmiyan unique hona lazmi hai.
 
 ---
 
@@ -1376,7 +1331,6 @@ Aap apne terminal mein `chapter06` directory ke andar ja kar yeh command chalate
 aws cloudformation package --template-file template.yaml \
   --s3-bucket ec2-owner-tag-$yourname \
   --output-template-file output.yaml
-
 ```
 
 #### Yeh Command Kya Karti Hai?
@@ -1395,7 +1349,6 @@ Ab hum final deployment command chalate hain:
 aws cloudformation deploy --stack-name ec2-owner-tag \
   --template-file output.yaml \
   --capabilities CAPABILITY_IAM
-
 ```
 
 #### Command Breakdown:
