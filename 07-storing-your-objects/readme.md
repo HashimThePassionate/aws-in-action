@@ -809,7 +809,7 @@ aws s3 mb s3://awsinaction-sdk-$yourname
 
 ## Installing a web application that uses S3
 
-Writer ki code repository GitHub par available hai: `[https://github.com/AWSinAction/code3](https://github.com/AWSinAction/code3)`.
+Writer ki code repository GitHub par available hai: `https://github.com/AWSinAction/code3`.
 
 1. Code directory ke andar `/chapter07/gallery/` folder mein jayein.
 2. Dependencies install karne ke liye terminal mein yeh command chalayein:
@@ -869,44 +869,54 @@ Image upload karne ke liye SDK ka `putObject()` function istemal hota hai.
 #### Listing 7.1 Uploading an image with the AWS SDK for S3
 
 ```javascript
-const AWS = require('aws-sdk'); // AWS SDK library ko load karta hai
+const AWS = require('aws-sdk');
 const uuid = require('uuid');
 
-const s3 = new AWS.S3({ // S3 client object ko configuration ke sath initialize karta hai
-  'region': 'us-east-1'
-});
-
-const bucket = process.argv[2]; // Command line parameter se bucket name read karta hai
+const s3 = new AWS.S3({ region: 'us-east-1' });
+const bucket = process.argv[2];
 
 async function uploadImage(image, response) {
   try {
-    await s3.putObject({ // S3 API ko putObject call bhejta hai
-      Body: image, // Image ka raw binary data
-      Bucket: bucket, // Target S3 bucket ka naam
-      Key: uuid.v4(), // Unique random filename generate karta hai (e.g., 123e4567-e89b...)
-      ACL: 'public-read', // Object ko publically readable banata hai
-      ContentLength: image.byteCount, // Image file ka exact size in bytes
-      ContentType: image.headers['content-type'] // File type (e.g., image/png ya image/jpeg)
-    }).promise();
+    const uploadParams = {
+      Bucket: bucket,
+      Key: uuid.v4(),
+      Body: image,
+      ACL: 'public-read',
+      ContentLength: image.byteCount,
+      ContentType: image.headers['content-type']
+    };
+
+    await s3.putObject(uploadParams).promise();
     
-    response.redirect('/'); // Upload hone ke baad homepage par redirect karta hai
-  } catch (err) { // Error Handling
+    response.redirect('/');
+  } catch (err) {
     console.error(err);
-    response.status(500);
-    response.send('Internal server error.'); // Error aane par HTTP 500 status code bhejta hai
+    response.status(500).send('Internal server error.');
   }
 }
-
 ```
 
 #### Detailed Technical & Code Breakdown:
-
-* `require('aws-sdk')`: AWS SDK module ko script mein import karta hai.
-* `new AWS.S3({ 'region': 'us-east-1' })`: Specific AWS region (`us-east-1`) ke sath S3 API client instanciate karta hai.
-* `uuid.v4()`: Har file ke liye ek Globally Unique Identifier generate karta hai. Is se yeh faida hota hai ke do users agar same naam ki file (e.g., `photo.jpg`) upload karein, toh wo ek doosre ko overwrite nahi karti.
-* `Body: image`: File ka actual binary stream.
-* `ACL: 'public-read'`: Object Level Access Control List jo internet par har kisi ko yeh photo dekhne ki permission deti hai.
-* `.promise()`: Asynchronous request ko handle karta hai taake Node.js thread block na ho.
+* `const AWS = require('aws-sdk');`: Node.js ke liye official AWS SDK library ko load karta hai taake code ke zariye AWS ki services (jaise S3) ko control kiya ja sake.
+* `const uuid = require('uuid');`: Unique IDs generate karne wali library (`uuid`) ko load karta hai taake har file ke liye aik unique naam mil sakay.
+* `const s3 = new AWS.S3({ region: 'us-east-1' });`: S3 client ka object banata hai aur usay `us-east-1` region par configure karta hai taake S3 ke operations us region mein perform hon.
+* `const bucket = process.argv[2];`: Command line se di gayi argument (jo S3 bucket ka naam hoti hai) ko read kar ke `bucket` variable mein store karta hai.
+* `async function uploadImage(image, response) {`: Aik asynchronous function `uploadImage` declare karta hai jo `image` (upload hone wali file) aur HTTP `response` ko arguments ke tor par leta hai.
+* `try {`: Error handling block start karta hai taake agar upload ke dauran koi masla aaye toh program crash na ho aur seedha catch block mein chala jaye.
+* `const uploadParams = {`: S3 `putObject` method ke liye saari zaroori settings aur parameters ka aik saaf suthra object (`uploadParams`) define karta hai.
+* `Bucket: bucket,`: Target S3 bucket ka naam specify karta hai jahan file save karni hai.
+* `Key: uuid.v4(),`: Har file ke liye aik unique random filename (UUID) generate karta hai taake naam duplicate hone ka chance khatam ho jaye.
+* `Body: image,`: Upload hone wali image ka raw binary data specify karta hai.
+* `ACL: 'public-read',`: File ki access permissions ko public set karta hai taake internet par koi bhi isay access kar sakay.
+* `ContentLength: image.byteCount,`: Upload hone wali file ka exact size bytes mein batata hai.
+* `ContentType: image.headers['content-type']`: File ki exact type specify karta hai (misal ke tor par `image/png` ya `image/jpeg`).
+* `};`: `uploadParams` object ki definition ko yahan close karta hai.
+* `await s3.putObject(uploadParams).promise();`: S3 API ko `putObject` call bhejta hai aur `await` ke zariye file upload mukammal hone ka wait karta hai (`.promise()` isay async/await ke qabil banata hai).
+* `response.redirect('/');`: Jab image kamyabi se S3 par upload ho jati hai, toh browser ko homepage (`/`) par redirect kar deta hai.
+* `} catch (err) {`: Agar try block ke andar koi bhi error aa jaye, toh usay catch kar ke handle karta hai.
+* `console.error(err);`: Error ki details ko terminal ya server logs mein print kar deta hai taake debugging mein asani ho.
+* `response.status(500).send('Internal server error.');`: HTTP response ka status code **500** (server error) set karta hai aur browser ko error ka message bhej kar process khatam kar deta hai.
+* `}`: Function ki body ko yahan close karta hai.
 
 > **2026 Modern Architectural Note:**
 > Code mein AWS SDK v2 (`aws-sdk`) use hua hai. Modern Node.js applications mein modular **AWS SDK v3** (`@aws-sdk/client-s3`) istemal hota hai jo light-weight hai aur `S3Client` + `PutObjectCommand` ka pattern use karta hai. Is ke ilawa, modern S3 buckets mein default security permissions ki wajha se `ACL: 'public-read'` ki bajaye **Bucket Policies** ya **Presigned URLs** se access diya jata hai.
@@ -981,7 +991,6 @@ Application ka practical complete hone ke baad extra cost se bachne ke liye S3 b
 
 ```bash
 aws s3 rb --force s3://awsinaction-sdk-$yourname
-
 ```
 
 * `--force` parameter bucket ke andar SDK ke zariye upload ki gayi tamaam images ko pehle automatically clear karega aur phir main bucket ko delete karega.
