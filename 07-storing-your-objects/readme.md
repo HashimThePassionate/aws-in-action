@@ -126,13 +126,7 @@ Modern AWS S3 environment mein in concepts se judi chand zaroori baatein:
 
 ---
 
-## Amazon S3
-
-AWS S3 cloud computing ki dunya ka sab se mashhoor aur bunyadi pillar hai. Aayein is pure text ko choti se choti bareeki ke sath step-by-step aur bacho ki tarah aasan karke samajhte hain.
-
----
-
-### Amazon S3 Kya Hai?
+## Amazon S3 Kya Hai?
 
 * **Full Form / Acronym:** S3 ka matlab hai **S**imple **S**torage **S**ervice (Teen 'S' hone ki wajah se isay **S3** kaha jata hai).
 * **Sab Se Purani Service:** Yeh AWS ki sab se pehli aur purani services mein se ek hai jo 2006 mein launch hui thi.
@@ -281,7 +275,7 @@ Writer ne **Figure 7.3** mein Bucket aur us ke andar parhe hue Objects ke rishte
 
 Modern cloud architecture ke mutabiq in points par dhyan dena zaroori hai:
 
-* **Block Public Access (By Default On):** Modern S3 buckets banate waqt AWS security ke liye **Block Public Access** ko default taur par On rakhta hai, taake tiyaari mein koi private data publically leak na ho jaye.
+* **Block Public Access (By Default On):** Modern S3 buckets banate waqt AWS security ke liye **Block Public Access** ko default taur par On rakhta hai, taake galti say koi private data publically leak na ho jaye.
 * **Access Control Lists (ACLs) vs Bucket Policies:** Figure 7.3 mein metadata ke andar `public read` (ACL) dikhaya gaya hai. Modern 2026 practice mein ACLs ko disable kar diya jata hai aur permissions ko manage karne ke liye **S3 Bucket Policies** aur **IAM Policies** ka istemal kiya jata hai.
 * **Default Encryption:** Ab har naya S3 bucket server-side encryption (**SSE-S3**) se automatically encrypt hota hai bina kisi extra cost ya manual setup ke.
 
@@ -305,9 +299,9 @@ S3 offsite backup ke liye sab se behtareen jagah hai kyun ke:
 
 ### Writer Ke Bataye Gaye 3 Doosre Scenarios (CLI File Transfer Ke Uses)
 
-Writer batata hai ke CLI se S3 par data bhejnakisi sirf backup ke liye nahi, balkay in teeno kaamon ke liye bhi istemal hota hai:
+Writer batata hai ke CLI se S3 par data bhejna sirf backup ke liye nahi, balkay in teeno kaamon ke liye bhi istemal hota hai:
 
-1. **Coworkers Ya Partners Ke Sath Files Share Karna:** Jab aap ke team members alag alag shataron ya mulkon mein baith kar kaam kar rahe hon, toh S3 par file upload karke unke sath share ki ja sakti hai.
+1. **Coworkers Ya Partners Ke Sath Files Share Karna:** Jab aap ke team members alag alag shahron ya mulkon mein baith kar kaam kar rahe hon, toh S3 par file upload karke unke sath share ki ja sakti hai.
 2. **Virtual Machines Ke Artifacts Save Karna:** Server (VM) ko chalane ke liye jo zaruri files, application binaries, libraries, ya configuration files chahiye hoti hain, unhe S3 par store aur retrieve kiya ja sakta hai.
 3. **Local Storage Ka Bojh Kam Karna (Outsourcing Storage):** Jo data roz roz istemal nahi hota (Infrequently accessed data), usay apne computer ki hard disk se hata kar S3 par daal dena taake local disk par jagah khali ho jaye.
 
@@ -321,14 +315,12 @@ Terminal mein yeh command chalayein:
 
 ```bash
 aws s3 mb s3://awsinaction-$yourname
-
 ```
 
 Writer ki di gayi real command ki example:
 
 ```bash
 aws s3 mb s3://awsinaction-awittig
-
 ```
 
 #### Code Breakdown:
@@ -353,14 +345,12 @@ Command format:
 
 ```bash
 aws s3 sync $path s3://awsinaction-$yourname/backup
-
 ```
 
 Writer ki example:
 
 ```bash
 aws s3 sync /Users/andreas/Desktop s3://awsinaction-awittig/backup
-
 ```
 
 #### Code Breakdown:
@@ -384,14 +374,12 @@ Command format:
 
 ```bash
 aws s3 cp --recursive s3://awsinaction-$yourname/backup $path
-
 ```
 
 Writer ki example:
 
 ```bash
 aws s3 cp --recursive s3://awsinaction-awittig/backup/ /Users/andreas/Downloads/restore
-
 ```
 
 #### Code Breakdown:
@@ -423,7 +411,6 @@ Command:
 
 ```bash
 aws s3api put-bucket-versioning --bucket awsinaction-$yourname --versioning-configuration Status=Enabled
-
 ```
 
 #### Code Breakdown:
@@ -442,7 +429,6 @@ Tamam versions dekhne ke liye command:
 
 ```bash
 aws s3api list-object-versions --bucket awsinaction-$yourname
-
 ```
 
 #### Architectural Trade-off & Cost Warning:
@@ -468,14 +454,12 @@ Command:
 
 ```bash
 aws s3 rb --force s3://awsinaction-$yourname
-
 ```
 
 Writer ki example:
 
 ```bash
 aws s3 rb --force s3://awsinaction-awittig
-
 ```
 
 #### Code Breakdown:
@@ -599,14 +583,12 @@ Sub se pehle terminal par ek naya S3 bucket banayein:
 
 ```bash
 aws s3 mb s3://awsinaction-archive-$yourname
-
 ```
 
 Writer ki example:
 
 ```bash
 aws s3 mb s3://awsinaction-archive-awittig
-
 ```
 
 * `aws s3 mb`: Naya S3 bucket create karta hai.
@@ -619,14 +601,12 @@ Ab local machine se koi document S3 par upload karein aur us ki storage class `G
 
 ```bash
 aws s3 cp --storage-class GLACIER $path s3://awsinaction-archive-$yourname/
-
 ```
 
 Writer ki example command:
 
 ```bash
 aws s3 cp --storage-class GLACIER /Users/andreas/Desktop/taxstatement-2022-07-01.pdf s3://awsinaction-archive-awittig/
-
 ```
 
 * `--storage-class GLACIER`: Yeh parameter AWS ko batata hai ke is file ko normal S3 Standard mein mat rakho, balkay isay **S3 Glacier Flexible Retrieval** storage class mein direct freeze/archive kar do.
@@ -639,7 +619,6 @@ Jab file Glacier mein chali jati hai, toh aap usay direct download nahi kar sakt
 
 ```bash
 aws s3 cp s3://awsinaction-archive-$yourname/$objectkey $path
-
 ```
 
 Writer ki example error output:
@@ -647,7 +626,6 @@ Writer ki example error output:
 ```text
 $ aws s3 cp s3://awsinaction-archive-awittig/taxstatement-2022-07-01.pdf ~/Downloads
 warning: Skipping file s3://awsinaction-archive-awittig/taxstatement-2022-07-01.pdf. Object is of storage class GLACIER. Unable to perform download operations on GLACIER objects. You must restore the object to be able to perform the operation.
-
 ```
 
 #### System Error Breakdown:
@@ -663,14 +641,12 @@ Normal mode mein Glacier Flexible Retrieval file restore karne mein **3 se 5 gha
 
 ```bash
 aws s3api restore-object --bucket awsinaction-archive-$yourname --key $objectkey --restore-request Days=1,,GlacierJobParameters={"Tier"="Expedited"}
-
 ```
 
 Writer ki example command:
 
 ```bash
 aws s3api restore-object --bucket awsinaction-archive-awittig --key taxstatement-2022-07-01.pdf --restore-request Days=1,,GlacierJobParameters={"Tier"="Expedited"}
-
 ```
 
 * `aws s3api restore-object`: Low-level API command jo Glacier object ko unfreeze/restore karne ki request bhejti hai.
@@ -685,7 +661,6 @@ Restore request bhejane ke baad hum check karenge ke kya file download ke liye t
 
 ```bash
 aws s3api head-object --bucket awsinaction-archive-$yourname --key $objectkey
-
 ```
 
 #### Phase A: Status Jab Restoration Chal Rahi Ho (Ongoing)
@@ -704,7 +679,6 @@ Jab tak file background mein restore ho rahi hoti hai, JSON output aisa dikhta h
   "Metadata": {},
   "StorageClass": "GLACIER"
 }
-
 ```
 
 * `"Restore": "ongoing-request=\"true\""`: Is key ka matlab hai ke AWS abhi backend par file ko cold storage se nikal kar hot storage par la raha hai. Abhi download nahi kar sakte.
@@ -725,7 +699,6 @@ Jab tak file background mein restore ho rahi hoti hai, JSON output aisa dikhta h
   "Metadata": {},
   "StorageClass": "GLACIER"
 }
-
 ```
 
 * `"Restore": "ongoing-request=\"false\""`: Is ka matlab hai ke restoration process khatam ho chuka hai aur temporary copy download ke liye bilkul tayyar hai!
@@ -738,7 +711,6 @@ Ab aap normal `aws s3 cp` command se file download kar sakte hain:
 
 ```bash
 aws s3 cp s3://awsinaction-archive-$yourname/$objectkey $path
-
 ```
 
 File ba-aasaani aap ke local folder (e.g., `~/Downloads`) mein download ho jayegi.
@@ -760,7 +732,6 @@ Practical khatam hone ke baad extra charges se bachne ke liye bucket ko tamam ob
 
 ```bash
 aws s3 rb --force s3://awsinaction-archive-$yourname
-
 ```
 
 * `rb`: Remove Bucket.
@@ -812,7 +783,6 @@ Node.js ek aisa execution environment hai jo JavaScript ko browser se bahar (ser
 * **Verification:** Terminal mein yeh command chala kar check karein ke Node.js sahi install hua hai ya nahi:
 ```bash
 node --version
-
 ```
 
 
@@ -831,7 +801,6 @@ Simple S3 Gallery app ko chalane ke liye pehle S3 par ek khali bucket banana hog
 
 ```bash
 aws s3 mb s3://awsinaction-sdk-$yourname
-
 ```
 
 * `mb`: Make Bucket command jo `$yourname` ke sath unique bucket register kar degi.
@@ -846,14 +815,12 @@ Writer ki code repository GitHub par available hai: `[https://github.com/AWSinAc
 2. Dependencies install karne ke liye terminal mein yeh command chalayein:
 ```bash
 npm install
-
 ```
 
 
 3. Web application ko start karne ke liye bucket ka naam pass karke server run karein:
 ```bash
 node server.js awsinaction-sdk-$yourname
-
 ```
 
 
@@ -975,7 +942,6 @@ async function listImages(response) {
     response.send('Internal server error.');
   }
 }
-
 ```
 
 #### Detailed Technical & Code Breakdown:
@@ -997,7 +963,6 @@ HTML template file (`index.html`) mein data ko dikhane ke liye dynamic code use 
     <img src="https://s3.amazonaws.com/{{Bucket}}/{{Key}}" width="400px" >
   </p> <!-- Har Object ki Key aur Bucket name ko URL mein interpolate karke Direct Image URL banata hai -->
 {{/Objects}}
-
 ```
 
 #### Detailed Template Breakdown:
@@ -1072,7 +1037,6 @@ Terminal mein command chalayein:
 
 ```bash
 aws s3 mb s3://$BucketName
-
 ```
 
 * `$BucketName`: Apni pasand ka globally unique name likhein.
@@ -1085,7 +1049,6 @@ Writer ne ek test HTML file tayyar ki hai. Download karne ke baad usay S3 par up
 
 ```bash
 aws s3 cp $pathToPlaceholder/helloworld.html s3://$BucketName/helloworld.html
-
 ```
 
 #### Code Breakdown:
@@ -1121,7 +1084,6 @@ Writer ki di gayi JSON policy bucket ke tamaam objects ko public-read permission
     }
   ]
 }
-
 ```
 
 #### Detailed Policy Breakdown:
@@ -1140,7 +1102,6 @@ Writer ki di gayi JSON policy bucket ke tamaam objects ko public-read permission
 
 ```bash
 aws s3api put-bucket-policy --bucket $BucketName --policy file://$pathToPolicy/bucketpolicy.json
-
 ```
 
 * `put-bucket-policy`: Is CLI command se JSON policy file bucket par attach ho jati hai.
@@ -1149,7 +1110,6 @@ aws s3api put-bucket-policy --bucket $BucketName --policy file://$pathToPolicy/b
 
 ```bash
 aws s3 website s3://$BucketName --index-document helloworld.html
-
 ```
 
 #### Command Breakdown:
@@ -1211,7 +1171,6 @@ Practical complete hone ke baad extra charges se bachne ke liye bucket ko delete
 
 ```bash
 aws s3 rb --force s3://$BucketName
-
 ```
 
 * `rb`: Remove Bucket command.
