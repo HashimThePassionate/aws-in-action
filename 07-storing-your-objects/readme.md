@@ -1,14 +1,21 @@
 # Storing your objects: S3
 
-## Data Storage Ke Do Bade Tachalish (Two Challenges)
+Is chapter mein yeh topics shamil hain:
+
+* Terminal ke zariye S3 par files transfer karna
+* SDKs ke zariye apni applications mein S3 ko integrate karna
+* Kam kharch mein data archive karna
+* S3 ke zariye static website host karna
+* S3 object store ke andaruni nizaam (internals) ko gehraai se samjhna
+
+## Data Storage Ke Do Bade Challenges
 
 Data ko sambhal kar rakhna (store karna) aasan kaam nahi hai. Is mein do bohot badi mushkilaat aati hain:
 
-* **Ever-increasing volumes of data (Data ka lagataar barhna):**
+**Ever-increasing volumes of data (Data ka lagataar barhna):**
 * **Bacho ki tarah samjhein:** Farz karein aap ke paas khilono ka ek chota dabba hai. Roz aap naya khilona khareedte hain. Ek din dabba poora bhar jayega! Ab naye khilonay rakhne ke liye dabba chota par jayega. Exactly waise hi, kisi ek computer ya server ki hard disk limited hoti hai. Roz aane wali videos, photos aur files itni zyada hoti hain ke ek machine ki disk bhar jati hai.
 
-
-* **Ensuring durability (Data ko hamesha ke liye safe rakhna):**
+**Ensuring durability (Data ko hamesha ke liye safe rakhna):**
 * **Bacho ki tarah samjhein:** Agar aap ne apni sari zaroori drawings usi ek dabbe mein rakhi hain, aur wo dabba paani mein gir jaye ya usay aag lag jaye, toh sab kuch hamesha ke liye zaya ho jayega. Single machine par data rakhne se agar wo hard disk kharab ho jaye, toh data wapas nahi milta. Isay hum **Single Point of Failure** kehte hain.
 
 
