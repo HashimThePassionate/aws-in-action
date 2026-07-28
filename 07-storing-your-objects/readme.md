@@ -1,5 +1,18 @@
 # Storing your objects: S3
 
+<details>
+<summary><strong>Table of Contents</strong> ▾</summary>
+
+- [Data Storage Ke Do Bade Challenges](#data-storage-ke-do-bade-challenges)
+- [Amazon S3 Ka Ta'aruf (Introduction to Amazon S3)](#amazon-s3-ka-taaruf-introduction-to-amazon-s3)
+- [What is an object store?](#what-is-an-object-store)
+- [Object Ke 3 Main Hissay (Components)](#object-ke-3-main-hissay-components)
+- [Storing objects programmatically](#storing-objects-programmatically)
+- [Using S3 for static web hosting](#using-s3-for-static-web-hosting)
+- [Summary](#summary)
+
+</details>
+
 Is chapter mein yeh topics shamil hain:
 
 * Terminal ke zariye S3 par files transfer karna
@@ -1137,7 +1150,7 @@ Region `us-east-1` ke liye endpoint format yeh hota hai:
 `http://$BucketName.s3-website-us-east-1.amazonaws.com`
 * **Example:**
 Agar bucket ka naam `awesomebucket` hai, toh full URL yeh hoga:
-`[http://awesomebucket.s3-website-us-east-1.amazonaws.com](http://awesomebucket.s3-website-us-east-1.amazonaws.com)`
+`http://awesomebucket.s3-website-us-east-1.amazonaws.com`
 
 > **System Behavior Note:**
 > Ghor karein ke S3 Static Web Hosting ka direct URL hamesha **`http://`** se shuru hota hai (HTTPS nahi hota) aur URL mein **`.s3-website-`** ka shamil hona lazmi hai.
