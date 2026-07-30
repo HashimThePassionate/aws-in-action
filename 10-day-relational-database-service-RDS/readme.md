@@ -640,3 +640,221 @@ aws cloudformation describe-stacks --stack-name wordpress --query "Stacks[0].Out
 * **`--output text`:** Response ko plain text format mein display karne ke liye flag.
 
 ---
+
+## Backing up and restoring your database
+
+Aap ki WordPress website par saalon mein hazaron blog posts, articles, aur user comments jama ho jatay hain. Yeh data aap ki website ka sab se qeemti sarmaya (asset) hota hai. Is liye is saare data ka **Backup** lena behad zaroori hai.
+
+Chahe Amazon RDS ek **Managed Service** hai aur AWS khud bohot saari chizon ko dekhta hai, phir bhi aap ko apne database ke backups ki zaroorat hoti hai. Yeh backups 2 mukhya sooraton mein kaam aate hain:
+
+1. **Data Recovery:** Agar galti se kisi user ya kisi galat query ne data delete ya kharab kar diya ho, toh aap database ko wapis puraani sahi halat mein restore kar sakein.
+2. **Duplication & Disaster Recovery:** Agar aap ko waisa hi same database kisi doosri jagah ya doosre AWS Region mein chalana ho.
+
+Amazon RDS hamein **Automated Snapshots** (khud-ba-khud banne waale backups) aur **Manual Snapshots** (khud apni marzi se banaye jaane waale backups) ki suhulat deta hai. Is section mein aap seekhenge:
+
+* Automated snapshots ka retention period (kitne din backup mehfooz rahe) aur time frame (kis waqt backup bane) set karna.
+* Apni marzi se Manual Snapshots create karna.
+* Snapshots se naye database instances bana kar data Restore karna.
+* Kisi snapshot ko doosre AWS Region mein Copy karna (Disaster Recovery ke liye).
+
+---
+
+## Configuring automated snapshots
+
+#### Snapshot Kya Hota Hai? (Bacho Ki Tarah Aasan Misaal)
+
+> **Aasan Misaal:** Aise samjhein ke aap apne mobile se kisi photo album ki bilkul waisi ki waisi ek **Photo (Snapshot)** khinch lete hain. Agar kal ko aap ka asli album ghum jaye ya kharab ho jaye, toh aap us photo ko dekh kar naya album bilkul waise ka waisa dubara bana sakte hain.
+
+RDS database mein agar `BackupRetentionPeriod` ki value **1 se 35** ke darmiyan set ki jaye, toh RDS khud-ba-khud rozana database ka snapshot lena shuru kar deta hai:
+
+* **Retention Period:** Is ka matlab hai ke backup kitne dino tak mehfooz rahega (Default value 1 din hoti hai).
+* **Backup Window:** Automated snapshots 24 ghantay mein ek baar liye jaate hain. Agar aap koi khas time na batayein, toh AWS khud hi raat ke waqt ek random **30-minute ka time frame** chuntah hai aur har raat usi waqt backup leta hai.
+
+#### Performance Trade-off Aur Time Choice (Zaroori Design Decision)
+
+Jab RDS snapshot leta hai, toh us waqt database ki disk activity ko **kuch lamhon ke liye freeze (rokna)** parta hai taake storage ki exact photo li ja sake. Is freeze ki waja se:
+
+* Users ki taraf se aane wali database queries late ho sakti hain.
+* Kabhi kabhi timeout error bhi aa sakta hai.
+
+**Best Practice:** Is liye hamesha automated backup ke liye aisa time select karein jab aap ki website par traffic sab se kam ho (maslan raat ke 3:00 baje ya subah 5:00 baje).
+
+#### Automated Snapshots Kis Se Bachtay Hain?
+
+1. **Accidental Deletion:** Kisi developer ya admin se galti se koi table drop/delete ho jaye.
+2. **Hardware Failure:** AWS ke kisi physical server mein koi kharabi aa jaye aur data zaye hone ka khatra ho.
+
+---
+
+### CloudFormation Stack Update Karna
+
+Automated backups ki settings ko change karne ke liye hum local terminal par yeh update command chalate hain:
+
+```bash
+aws cloudformation update-stack --stack-name wordpress --template-url \
+https://s3.amazonaws.com/awsinaction-code3/chapter10/template-snapshot.yaml \
+--parameters ParameterKey=WordpressAdminPassword,UsePreviousValue=true \
+--capabilities CAPABILITY_IAM
+
+```
+
+#### Command Ka Line-by-Line Breakdown:
+
+* **`aws cloudformation update-stack`:** Existing CloudFormation stack ki configurations ko badalne/update karne ki command.
+* **`--stack-name wordpress`:** Us stack ka naam jise update karna hai (`wordpress`).
+* **`--template-url https://.../template-snapshot.yaml`:** Naye updated blueprint (template) ka S3 link jis mein backup settings mojood hain.
+* **`--parameters ParameterKey=WordpressAdminPassword,UsePreviousValue=true`:** Is ka matlab hai ke `WordpressAdminPassword` ke liye wahi purana password istemal karo jo pehle set kiya tha, naya dene ki zaroorat nahi hai.
+* **`--capabilities CAPABILITY_IAM`:** Templates mein IAM security rules ki update ke liye AWS ko ijazat dena.
+
+---
+
+### Listing 10.3 Modifying an RDS database’s snapshot time frame and retention time
+
+Neeche template waali YAML file ka excerpt diya gaya hai jo database ki snapshot timing aur retention period ko update karta hai:
+
+```yaml
+Database:
+  Type: 'AWS::RDS::DBInstance'
+  DeletionPolicy: Delete
+  Properties:
+    AllocatedStorage: 5
+    BackupRetentionPeriod: 3 # Snapshots ko teen din tak mehfooz rakhta hai
+    PreferredBackupWindow: '05:00-06:00' # UTC ke mutabiq subah 05:00 aur 06:00 ke darmiyan khud-ba-khud snapshots create karta hai
+    DBInstanceClass: 'db.t2.micro'
+    DBName: wordpress
+    Engine: MySQL
+    MasterUsername: wordpress
+    MasterUserPassword: wordpress
+    VPCSecurityGroups:
+      - !Sub ${DatabaseSecurityGroup.GroupId}
+    DBSubnetGroupName: !Ref DBSubnetGroup
+  DependsOn: VPCGatewayAttachment
+
+```
+
+#### Code Ka Mukammal Breakdown:
+
+* **`BackupRetentionPeriod: 3`:** Automated snapshots ab **3 dino tak** AWS mein mehfooz rahenge. 3 din purane snapshots khud-ba-khud delete ho jayenge. *(Agar aap automated backups band karna chahte hain toh isay `0` set kar dein)*.
+* **`PreferredBackupWindow: '05:00-06:00'`:** Har roz UTC time ke mutabiq subah **05:00 se 06:00** ke darmiyan AWS automatic snapshot generate karega.
+
+#### Automated vs Manual Snapshots Lifecycle Distinction (Khas Point)
+
+> **Zaroori Baat:** Jab aap apna RDS Database Instance delete kar dete hain, toh us ke tamam **Automated Snapshots bhi automatic DELETE ho jaate hain**. Unhein bachaya nahi ja sakta! Lekin **Manual Snapshots** kabhi delete nahi hotay jab tak aap khud unhein delete na karein.
+
+---
+
+## Creating snapshots manually
+
+Manual Snapshots aap khud apni marzi se kisi bhi waqt trigger kar sakte hain.
+
+#### Manual Snapshot Kab Lena Chahiye?
+
+* WordPress ko naye version par **Upgrade** karne se pehle.
+* Database ka **Schema / Tables Structure** badalne se pehle.
+* Kisi bhi aise khatarnak kaam se pehle jis se data kharab hone ka darr ho.
+
+---
+
+### Step 1: Database Instance Identifier Pata Karna
+
+Manual snapshot banane ke liye aap ko apne RDS instance ka sahi naam (Identifier) maloom hona chahiye. Yeh command run karein:
+
+```bash
+aws rds describe-db-instances --output text --query "DBInstances[0].DBInstanceIdentifier"
+
+```
+
+#### Command Breakdown:
+
+* **`aws rds describe-db-instances`:** RDS instances ki details mangwane ki command.
+* **`--output text`:** Response ko saf-suthray plain text format mein convert karna.
+* **`--query "DBInstances[0].DBInstanceIdentifier"`:** JSON response mein se pehle instance ka naam (DBInstanceIdentifier) nikal kar print karna.
+
+---
+
+### Step 2: Manual Snapshot Create Karna
+
+Ab hum `wordpress-manual-snapshot` ke naam se ek manual backup create karne ki command chalate hain:
+
+```bash
+aws rds create-db-snapshot --db-snapshot-identifier wordpress-manual-snapshot --db-instance-identifier $DBInstanceIdentifier
+
+```
+
+#### Command Breakdown:
+
+* **`aws rds create-db-snapshot`:** Naya manual snapshot banane ka hukum.
+* **`--db-snapshot-identifier wordpress-manual-snapshot`:** Is naye banne waale snapshot ka naam.
+* **`--db-instance-identifier $DBInstanceIdentifier`:** Us RDS database instance ka naam jis ka backup lena hai.
+
+#### Error Handling Note:
+
+> **Masla:** Agar aap ko yeh error aaye: `"Cannot create a snapshot because the database instance .. is not currently in the available state."`
+> **Hal:** Ghabrane ki baat nahi hai. Is ka matlab hai ke aap ka database piche abhi initialize (tayar) ho raha hai. 5 minute intezar karein aur command dobara chalayein.
+
+---
+
+### Step 3: Snapshot Ka Status Check Karna
+
+Snapshot banne mein kuch minute lagte hain. Us ka current status check karne ke liye yeh command chalayein:
+
+```bash
+aws rds describe-db-snapshots --db-snapshot-identifier wordpress-manual-snapshot
+
+```
+
+#### Command Breakdown:
+
+* **`aws rds describe-db-snapshots`:** Snapshots ki details dekhne ki command.
+* **`--db-snapshot-identifier wordpress-manual-snapshot`:** Makhsoos snapshot ki progress dekhna ke wo ban chuka hai ya abhi process mein hai (`creating` vs `available`).
+
+*Yad rahe ke RDS manual snapshots ko kabhi khud delete nahi karta, inhein aap ko zaroorat khatam hone par khud delete karna parta hai.*
+
+---
+
+## Copying an automated snapshot as a manual snapshot
+
+#### Masla Aur Us Ka Hal:
+
+Automated snapshots un ke retention period (maslan 3 din) ke baad automatic delete ho jaate hain. Agar kisi automated snapshot mein koi bohot ahem data ho aur aap chahte hon ke **ye backup 3 din baad bhi delete na ho aur hamesha ke liye mehfooz ho jaye**, toh aap ko us Automated Snapshot ko **Copy kar ke Manual Snapshot** bana lena chahiye.
+
+---
+
+### Step 1: Automated Snapshot Ki ID Nikalna
+
+Pehle se bane hue automated snapshot ki Identifier ID hasil karne ke liye local terminal par yeh command chalayein:
+
+```bash
+aws rds describe-db-snapshots --snapshot-type automated --db-instance-identifier $DBInstanceIdentifier --query "DBSnapshots[0].DBSnapshotIdentifier" --output text
+
+```
+
+#### Command Breakdown:
+
+* **`--snapshot-type automated`:** Query filter jo sirf automatic banne waale snapshots ko dhoondta hai.
+* **`--db-instance-identifier $DBInstanceIdentifier`:** Makhsoos database instance ke snapshots filter karna.
+* **`--query "DBSnapshots[0].DBSnapshotIdentifier"`:** Pehle automated snapshot ki unique identifier string nikalna.
+* **`--output text`:** Text format mein ID return karna.
+
+---
+
+### Step 2: Automated Snapshot Ko Copy Karna
+
+Ab us automated snapshot ko copy kar ke `wordpress-copy-snapshot` ke naam se naya manual snapshot banate hain:
+
+```bash
+aws rds copy-db-snapshot --source-db-snapshot-identifier $SnapshotId --target-db-snapshot-identifier wordpress-copy-snapshot
+
+```
+
+#### Command Breakdown:
+
+* **`aws rds copy-db-snapshot`:** AWS RDS ka snapshot copy karne ka tool.
+* **`--source-db-snapshot-identifier $SnapshotId`:** Asli automated snapshot ki ID jo hum ne pichli command se nikaali thi.
+* **`--target-db-snapshot-identifier wordpress-copy-snapshot`:** Naye banne waale copy snapshot ka naam.
+
+#### Nateeja:
+
+Yeh naya snapshot (`wordpress-copy-snapshot`) ab ek **Manual Snapshot** ban chuka hai. Yeh retention period khatam hone par ya RDS instance delete hone par bhi **DELETE NAHI HOGA** jab tak aap khud isay delete na karein.
+
+---
