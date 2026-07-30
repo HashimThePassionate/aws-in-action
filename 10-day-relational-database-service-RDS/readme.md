@@ -1092,3 +1092,183 @@ curl -s https://raw.githubusercontent.com/AWSinAction/code3/main/chapter10/clean
 *(Note: Baaqi main WordPress infrastructure ko abhi delete mat karein, kyunke usay hum agley sections mein istemal karenge).*
 
 ---
+
+## Controlling access to a database
+
+Aaye din news mein aata hai ke hazaron WordPress websites hack ho gayi hain. Apni WordPress site ko hackers se bachane ka sab se aham pehlu yeh hai ke aap apne cloud infrastructure aur database tak rasai (access) ko sakhti se control karein.
+
+AWS mein **Shared Responsibility Model** (Aapas ki zimmedari ka usool) RDS service par bhi bilkul waise hi apply hota hai jaise baaqi AWS services par hota hai:
+
+* **AWS Ki Zimmedari (Security OF the Cloud):** AWS cloud infrastructure ke piche chalne wale hardware, physical data centers, aur operating system ki security ka zimmedar hai.
+* **Aap Ki Zimmedari (Security IN the Cloud):** Aap (customer) is baat ke zimmedar hain ke aap apne data aur RDS database tak pohnchne ke qawaneen (access rules) khud tay karein.
+
+---
+
+### Figure 10.4 Your data is protected by the database itself, security groups, and IAM.
+
+Figure 10.4 (`image_3ffce3.png`) mein dekha ja sakta hai ke RDS database ko mehfooz rakhne ke liye security ki **3 Protective Layers (Hifazati Tehein)** hoti hain jo ek pyaz (onion) ki tarah data ko chaaron taraf se gher kar rakhti hain:
+
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+#### Tehon Ki Aasan Detail Explanation:
+
+1. **Outer Layer - Configuration Access Management (IAM):** Yeh sab se bahar wali hifazati deewar hai. IAM Policies yeh tay karti hain ke kaun sa banda ya script AWS console ya CLI ke zariye database ko create, modify, reboot, ya delete kar sakta hai.
+2. **Middle Layer - Network Access Management (Security Groups):** Yeh network level ka darwaza hai. Firewalls aur Security Groups yeh check karte hain ke kis computer ya IP address se aane wala network traffic database ke port tak pohnch sakta hai.
+3. **Inner Layer - Database Access Management (DB Engine Users):** Yeh database engine (MySQL/PostgreSQL) ke andar ka apna login system hai. Yeh username aur password check karta hai ke user ko tables se data parhne (SELECT) ya likhne (INSERT/UPDATE) ki ijazat hai ya nahi.
+4. **Center Core - Sensitive Data:** Sab se andar aap ka ahem data mehfooz parha hota hai jise ghair-mutaaliqa (unauthorized) logon se bachana zaroori hai.
+
+---
+
+## Controlling access to the configuration of an RDS database
+
+RDS service ki configurations ko control karne ke liye AWS ki **IAM (Identity and Access Management)** service istemal hoti hai.
+
+#### Badi Wazahat: IAM vs Database Engine
+
+> **Khas Point:** IAM sirf yeh control karta hai ke RDS instance ko **bana, badal, ya delete** kaun kar sakta hai. IAM database ke **andar ja kar tables, rows, ya posts** ko nahi dekh sakta aur na hi manage kar sakta hai! Wo kaam database engine ka apna hota hai.
+
+IAM Policies ko aap IAM Users, Groups, ya Roles ke sath attach karte hain taake un ke powers ko limit kiya ja sake.
+
+---
+
+### Listing 10.4 Allowing access to all RDS service configuration and management actions
+
+Neeche di gayi JSON IAM Policy user ko RDS ki tamam configurations par full control de deti hai. Is policy ko sirf unhi logon ko dena chahiye jin par aap ko mukammal bharosa ho:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "rds:*",
+    "Resource": "*"
+  }]
+}
+
+```
+
+#### Code Ka Mukammal Breakdown:
+
+* **`"Version": "2012-10-17"`:** IAM policy ki language syntax ka standard version.
+* **`"Statement": [...]`:** Rules ka group.
+* **`"Effect": "Allow"`:** Yeh statement ijazat de raha hai.
+* **`"Action": "rds:*"`:** Wildcard `*` ka matlab hai ke Amazon RDS service ke **tamaam actions** (jaise `CreateDBInstance`, `DeleteDBInstance`, `ModifyDBInstance`, `RebootDBInstance`) ki ijazat hai.
+* **`"Resource": "*"`:** Wildcard `*` ka matlab hai ke yeh policy AWS account ke **har aik RDS database** par apply hoti hai.
+
+---
+
+### Listing 10.5 IAM policy denying destructive actions
+
+Baqi tamaam kaam ki ijazat dena lekin **Tabah-kun / Destructive Actions (jaise Database Delete karna)** ko rokna ek bohot behtar security practice hai. Is se insani galti (Human Error) ki waja se hone waale data loss ko roka jata hai:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "rds:*",
+    "Resource": "*"
+  }, {
+    "Effect": "Deny",
+    "Action": ["rds:Delete*", "rds:Remove*"],
+    "Resource": "*"
+  }]
+}
+
+```
+
+#### Code Ka Mukammal Breakdown:
+
+1. **Pehla Statement (`Allow`):**
+* **`"Effect": "Allow"`, `"Action": "rds:*"`, `"Resource": "*"`:** User ko RDS ke saare aam kaam karne ki ijazat deta hai.
+
+
+2. **Doosra Statement (`Deny`):**
+* **`"Effect": "Deny"`:** Yeh sakhti se mana (block) kar raha hai.
+* **`"Action": ["rds:Delete*", "rds:Remove*"]`:** Har wo action jis ke naam mein `Delete` ya `Remove` aata ho (maslan `DeleteDBInstance`, `DeleteDBSnapshot`, `RemoveTagsFromResource`), us par sakhti se rukaawat laga deta hai.
+* **`"Resource": "*"`:** Tamam RDS resources par yeh pabandi lago hoti hai.
+
+
+
+#### Architectural Trade-off & Decision Rule: Deny Overrides Allow
+
+> **Khas Ussool:** IAM ka qanoon hai ke **Explicit Deny hamesha kisi bhi Allow par jeet jata hai (Deny Overrides Allow)**.
+> Chahe pehle statement ne poori duniya khol di thi (`rds:*`), lekin jaise hi doosre statement ne `Delete*` ko `Deny` kiya, toh system delete ki request ko FORAN block kar dega. Is policy ke sath developer database mein changes toh kar sakta hai lekin galti se bhi kisi DB ko delete nahi kar sakta!
+
+---
+
+## Controlling network access to an RDS database
+
+Database ko network level par safe rakhne ke liye RDS ko **Security Groups** ke sath joda jata hai. Security Group ek Virtual Firewall ka kaam karta hai jo yeh faisla karta hai ke kaun se network packets database ke andar aa sakte hain (Inbound) aur kaun se bahar ja sakte hain (Outbound).
+
+---
+
+### Listing 10.6 CloudFormation template extract: Firewall rules for an RDS database
+
+Neeche CloudFormation template ka wo hissa hai jo hamare WordPress database ke liye network firewall rules tayar karta hai:
+
+```yaml
+DatabaseSecurityGroup: # Database instance ke liye security group, jo web servers ke liye MySQL default port par aane wale traffic ki ijazat deta hai
+  Type: 'AWS::EC2::SecurityGroup'
+  Properties:
+    GroupDescription: 'awsinaction-db-sg'
+    VpcId: !Ref VPC
+    SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306 # MySQL ka default port 3306 hai
+        ToPort: 3306
+        SourceSecurityGroupId: !Ref WebServerSecurityGroup # Web server ke liye security group ka reference deta hai
+
+```
+
+#### Code Ka Mukammal Breakdown:
+
+* **`DatabaseSecurityGroup:`** Security Group resource ka naam.
+* **`Type: 'AWS::EC2::SecurityGroup'`:** AWS ko bataya ja raha hai ke ek virtual firewall create karein.
+* **`GroupDescription: 'awsinaction-db-sg'`:** Firewall ka maqsad.
+* **`VpcId: !Ref VPC`:** Is firewall ko hamare private network (VPC) ke sath attach kar raha hai.
+* **`SecurityGroupIngress:`** Inbound rules (andar aane waale traffic ke qawaneen).
+* **`IpProtocol: tcp`:** Network communication ke liye TCP protocol use hoga.
+* **`FromPort: 3306` & `ToPort: 3306`:** Port number 3306 ko target kiya ja raha hai jo MySQL database ka standard port hota hai.
+* **`SourceSecurityGroupId: !Ref WebServerSecurityGroup`:** **Network Security Ka Sab Se Bada Rule!** Yahan hum ne koi IP address (`0.0.0.0/0`) nahi diya. Hum ne kaha ke sirf aur sirf wo virtual machines jin ke sath `WebServerSecurityGroup` laga hua hai, wahi port 3306 par database se baat kar sakti hain. Public Internet se aane wala har traffic network level par hi drop ho jayega!
+
+
+
+---
+
+## Controlling data access
+
+Network aur IAM ke baad sab se androoni layer **Database Engine Ka Apna Access Control** hai.
+
+* **DB User vs IAM User:** Database engine ke users (jaise MySQL user) ka IAM Users se koi talluq nahi hota. Database Engine ke users SQL commands ke zariye database ke andar hi create aur manage kiye jaate hain.
+* **WordPress Example:** Application ke liye hum ne `wordpress` naam ka ek database user banaya. WordPress application is user aur password ka istemal karke MySQL engine se connect hoti hai.
+
+---
+
+### IAM database authentication
+
+AWS ek modern aur secure feature deta hai jise **IAM Database Authentication** kehte hain (jo MariaDB, MySQL, aur PostgreSQL par chalta hai).
+
+#### Yeh Kaise Kaam Karta Hai? (Zero Password Concept)
+
+1. Aap ko database engine ke andar har user ka static password save karne ki zaroorat nahi hoti.
+2. Database user ek khas plugin **`AWSAuthenticationPlugin`** istemal karta hai.
+3. Jab user ya application database mein login hona chahti hai, toh wo AWS IAM service se ek temporary **Authentication Token** maangti hai.
+4. Token password ki jagah use hota hai aur yeh token **sirf 15 minute ke liye valid hota hai**. 15 minute baad yeh khud hi expire ho jata hai.
+
+> **2026 Modern Security Standard:** Static passwords (jo files mein hardcode hotay hain) leak hone ka khatra hota hai. IAM DB Auth se temporary tokens use hotay hain jiss se security 100x barh jaati hai.
+
+---
+
+### Typical Use Cases for Data Access Control
+
+Database ke andar mukhtalif users aur un ke permissions ko limit karne ke teen main use cases hotay hain:
+
+1. **Limiting write access to a few database users:** Sirf main application (e.g., WordPress) ko read aur write (INSERT/UPDATE/DELETE) dono ki ijazat dena, jabke reporting ya analytics wale users ko sirf read-only (SELECT) access dena.
+2. **Limiting access to specific tables to a few users:** Organization ke makhsoos shobon ko un ki zaroorat ke tables tak mahdood rakhna (e.g., Finance team sirf `invoices` table dekhe, HR team sirf `employees` table dekhe).
+3. **Limiting access to tables to isolate different applications:** Ek hi database server par multiple customers ya applications chalana aur un ke data ko aik doosre se alag (isolate) rakhna taake ek client doosre client ka data na dekh sake.
+
+---
