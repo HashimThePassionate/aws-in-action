@@ -858,3 +858,237 @@ aws rds copy-db-snapshot --source-db-snapshot-identifier $SnapshotId --target-db
 Yeh naya snapshot (`wordpress-copy-snapshot`) ab ek **Manual Snapshot** ban chuka hai. Yeh retention period khatam hone par ya RDS instance delete hone par bhi **DELETE NAHI HOGA** jab tak aap khud isay delete na karein.
 
 ---
+
+## Restoring a database
+
+Farz karein ek bohot scary (khaufnaak) situation paish aati hai: Aap se galti se WordPress site ke saare blog posts aur comments delete ho gaye! Aise waqt mein aap chahenge ke jitni jaldi ho sake saara data wapis aa jaye (restore ho jaye). Achhi baat yeh hai ke Amazon RDS ke paas is ka mukammal hal maujood hai.
+
+Jab aap kisi automated ya manual snapshot se database ko restore karte hain, toh ek bohot zaroori rule samajhna zaroori hai.
+
+---
+
+### Figure 10.2 & Figure 10.3 Breakdown (Architecture Decision)
+
+#### Figure 10.2: Existing Database Par Restore Nahi Ho Sakta
+
+`image_4000e2.png` mein dikhaya gaya hai ke jab aap ke paas pehle se ek database chal raha hai (`Running DB instance`), toh aap us ke **andar direct snapshot restore NAHI kar sakte**.
+
+> **Bacho Ki Tarah Aasan Misaal:** Farz karein aap ke paas ek mitti ka khiloona hai jo toot gaya hai. Aap us toote hue khiloone ke upar hi naya khiloona nahi dhaal sakte, balki aap ko bilkul naya khiloona shuru se dhalna padta hai.
+
+#### Figure 10.3: Restore Hamesha Naya Instance Banata Hai
+
+`image_4000a7.png` mein yeh process dikhaya gaya hai:
+
+1. `Running DB instance` se pehle ek `Snapshot` (backup) banta hai.
+2. Jab aap restore ki command chalate hain, toh AWS us snapshot se ek **`New DB instance` (bilkul naya database server)** khada kar deta hai.
+
+#### Real-World Process (Web Server Ko Naye Database Par Shift Karna)
+
+Jab naya database instance restore ho jata hai, toh us ka ek naya **Endpoint (Address)** milta hai. Apni website ko wapis chalane ke liye hum dono web servers (EC2 instances) par ja kar WordPress ki configuration file (`/var/www/html/wp-config.php`) mein purane endpoint ki jagah yeh **naya endpoint address** daal dete hain. Is tarah website naye restored database se connect ho jati hai.
+
+---
+
+### Step 1: Subnet Group Ka Naam Pata Karna
+
+Naya database restore karne ke liye zaroori hai ke usay usi VPC aur network subnets mein banaya jaye jahan hamara WordPress chal raha hai. Is ke liye hum CloudFormation se subnet group ka naam pucha karte hain:
+
+```bash
+aws cloudformation describe-stack-resource --stack-name wordpress --logical-resource-id DBSubnetGroup --query "StackResourceDetail.PhysicalResourceId" --output text
+
+```
+
+#### Command Ka Breakdown:
+
+* **`aws cloudformation describe-stack-resource`:** Stack ke andar maujood kisi ek makhsoos resource ki details nikalne ki command.
+* **`--stack-name wordpress`:** Hamare stack ka naam.
+* **`--logical-resource-id DBSubnetGroup`:** Template ke andar likha hua resource ID.
+* **`--query "StackResourceDetail.PhysicalResourceId"`:** AWS mein actual baney hue Subnet Group ka asli naam (Physical ID) filter karke lana.
+* **`--output text`:** Response ko plain text format mein display karna.
+
+---
+
+### Step 2: Snapshot Se Naya Database Restore Karna
+
+Ab hum apne manual snapshot (`wordpress-manual-snapshot`) se ek naya database instance (`awsinaction-db-restore`) banane ki command chalate hain. **`$SubnetGroup`** ki jagah pichli command ka output use karein:
+
+```bash
+aws rds restore-db-instance-from-db-snapshot --db-instance-identifier awsinaction-db-restore --db-snapshot-identifier wordpress-manual-snapshot --db-subnet-group-name $SubnetGroup
+
+```
+
+#### Command Ka Breakdown:
+
+* **`aws rds restore-db-instance-from-db-snapshot`:** Existing snapshot se naya RDS database instance restore karne ka tool.
+* **`--db-instance-identifier awsinaction-db-restore`:** Is naye banne waale restored database server ka naam.
+* **`--db-snapshot-identifier wordpress-manual-snapshot`:** Us snapshot ka naam jis se data utha kar naya database banana hai.
+* **`--db-subnet-group-name $SubnetGroup`:** Subnet group ka naam taake naya database sahi network/VPC ke andar hi banay.
+
+#### Error Handling Note:
+
+> **Masla:** Agar terminal par error aaye: `"DBSnapshot must have state available but actually has creating"`
+> **Hal:** Is ka matlab hai ke aap ka snapshot piche abhi ban raha tha. 5 minute intezar karein aur command dubara chala dein.
+
+---
+
+### Point-in-Time Restore (PITR) Kya Hota Hai?
+
+Agar aap ne **Automated Snapshots** enable kiye hue hain, toh RDS ke paas ek magical power hoti hai jise **Point-in-Time Restore** kehte hain.
+
+#### Yeh Kaise Kam Karta Hai? (Bacho Ki Tarah Aasan Misaal)
+
+> **Aasan Misaal:** Aise samjhein ke RDS aap ke database ki ek **Dairy (Transaction Logs / Change Logs)** likhta rehta hai. Is dairy mein har ek second ka hisab hota hai ke kab kaun sa post add hua aur kab delete hua.
+
+Is feature ki wajah se aap **pichle retention period ke andar kisi bhi minute ya second (jaise 'aaj subah 10 baje se 5 minute pehle')** par waqt ko peeche le ja kar database ko wapis us exact haalat mein restore kar sakte hain!
+
+---
+
+### Point-in-Time Restore Execute Karna
+
+Neeche di gayi command se hum bilkul 5 minute pehle waale waqt (`$Time`) par ja kar ek naya database (`awsinaction-db-restore-time`) create karte hain:
+
+```bash
+aws rds restore-db-instance-to-point-in-time --target-db-instance-identifier awsinaction-db-restore-time --source-db-instance-identifier $DBInstanceIdentifier --restore-time $Time --db-subnet-group-name $SubnetGroup
+
+```
+
+#### Command Ka Breakdown:
+
+* **`aws rds restore-db-instance-to-point-in-time`:** Waqt ke kisi makhsoos lamhay (timestamp) par database restore karne ki command.
+* **`--target-db-instance-identifier awsinaction-db-restore-time`:** Naye banne waale restored database ka naam.
+* **`--source-db-instance-identifier $DBInstanceIdentifier`:** Asli live database ka naam jis ki logs se data uthana hai.
+* **`--restore-time $Time`:** Exact UTC time stamp jahan tak data restore karna hai (maslan: `2026-07-28T08:25:00Z`).
+* **`--db-subnet-group-name $SubnetGroup`:** Network subnet group ka naam.
+
+Naya database banne ke baad, aap `/var/www/html/wp-config.php` file mein naya endpoint update karke apni application ko 5 minute purane data par shift kar sakte hain.
+
+---
+
+## Copying a database to another region
+
+Pehle jab hum ne WordPress ka infrastructure banaya tha, toh hum ne yeh socha tha ke hamare saare visitors America (US) se aayenge. Lekin baad mein pata chalta hai ke ziada tar visitors Europe se aa rahe hain. Is waja se website slow chal rahi hai (Latency ziada hai).
+
+Aap snapshots ki madad se apne poore database ko ek AWS Region (e.g., `us-east-1` Virginia) se doosre AWS Region (e.g., `eu-west-1` Ireland) mein **copy** kar sakte hain.
+
+#### Region Copy Karne Ke 2 Main Asbaab (Reasons):
+
+1. **Disaster Recovery (DR):** Agar khuda-na-khasta poora ek AWS Region kisi disaster (jaise flood ya bijli ke bare breakdown) ki waja se band ho jaye, toh aap doosre region mein majood snapshot se apni website minute-on mein dobara chala sakte hain.
+2. **Relocating (Doosri Jagah Shift Hona):** Apne infrastructure ko users ke ziada qareeb le jana taake unhein fast speed aur kam latency mile.
+
+---
+
+### Compliance Warning (Qanooni Hidayat)
+
+> **Khas Khayal Rakhein:** Asli data (real customer data) ko ek mulk/region se doosre region mein shift karne se pehle **Data Privacy Laws (jaise Europe ka GDPR)** aur compliance rules ka dhyan rakhna behad zaroori hai. Kuch qawaneen ke mutabiq aap apne mulk ke citizens ka data mulk se bahar nahi bhej sakte.
+
+---
+
+### Step 1: Snapshot Ka Unique ARN Number Pata Karna
+
+Snapshot ko doosre region mein copy karne ke liye us ka **ARN (Amazon Resource Name)** chahiye hota hai. ARN AWS mein har resource ka ek unique identity card number jaisa hota hai:
+
+```bash
+aws rds describe-db-snapshots --db-snapshot-identifier wordpress-manual-snapshot --query "DBSnapshots[0].DBSnapshotArn" --output text
+
+```
+
+#### Command Ka Breakdown:
+
+* **`aws rds describe-db-snapshots`:** Snapshot ki details dekhna.
+* **`--db-snapshot-identifier wordpress-manual-snapshot`:** Snapshot ka naam.
+* **`--query "DBSnapshots[0].DBSnapshotArn"`:** Output mein se sirf snapshot ka ARN number filter karke lana (maslan: `arn:aws:rds:us-east-1:123456789012:snapshot:wordpress-manual-snapshot`).
+* **`--output text`:** Text output.
+
+---
+
+### Step 2: Snapshot Ko Europe Region Mein Copy Karna
+
+Ab hum us snapshot ko `us-east-1` se `eu-west-1` (Ireland) region mein copy karte hain:
+
+```bash
+aws rds copy-db-snapshot --source-db-snapshot-identifier $SourceSnapshotArn --target-db-snapshot-identifier wordpress-manual-snapshot --region eu-west-1
+
+```
+
+#### Command Ka Breakdown:
+
+* **`aws rds copy-db-snapshot`:** Snapshot copy tool.
+* **`--source-db-snapshot-identifier $SourceSnapshotArn`:** Original snapshot ka ARN number (jo pichli command se nikala tha).
+* **`--target-db-snapshot-identifier wordpress-manual-snapshot`:** Naye region mein banne waale snapshot ka naam.
+* **`--region eu-west-1`:** Destination region ka naam jahan snapshot copy karke bhejna hai.
+
+Snapshot Europe (`eu-west-1`) mein copy hone ke baad, aap wahan par is snapshot se naya database restore kar sakte hain.
+
+---
+
+## Calculating the cost of snapshots
+
+Snapshots ki pricing un ki istemal shuda storage space par li jati hai.
+
+* **Free Storage Allowance:** Jitne GB ka aap ka RDS database instance hota hai, utni hi size ke **Snapshots aap ko BILKUL FREE** milte hain. (Hamare WordPress example mein database 5 GB ka tha, is liye 5 GB tak ke snapshots store karne ka koi kharcha nahi hai).
+* **Extra Storage Charges:** Agar aap ke snapshots 5 GB se ziada space lene lagein, toh aap ko extra space ke hisab se mahana per GB charge Dena hota hai (maslan taqreeban **$0.095 USD per GB per month**).
+
+---
+
+## Cleaning up
+
+Ab waqt aa gaya hai ke hum ne jitne bhi temporary snapshots aur restore kiye hue database instances banaye the un sab ko delete kar dein taake extra bill na aaye.
+
+Neeche diye gaye tamam commands ko ek ek karke chalayein:
+
+```bash
+aws rds delete-db-instance --db-instance-identifier awsinaction-db-restore --skip-final-snapshot
+aws rds delete-db-instance --db-instance-identifier awsinaction-db-restore-time --skip-final-snapshot
+aws rds delete-db-snapshot --db-snapshot-identifier wordpress-manual-snapshot
+aws rds delete-db-snapshot --db-snapshot-identifier wordpress-copy-snapshot
+aws --region eu-west-1 rds delete-db-snapshot --db-snapshot-identifier wordpress-manual-snapshot
+
+```
+
+#### Commands Ka Line-by-Line Breakdown:
+
+1. **`aws rds delete-db-instance --db-instance-identifier awsinaction-db-restore --skip-final-snapshot`:**
+* Manual snapshot restore se banaye gaye database (`awsinaction-db-restore`) ko delete kar do.
+* **`--skip-final-snapshot`:** Database delete karte waqt aakhri backup lene ki zaroorat nahi hai (is se deletion fast ho jati hai aur time bachta hai).
+
+
+2. **`aws rds delete-db-instance --db-instance-identifier awsinaction-db-restore-time --skip-final-snapshot`:**
+* Point-in-time restore se banaye gaye doosre database (`awsinaction-db-restore-time`) ko bhi aakhri snapshot liye baghair delete kar do.
+
+
+3. **`aws rds delete-db-snapshot --db-snapshot-identifier wordpress-manual-snapshot`:**
+* Primary region mein banaye gaye manual snapshot ko delete kar do.
+
+
+4. **`aws rds delete-db-snapshot --db-snapshot-identifier wordpress-copy-snapshot`:**
+* Automated snapshot se copy kiye gaye manual snapshot ko delete kar do.
+
+
+5. **`aws --region eu-west-1 rds delete-db-snapshot --db-snapshot-identifier wordpress-manual-snapshot`:**
+* Europe (`eu-west-1`) region mein copy kiye gaye snapshot ko delete kar do.
+
+
+
+---
+
+### Cleanup Ko Automated Bash Script Se Karna
+
+Aap ko yeh saari commands aik aik karke manual type karne ki zaroorat nahi hai. Aap apne local machine par yeh single command chala kar automated cleanup script execute kar sakte hain:
+
+```bash
+curl -s https://raw.githubusercontent.com/AWSinAction/code3/main/chapter10/cleanup.sh | bash -ex
+
+```
+
+#### Command Ka Breakdown:
+
+* **`curl -s https://.../cleanup.sh`:** Internet (GitHub) se `cleanup.sh` script ko silent mode (`-s` flag taake extra progress text na dikhay) mein download karna.
+* **`|` (Pipe Operator):** Direct internet se aane waale script text ko aage bash shell ke paas bhej dena.
+* **`bash -ex`:** Downlad shuda script ko execute karna:
+* **`-e`:** Agar koi bhi command fail ho toh script wahein rok do.
+* **`-x`:** Terminal par har ek command ko execute hone se pehle print karke dikhao.
+
+
+
+*(Note: Baaqi main WordPress infrastructure ko abhi delete mat karein, kyunke usay hum agley sections mein istemal karenge).*
+
+---
