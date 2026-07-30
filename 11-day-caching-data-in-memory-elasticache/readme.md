@@ -349,3 +349,279 @@ Resources:
 
 
 ---
+
+## Test the Redis cluster
+
+Pichle section mein hum ne Redis cluster create karne ki CloudFormation configuration ko dekha tha. Lekin kyunki ElastiCache cluster ko AWS secure rakhne ke liye sirf **Private IP Address** deta hai, is liye aap apne ghar ke internet ya laptop se direct us se connect nahi ho sakte.
+
+Is maslay ko hal karne ke liye, hume usi VPC ke andar ek **Virtual Machine (EC2 Instance)** banani parti hai. Yeh Virtual Machine ek bridge (pulao) ka kaam karti hai: aap internet ke zariye is Virtual Machine mein enter hote hain, aur phir wahan se private network par Redis cluster ko test karte hain.
+
+---
+
+### CloudFormation Template Code Snippet
+
+Neeche diya gaya CloudFormation template snippet humari Virtual Machine (EC2 Instance), uske Security Group, aur zaruri Outputs ko define karta hai:
+
+```yaml
+Resources:
+  # [...]
+  InstanceSecurityGroup: # Yeh security group sirf outbound traffic (bahar jaane wale traffic) ki ijazat deti hai
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'vm'
+      VpcId: !Ref VPC
+  Instance: # Yeh woh virtual machine hai jiska istemal aap apne Redis cluster se connect karne ke liye karte hain
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      InstanceType: 't2.micro'
+      IamInstanceProfile: !Ref InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: 0
+          GroupSet:
+            - !Ref InstanceSecurityGroup
+          SubnetId: !Ref SubnetA
+Outputs:
+  InstanceId:
+    Value: !Ref Instance
+    Description: 'EC2 Instance ID (connect via Session Manager)' # Session Manager ke zariye connect karne ke liye istemal hone wali instance ki ID
+  CacheAddress:
+    Value: !GetAtt 'Cache.RedisEndpoint.Address'
+    Description: 'Redis DNS name (resolves to a private IP address)' # Redis cluster node ka DNS naam (jo aik private IP address par resolve hota hai)
+
+```
+
+---
+
+### Code ka Asaan Breakdown
+
+#### 1. Security Group (`InstanceSecurityGroup`)
+
+* **`Type: 'AWS::EC2::SecurityGroup'`**: Yeh Virtual Machine ke chaugird ek digital guard (firewall) khada karta hai.
+* **`GroupDescription: 'vm'`**: Firewall ka maqsad batata hai.
+* **`VpcId: !Ref VPC`**: Is Security Group ko humare main VPC network ke sath jortaa hai.
+* **Ahem Baat**: Is mein koi `Ingress` (andar aane wala) rule nahi hai, sirf `Outbound` (bahar jane wala) traffic allowed hai. Yeh VM ko secure rakhta hai taake bahar se koi direct attack na kar sake, jabke hum **AWS Systems Manager (SSM) Session Manager** ke zariye bina kisi SSH Port 22 open kiye is mein secure login kar sakte hain.
+
+#### 2. Virtual Machine (`Instance`)
+
+* **`Type: 'AWS::EC2::Instance'`**: Main Virtual Machine (server) create karta hai.
+* **`ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]`**: Selected region ke mutabiq Amazon Linux ka sahi Operating System image pick karta hai.
+* **`InstanceType: 't2.micro'`**: Small server size jo Free Tier ke andar aata hai. *(Modern 2026 tech standards mein `t3.micro` ya `t4g.micro` zyada use hotay hain, lekin `t2.micro` testing ke liye bilkul perfect hai)*.
+* **`IamInstanceProfile: !Ref InstanceProfile`**: Is server ko AWS Systems Manager se baat karne ki ijazat (permissions) deta hai.
+* **`NetworkInterfaces`**:
+* **`AssociatePublicIpAddress: true`**: Is VM ko ek Public IP deta hai taake yeh internet se software packages download kar sake aur AWS SSM se connect ho sake.
+* **`DeleteOnTermination: true`**: Jab hum is EC2 instance ko delete karenge, toh iski network card khud-ba-khud delete ho jayegi.
+* **`DeviceIndex: 0`**: Is server ka pehla primary network card index.
+* **`GroupSet`**: Is server par `InstanceSecurityGroup` firewall ko apply karta hai.
+* **`SubnetId: !Ref SubnetA`**: Is VM ko pehle Subnet (`SubnetA`) mein place karta hai.
+
+
+
+#### 3. Stack Outputs (`Outputs`)
+
+* **`InstanceId`**:
+* **`Value: !Ref Instance`**: Stack banne ke baad humein EC2 Machine ki unique ID batata hai taake hum Session Manager se is se connect ho sakein.
+
+
+* **`CacheAddress`**:
+* **`Value: !GetAtt 'Cache.RedisEndpoint.Address'`**: Redis cluster ka private DNS Address (endpoint) nikal kar deta hai (maslan `cluster-name.xxxx.cache.amazonaws.com`).
+
+
+
+---
+
+### Stack Create karne Ka Tariqa
+
+AWS Management Console ke zariye stack banate waqt aap ko yeh 3 Parameters choose karne honge:
+
+* **`SubnetA`**: Aap ke samne kam se kam do subnets aayenge, pehla wala select karein.
+* **`SubnetB`**: Dusra wala subnet select karein.
+* **`VPC`**: Aap ka standard **Default VPC** select karein.
+
+---
+
+### Where is the template located?
+
+> **Template ki Location**:
+> CloudFormation template GitHub par majood hai. Aap is Link se ZIP repository download kar sakte hain:
+> `[https://github.com/AWSinAction/code3/archive/main.zip](https://github.com/AWSinAction/code3/archive/main.zip)`
+> ZIP extract karne ke baad file aap ko is path par milegi: `chapter11/redis-minimal.yaml`.
+> Is ke alawa yeh file S3 bucket par bhi available hai: `[http://mng.bz/9Vra](http://mng.bz/9Vra)`.
+
+---
+
+### Step-by-Step Redis Cluster Testing
+
+Gamer ka session store karne aur highscore list (leaderboard) banane ke liye in steps ko follow karein:
+
+1. **Step 1**: CloudFormation Console par stack status **`CREATE_COMPLETE`** hone ka intazaar karein.
+2. **Step 2**: Stack par click karke **Outputs** tab mein jayein aur wahan se **`InstanceId`** aur **`CacheAddress`** ko copy kar lein.
+3. **Step 3**: AWS Systems Manager **Session Manager** ke zariye EC2 Instance mein login karein.
+4. **Step 4**: Terminal par neeche di gayi commands execute karein (`$CacheAddress` ki jagah apna actual copied DNS address dalein):
+
+---
+
+#### Terminal Commands & Redis CLI Execution
+
+```bash
+$ sudo amazon-linux-extras install -y redis6
+
+```
+
+* **Wazahat**: Yeh command Amazon Linux machine par **Redis 6 CLI tool** (command-line client) install karti hai taake hum terminal se Redis database ke sath baat kar sakein.
+
+---
+
+```bash
+$ redis-cli -h $CacheAddress
+
+```
+
+* **Wazahat**: `redis-cli` tool ke zariye hum **Port 6379** par banay gaye Redis cluster endpoint (`$CacheAddress`) se connection establish karte hain.
+
+---
+
+```text
+> SET session:gamer1 online EX 15
+OK
+
+```
+
+* **Wazahat**:
+* `SET`: Redis mein naya key-value pair save karne ke liye command.
+* `session:gamer1`: Key ka naam.
+* `online`: Value jo store ki ja rahi hai (player ka current status).
+* `EX 15`: Time-To-Live (TTL) set karta hai **15 seconds** ke liye. Iska matlab hai 15 seconds baad yeh memory se auto-delete ho jayega.
+* **Output `OK**`: Matleb Redis ne data kamyabi se RAM mein save kar liya hai.
+
+
+
+---
+
+```text
+> GET session:gamer1
+"online"
+
+```
+
+* **Wazahat**:
+* `GET`: Key ki value read karne ke liye command.
+* **Output `"online"**`: Kyunki 15 seconds abhi khatam nahi huay, Redis ne RAM se foran jawab de diya (**Cache Hit**).
+
+
+
+---
+
+```text
+> GET session:gamer1
+(nil)
+
+```
+
+* **Wazahat**:
+* 15 seconds ka time guzarne ke baad jab dobara `GET session:gamer1` chalaya gaya, toh jawab mein `(nil)` aaya.
+* **Output `(nil)**`: Nil ka matlab hai "Kuch nahi mila" (**Cache Miss**). Kyunki TTL khatam hotay hi Redis ne key ko RAM se delete kar diya tha.
+
+
+
+---
+
+```text
+> ZADD highscore 100 "gamer1"
+(integer) 1
+
+```
+
+* **Wazahat**: `ZADD` command **Sorted Set** data structure mein data add karti hai. Hum `highscore` naam ki list mein player `"gamer1"` ko **`100`** score ke sath add kar rahe hain. Response `(integer) 1` batata hai ke 1 naya member add ho gaya hai.
+
+---
+
+```text
+> ZADD highscore 50 "gamer2"
+(integer) 1
+
+```
+
+* **Wazahat**: `highscore` set mein `"gamer2"` ko **`50`** score ke sath add kiya gaya.
+
+---
+
+```text
+> ZADD highscore 150 "gamer3"
+(integer) 1
+
+```
+
+* **Wazahat**: `highscore` set mein `"gamer3"` ko **`150`** score ke sath add kiya gaya.
+
+---
+
+```text
+> ZADD highscore 5 "gamer4"
+(integer) 1
+
+```
+
+* **Wazahat**: `highscore` set mein `"gamer4"` ko **`5`** score ke sath add kiya gaya.
+
+---
+
+```text
+> ZRANGE highscore -3 -1 WITHSCORES
+1) "gamer2"
+2) "50"
+3) "gamer1"
+4) "100"
+5) "gamer3"
+6) "150"
+
+```
+
+* **Wazahat**:
+* `ZRANGE`: Sorted Set se Specific range ke elements nikalne ke liye use hoti hai.
+* `highscore`: Target sorted set ka naam.
+* `-3 -1`: Negative index ka matlab hai aakhri hisse se values uthana (`-3` teesra aakhri item, `-1` sab se aakhri item). Matlab top 3 high scores!
+* `WITHSCORES`: Players ke naam ke sath unka score bhi print karne ke liye flag.
+* **Output Breakdown**:
+Redis Sorted Sets data ko automatically score ke mutabiq chote se bade (ascending order) mein arrange karte hain:
+1. 3rd Highest: `"gamer2"` (Score: `50`)
+2. 2nd Highest: `"gamer1"` (Score: `100`)
+3. 1st Highest: `"gamer3"` (Score: `150`)
+
+
+
+
+
+---
+
+```text
+> quit
+
+```
+
+* **Wazahat**: Redis CLI terminal session se bahar aane aur exit karne ke liye command.
+
+---
+
+Aap ne successfully ek real-world gaming backend ki tarah Redis cluster se connect karke user sessions aur fast highscore leaderboards ko test kar liya hai!
+
+---
+
+## Cleaning up
+
+Lab complete hone ke baad resources ko delete karna bohot zaruri hota hai taake AWS account mein fuzool charges na aayein.
+
+### Stack Delete karne ka Command
+
+Aap CloudFormation Console se bhi stack delete kar sakte hain ya AWS CLI par yeh command chala sakte hain:
+
+```bash
+$ aws cloudformation delete-stack --stack-name redis-minimal
+
+```
+
+* **Wazahat**: Yeh command AWS CloudFormation ko instruction deti hai ke `redis-minimal` naam ke stack ke tehat banay gaye tamam resources (EC2 Instance, ElastiCache Redis Cluster, Security Groups, Subnet Groups) ko ek sath mukammal taur par delete kar de.
+
+----
