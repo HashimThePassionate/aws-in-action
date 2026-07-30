@@ -1708,3 +1708,271 @@ Obtain kiye gaye IP address ko apne browser ke address bar mein daalein. Aap ke 
 
 
 ---
+
+## Monitoring a cache
+
+AWS **Amazon CloudWatch** ek aisi centralized monitoring service hai jo AWS ke tamam resources ke metrics (performance record aur data points) ko jama karti hai. Bilkul baki services ki tarah, ElastiCache nodes bhi apna sara performance data CloudWatch ko bhejte hain.
+
+Cache ki sehat aur speed par nazar rakhne ke liye yeh **4 sab se ahem metrics** hote hain:
+
+* **`CPUUtilization`**: Machine ka processor kitne percent (%) busy hai aur kitna load utha raha hai.
+* **`SwapUsage`**: Host machine par kitni **Swap Memory** (Hard Disk ka hissa jo RAM full hone par use hota hai) istemal ho rahi hai (bytes mein).
+* **`Evictions`**: Memory full hone ki waja se kitni aisi valid keys ko cache ne dhakka de kar bahar (delete) nikala hai jo abhi expire nahi hui thin.
+* **`ReplicationLag`**: Yeh metric sirf Redis ke **Read Replica** (backup reader node) par lagu hota hai. Yeh batata hai ke Primary (main) node par badlay gaye data ko Replica node tak pohochne mein kitne seconds ka delay (lag) aa raha hai. Aam taur par yeh value bohot kam (zero ke kareeb) honi chahiye.
+
+---
+
+## Monitoring host-level metrics
+
+ElastiCache service ke piche chalne wali Virtual Machines (servers) apna CPU Utilization aur Swap Usage report karti hain.
+
+* **CPU Utilization Ka Masla**: Jab CPU Utilization **80% se 90%** ko cross kar jati hai, toh severe performance issues aana shuru ho jate hain kyunki processing wait-time bohot ziada badh jata hai.
+* **Redis Single-Threaded Nature (Ek Khas Pechidgi)**:
+* Redis engine ek waqt mein CPU ka sirf **1 Core (Single Thread)** istemal karta hai.
+* Socho aap ke server mein 4 CPU Cores hain. Agar Redis processor ke 1 Core ko 100% full utilize kar raha ho, toh overall system ka average CPU Utilization aap ko sirf **25%** dikhayi dega! Yeh aap ko galat-fehmi mein daal sakta hai ke server free hai.
+* Is maslay se bachne ke liye AWS humein **`EngineCPUUtilization`** metric deta hai, jo khas taur par sirf Redis process ke CPU usage par nazar rakhta hai.
+
+
+* **Swap Usage Ka Masla**: Cache ka pura maqsad super-fast RAM speed hasil karna hota hai. Agar server ki RAM khatam ho jaye aur Operating System memory ka data slow Hard Disk (Swap space) mein shift karne lage, toh cache ki speed bilkul slow ho jayegi.
+* **Memory Management & Solutions**: AWS ElastiCache by default total RAM ka kuch hissa bacha kar rakhta hai (jaise System Kernel aur network sockets ke liye memory zaroori hoti hai). Lekin agar doosre internal processes ziada RAM khane lagein, toh is maslay ka hal yeh hai ke:
+1. Cache Node ka Size badhayein (**Scale Up** - maslan larger instance class par jayein).
+2. Ziada Shards add karein (**Scale Out** - data ko mazeed servers par baant dein).
+
+
+
+---
+
+## Queuing theory: Why 80–90%?
+
+### Real-World Supermarket Cashier Example
+
+Socho aap ek bohot bade Supermarket ke manager hain. Aap ke paas saman ke billing counter par **Cashiers** kaam kar rahe hain.
+
+Aap sochte hain: *"Main cashiers se poora din 90% kaam karwaunga taake un ka aik minute bhi zaya na ho!"*
+
+Lekin iska nateeja kya hoga? Customers ki lambi lines (queues) lag jayengi aur log ghussey mein intazaar karenge! Kyunki customers ek fix timetable ke mutabiq nahi aate; kabhi ek sath 10 log aa jate hain aur kabhi koi nahi aata.
+
+Computer architecture mein isay **Queuing Theory (M/D/1 System)** kehte hain. Wait time resource ki utilization badhne ke sath linear tarike se nahi, balki **exponentially (bohot tezi se tez speed mein)** badhta hai. Yeh rule Supermarket ke cashiers par bhi lagu hota hai aur Computer ke Network Cards, CPU, aur Hard Disks par bhi.
+
+### Wait Time Hesab (Math Breakdown):
+
+* **0% se 60% Utilization**: Wait time **2 guna (double)** ho jata hai.
+* **80% Utilization**: Wait time **3 guna (triple)** ho jata hai.
+* **90% Utilization**: Wait time **6 guna** badh jata hai!
+
+> **Khas Misal**: Agar 0% utilization par response time **100 ms** hai, toh 80% utilization par woh badh kar **300 ms** ho jayega—jo ek modern e-commerce application ya high-scale system ke liye kafi slow mana jata hai.
+
+### Recommended Production Alarms:
+
+Production system mein automated CloudWatch Alarms setup karne ke liye yeh thresholds recommended hain:
+
+1. **`EngineCPUUtilization` Alarm**: Agar 10-minute ka average **80%** se uupar chala jaye (1 consecutive period ke liye), toh alarm trigger ho.
+2. **`SwapUsage` Alarm**: Agar 10-minute ka average **67108864 bytes** (**64 MB**) se uupar chala jaye (1 consecutive period ke liye), toh alarm trigger ho.
+
+---
+
+## Is my memory sufficient?
+
+**Evictions Metric** Memcached aur Redis dono report karte hain.
+
+Jab cache ki RAM poori tarah bhar (full ho) jaye aur aap us mein ek naya key-value pair add karne ki koshish karein, toh cache ko naye data ke liye jagah banane ki waja se kisi purane key-value pair ko **delete (evict)** karna parta hai. Is process ko **Eviction** kehte hain.
+
+By default, Redis **`volatile-lru`** policy istemal karta hai. Iska matlab hai ke Redis sirf un keys ko delete karta hai jin par **TTL (Time-To-Live)** set hota hai aur jo sab se kam istemal (Least Recently Used) hui hoti hain.
+
+### 6 Eviction Strategies (Data Delete Karne Ke Tariqay):
+
+1. **`volatile-lru`**: Sirf un keys mein se Least Recently Used key hatata hai jin par TTL set ho.
+2. **`allkeys-lru`**: Tamam keys (chahay TTL set ho ya na ho) mein se sab se kam access hone wali key ko delete karta hai.
+3. **`volatile-random`**: TTL wali keys mein se random (bina kisi tarteeb ke) koi bhi key uda deta hai.
+4. **`allkeys-random`**: Tamam keys mein se random koi bhi key uda deta hai.
+5. **`volatile-ttl`**: Un keys mein se sab se chote remaining TTL (jis ki expiry sab se kareeb ho) wali key ko pehle delete karta hai.
+6. **`noeviction`**: Kisi bhi key ko delete nahi karta! Jab memory full hoti hai, toh naya data write karne par error return kar deta hai.
+
+### Nuqsan aur Hal:
+
+Agar aap ke system mein **High Eviction Rates** aa rahe hain, toh is ki do baray wajohat hain:
+
+1. Aap ne keys par sahi **TTL set nahi kiya**, jis se purana data memory mein phasa rehta hai.
+2. Aap ka **Cache Server size bohot chota hai**.
+
+**Hal**: Node size ko bada karein (Scale Up) ya Shards add karein (Scale Out).
+
+### Recommended Alarm Threshold:
+
+* **`Evictions` Alarm**: Agar 10-minute ka average **1000 evictions** se ziada ho jaye (1 consecutive period ke liye), toh alarm trigger ho.
+
+---
+
+## Is my Redis replication up-to-date?
+
+**`ReplicationLag` Metric** sirf un nodes par chalega jo **Read Replica** ke taur par configure hotay hain. Yeh batata hai ke Primary Node se data ko Sync karke Replica Node tak pohochne mein kitne seconds ka time delay aa raha hai.
+
+### Real-World Gaming Example:
+
+Maan lijiye gaming backend mein ek Primary Node hai (jo Writes handle kar raha hai) aur ek Replica Node hai (jo Reads handle kar raha hai).
+
+* Player ne naya high-score banaya aur woh Primary Node par write ho gaya.
+* Agar **`ReplicationLag = 600`** ho, iska matlab hai ke Replica Node Primary Node se **600 seconds (10 minutes)** pichhay chal raha hai!
+* Ab jab player leaderboard dekhega aur us ki request Replica Node par jayegi, toh usay **10 minute purana purana score** dikhayi dega.
+
+### High Replication Lag Ki Waja Aur Hal:
+
+High replication lag tab aata hai jab cluster par capacity ka bhojh ziada ho aur server CPU process na kar pa raha ho.
+
+* **Hal**: Capacity badhane ke liye naye **Shards** ya extra **Replicas** add karein.
+
+### Recommended Alarm Threshold:
+
+* **`ReplicationLag` Alarm**: Agar 10-minute ka average **30 seconds** se ziada ho jaye (1 consecutive period ke liye), toh alarm trigger ho.
+
+---
+
+## Cleaning up
+
+Lab aur testing complete hone ke baad AWS bill se bachne ke liye Discourse stack ko delete kar dena chahiye.
+
+Terminal par yeh command chalaayein:
+
+```bash
+$ aws cloudformation delete-stack --stack-name discourse
+
+```
+
+### Command ka Line-by-Line Breakdown:
+
+* **`aws cloudformation`**: AWS CLI ko instruction deta hai ke CloudFormation service API ke sath interact karein.
+* **`delete-stack`**: CloudFormation ko hukam deta hai ke specify kiye gaye stack aur us ke tehat bane tamam components ko permanently delete kar de.
+* **`--stack-name discourse`**: Specific stack name define karta hai (`discourse`). Yeh command Discourse ke tehat banay gaye EC2 Instance, ElastiCache Redis Cluster, RDS PostgreSQL Database, Subnet Groups, aur Security Groups ko AWS account se safai ke sath terminate aur delete kar degi.
+
+## Tweaking cache performance
+
+Jab aap ka cache system heavy traffic ki waja se slow hone lage aur fast response (low latency) na de sake, toh woh pooray system ke liye ek bottleneck (rukwat) ban jata hai.
+
+Agar CloudWatch monitoring metrics dikhayen ke cache par CPU utilization bohot ziada ho gayi hai ya network capacity phul chuki hai, toh performance ko behtar (tweak) karne ke liye **3 main strategies** istemal ki jati hain:
+
+1. **Selecting the right cache node type (Vertical Scaling)**: Server ka size bara karna taake usay ziada CPU, Memory (RAM), aur tez Network bandwidth mil sake.
+2. **Selecting the right deployment option (Horizontal Scaling)**: Traffic ko taqseem karne ke liye Read Replicas ya Sharding ka istemal karna.
+3. **Compressing your data (Application-Level Optimization)**: Cache mein data bhejne se pehle usay compress (chota) karna taake memory aur network par bhojh kam ho.
+
+---
+
+### Figure 11.10 Ki Wazahat (Performance Decision Tree Breakdown)
+
+**Figure 11.10** ek decision tree (faisla karne ka choktah) dikhata hai jise follow karke aap ElastiCache ke kisi bhi performance issue ko step-by-step hal kar sakte hain. Is chart ka breakdown yeh hai:
+
+<div align="center">
+  <img src="./images/10.png" width="600"/>
+</div>
+
+#### Decision Flow Steps:
+
+* **Step 1 (Performance Check)**: Kya aap ke cache ki performance filhal theek hai?
+* **Haan (Yes)**: Kuch mat karein (**Do nothing**).
+* **Nahi (No)**: Agle step par jayein.
+
+
+* **Step 2 (Compression Check)**: Kya aap ne data compression implement ki hui hai?
+* **Nahi (No)**: Pehle app level par data compression lagayein (**Implement compression**).
+* **Haan (Yes)**: Agle step par jayein.
+
+
+* **Step 3 (Node Size Check)**: Kya is se bara node size (instance type) market mein available hai?
+* **Haan (Yes)**: Server size bada kar dein (**Increase node type**).
+* **Nahi (No)**: Agle step par jayein.
+
+
+* **Step 4 (Memory Fit Check)**: Kya aap ka poora dataset ek hi server ki RAM mein aasaani se fit aa sakta hai?
+* **Nahi (No)**: Data ko multiple servers par baantne ke liye Sharding karein (**Sharding**).
+* **Haan (Yes)**: Agle step par jayein.
+
+
+* **Step 5 (Read/Write Ratio Check)**: Kya aap ki app mein Read traffic Write traffic se ziada hai?
+* **Haan (Yes)**: Read traffic ko distribute karne ke liye Read Replicas lagayein (**Read replicas**).
+* **Nahi (No)**: Writes ko handle karne ke liye Sharding karein (**Sharding**).
+
+
+
+---
+
+## Selecting the right cache node type
+
+Pehle hum ne testing ke liye **`cache.t2.micro`** node type use kiya tha, jis mein sirf 1 vCPU, ~0.6 GB RAM, aur low-to-moderate network capacity hoti hai. Yeh sirf Free Tier testing ke liye hota hai.
+
+AWS par bohot powerful servers majood hain, jaise **`cache.r6gd.16xlarge`** jis mein 64 vCPUs, ~419 GB RAM, aur 25 Gbps ki super-fast network speed milti hai.
+
+### Production Node Selection Rule of Thumb:
+
+1. **At least 2 vCPUs**: Production workload ke liye kam se kam 2 vCPUs hone chahiye taake real multi-threading aur background tasks ek sath chal sakein.
+2. **20% Memory Buffer**: Apne data size se kam se kam 20% ziada RAM rakhein taake future growth sambhal sake aur **Memory Fragmentation** (RAM mein data bikharne se hone wali jagah ki zayai) se bacha ja sake.
+3. **High Network Performance**: Cache server ke paas tez network card hona zaroori hai.
+
+> **Recommended Baseline Node**: Production mein shuruat karne ke liye **`cache.r6g.large`** (2 vCPUs, ~13 GB RAM, aur 10 Gbps network) ek behtareen starting point hai.
+> *(Modern 2026 Tech Standard: AWS ke naye Graviton3/Graviton4 processors par chalne wale nodes jaise **`cache.r7g.large`** ya **`cache.r8g.large`** kam qeemat mein ziada speed aur efficiency dete hain).*
+
+---
+
+## Selecting the right deployment option
+
+Jab ek single node hardware ke lehaz se maximum limit tak pohoch jaye, toh hum Horizontal Scaling (Replication ya Sharding) ka sahara lete hain.
+
+### 1. Replication (Redis)
+
+* **Kaam Karne Ka Tariqa**: Is mein 1 **Primary Node** hota hai jo Read aur Write dono handle karta hai, aur baqi **Replica Nodes** hotay hain jo sirf Read requests ka jawab dete hain.
+* **Asynchronous Synchronization**: Primary node apna naya data Replicas ko **Asynchronously** (piche se background mein) bhejta hai. Iska matlab hai ke replica par data pohochne mein fractions of a second (eventual consistency) ka time lag sakta hai.
+* **Client Awareness**: Application ke Redis client code ko cluster topology ki samajh honi chahiye taake woh Write commands primary ko aur Read commands replicas ko bhej sake.
+* **Benefits**: Read capacity multi-fold badh jati hai aur High Availability (HA) milti hai.
+
+---
+
+### 2. Sharding (Memcached aur Redis)
+
+* **Kaam Karne Ka Tariqa**: Single cluster ke saare data ko chote buckets (shards) mein taqseem kar diya jata hai. Keys ko alag alag nodes par divide karne ke liye clients hashing algorithm ka istemal karte hain.
+* **Benefits**: RAM Capacity aur Read/Write throughput dono ek sath scale ho jate hain.
+
+---
+
+### 3. Application Auto Scaling
+
+ElastiCache mein hum **Application Auto Scaling** configure kar sakte hain. Yeh system ke CPU ya Memory utilization metrics ko dekh kar automatic shards ki tadad ko kam ya ziada (scale out / scale in) kar deta hai.
+
+---
+
+### 4. Multi-Region Scaling (ElastiCache Global Datastore)
+
+Socho aap ka ek international online game hai jis ke players United States, Europe, aur Asia teeno jagah hain. Game latency ko zero karne ke liye infrastructure ko teeno continent mein lagana parta hai.
+
+**ElastiCache Global Datastore** ke zariye aap Europe (Ireland) mein majood apne main Redis cluster ka data direct US East (N. Virginia) aur Asia (Singapore) ke regional clusters mein real-time replicate kar sakte hain.
+
+---
+
+## Compressing your data
+
+Memory aur Network ka bhojh kam karne ka sab se sasta tarika application-level **Data Compression** hai.
+
+* **Kaam Karne Ka Tariqa**: App data ko Redis/Memcached mein write karne se pehle compress karti hai, aur read karte waqt uncompress kar leti hai.
+* **Nateeja (Performance Gain)**: Heavy JSON objects ya strings ko compress karne se memory consumption aur network transfer **75% tak kam** ho jata hai (data size original ka sirf **25%** reh jata hai).
+* **Best Algorithms**: Data compression ke liye standard **`zlib`** library, ya modern high-speed algorithms (jaise **`zstd`** ya **`lz4`**) behtareen options hain.
+
+---
+
+### ElastiCache Data Tiering (Cost vs Latency Trade-Off)
+
+ElastiCache for Redis mein **Data Tiering** ka option hota hai.
+
+* **Mechanics**: Jab Data Tiering ON hota hai, toh Redis aksar use hone wale (Hot Data) ko fast **RAM** mein rakhta hai, jabke kam istemal hone wale (Cold Data) ko saste solid-state drives (**NVMe SSDs**) mein shift kar deta hai.
+* **Trade-off**: SSD se data read karna RAM ke mukable thoda slow hota hai (microseconds ki jagah latency thodi badh jati hai), lekin is se server ka kharcha (cost) bohot kam ho jata hai.
+
+---
+
+## Summary
+
+* **Cache Layer ke Fawaid**: Caching layer aap ki app ki speed ko bohot badha deti hai aur primary database ke kharche ko kam karti hai.
+* **Data Freshness**: Cache aur DB ko sync rakhne ke liye keys par **TTL (Time-To-Live)** lagaya jata hai ya **Write-Through** strategy use ki jati hai.
+* **Eviction**: Cache memory full hone par **LRU (Least Recently Used)** policy ke tehat purana data auto-delete hota hai.
+* **Managed Engine Options**: AWS ElastiCache **Memcached** aur **Redis** dono ko fully-managed service ke taur par deta hai.
+* **Memcached**: Simple key-value store hai jo **Sharding** ke zariye memory aur throughput scale karta hai.
+* **Redis**: Advanced in-memory database hai jo **Sorted Sets**, Hashes, aur Lists jaise complex data structures ko support karta hai.
+* **MemoryDB**: ElastiCache ka alternative in-memory database hai jo **100% Data Persistence** deta hai aur primary DB ke taur par use ho sakta hai.
+* **CloudWatch Insights**: CloudWatch metric monitors ke zariye ElastiCache cluster ki CPU, Swap, Evictions, aur Replication Lag par mukammal nazar rakhi ja sakti hai.
+
+----
