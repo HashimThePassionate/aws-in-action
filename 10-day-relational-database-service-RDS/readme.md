@@ -1272,3 +1272,177 @@ Database ke andar mukhtalif users aur un ke permissions ko limit karne ke teen m
 3. **Limiting access to tables to isolate different applications:** Ek hi database server par multiple customers ya applications chalana aur un ke data ko aik doosre se alag (isolate) rakhna taake ek client doosre client ka data na dekh sake.
 
 ---
+
+
+## Building on a highly available database
+
+Aap ke blog ya WordPress site ki **Availability (24/7 chalte rehna)** aap ke business ki kamyabi ke liye sab se zaroori cheez hai. Agar aap ki website band (down) ho jaye, toh visitors aur business dono ka bohot bara nuqsan hota hai. Is liye hamari koshish hoti hai ke hum website ke **Downtime (band hone ke waqt)** ko jitna ho sake zero kar dein.
+
+System ke andar **Database sab se zaroori hissa** hota hai. Agar application (WordPress) database se connect na ho sake, toh website bilkul kaam nahi karegi. Database mein rakha hua data "Mission Critical" (nihayat qeemti) hota hai, is liye database ka **Highly Available (HA)** hona aur data ka mehfooz (durable) rehna behad zaroori hai.
+
+---
+
+### Primary aur Standby Instance Ka Concept (Bacho Ki Tarah Aasan Misaal)
+
+Default (normal) setup mein hum sirf ek akela database instance chalate hain. Lekin Amazon RDS aap ko **Highly Available (HA) Database** banane ki suhulat deta hai.
+
+> **Aasan Misaal:** Farz karein aap ek school bus ke driver hain. Agar aap ke paas sirf **Ek Bus (Single Instance)** hai aur wo raaste mein kharab ho jaye, toh saare bachay school nahi pohanch payenge (Downtime).
+> Lekin agar aap ke paas ek **Doosri Extra Bus (Standby Instance)** bhi pehle se tayar khadi ho, toh pehli bus kharab hote hi aap bachon ko فوراً doosri bus mein bitha kar rawana kar denge. School ke bachon ko pata bhi nahi chalega ke pehli bus kharab hui thi!
+
+HA RDS Database setup mein **2 Database Instances** hotay hain:
+
+1. **Primary Database Instance:** Yeh asli main server hai. Tamam clients (web servers) apni SQL queries (Read aur Write requests) sirf is Primary database ko bhejte hain.
+2. **Standby Database Instance:** Yeh backup server hai jo doosre datacenter mein tayar rehta hai.
+
+Data ko Primary se Standby database mein **Synchronously Replicate** (hath ke hath double copy) kiya jata hai. Is ka matlab hai ke jab bhi Primary database mein koi naya post ya comment save hota hai, toh AWS usay pehle Standby par bhi save karta hai, phir client ko bolta hai ke "Data Save Ho Gaya".
+
+#### Architectural Decision & Cost Trade-off:
+
+> **Zaroori Mashwara:** Production systems (live business websites) ke liye **HAMESHA High-Availability deployment istemal karein**.
+> **Trade-off:** HA setup mein aap ko **Dono Instances (Primary + Standby)** ke double paise dene padte hain. Is liye agar aap sirf Testing ya Learning kar rahe hain, toh paise bachane ke liye HA option off rakh sakte hain.
+
+---
+
+### Automatic Failover Kaise Kaam Karta Hai?
+
+Agar kisi wajah se Primary database crash ho jaye, hardware kharab ho jaye, ya network cut jaye, toh AWS RDS **Automatic Failover** ka amal shuru karta hai:
+
+1. RDS khud-ba-khud detect kar leta hai ke Primary Database jawab nahi de raha.
+2. Standby Database ko promotion de kar naya **Primary Database** bana diya jata hai.
+3. System bina kisi insani madad (without human intervention) ke khud hi yeh saara kaam sambhal leta hai.
+
+---
+
+### Figure 10.5 & Figure 10.6 Breakdown
+
+`image_3ff4e2.png` mein dikhaya gaya hai ke Failover ke waqt network aur DNS level par kya tabdeeli aati hai:
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+  <img src="./images/06.png" width="600"/>
+</div>
+
+#### Diagram Ka Step-by-Step Breakdown:
+
+* **Figure 10.5 (Normal HA Mode):** Application client database ke Endpoint Domain Name (`awsinaction-db...rds.amazonaws.com`) par request bhejta hai. DNS resolution is address ko Primary DB Instance ke IP par bhejti hai. Primary DB real-time mein data ko Standby DB par **Synchronize** karta rehta hai.
+* **Figure 10.6 (Failover Situation):** Primary DB crash ho gaya (Katan / Cross ka nishaan `O` dikhaya gaya hai). AWS RDS seconds ke andar DNS Record ko update kar deta hai. Ab wahi domain name (`awsinaction-db...rds.amazonaws.com`) automatically **Standby DB Instance** ke IP address ki taraf point karne lagta hai. Application bina code badle naye server se connect ho jati hai.
+
+---
+
+## Aurora is different
+
+AWS ka apna cloud-native engine **Amazon Aurora** baki aam RDS databases (MySQL/PostgreSQL) se bilkul alag tarike se High Availability handle karta hai:
+
+* **No EBS Single Storage:** Normal RDS database apna data ek single EBS volume par rakhta hai. Aurora apna data ek **Cluster Volume** par rakhta hai.
+* **Storage Cluster Volume:** Aurora ka cluster volume multiple storage disks par phaila hota hai aur har disk par aap ke data ki multiple copies hoti hain. Is ka matlab hai ke Aurora ki Storage Layer mein **kabhi Single Point of Failure nahi ho sakta**.
+* **Primary Instance Failover:** Aurora mein bhi sirf Primary instance hi Write requests accept karta hai. Agar Primary instance down ho jaye:
+* **Agar Cluster mein sirf 1 Instance tha:** Toh AWS naya Primary instance re-create karta hai (jis mein 10 minute se kam waqt lagta hai).
+* **Agar Cluster mein Read Replicas maujood hain:** Toh AWS kisi ek Read Replica ko promote kar ke naya Primary instance bana deta hai. Yeh kaam sirf **1 minute ke andar** ho jata hai jo ke pehle se bohot fast hai!
+
+
+
+---
+
+## Multi-AZ with two standby instances
+
+AWS ne RDS databases ke liye ek mazeed advance option muta-arif karwaya hai: **Multi-AZ deployment with TWO standby instances (1 Primary + 2 Standbys)**.
+
+Single standby instance ke muqablay mein 2 Standby instances chalane ke **3 bade fawaid (Advantages)** hain:
+
+1. **Read Replica Capacity:** Dono standby instances ko aap Read-Only queries (data parhne wali queries) ke liye istemal kar sakte hain, jiss se database ki speed aur capacity barh jati hai.
+2. **Lower Latency & Faster Commit:** Transaction commits par latency aur jitter kam aata hai, jis se Write performance behtar hoti hai.
+3. **Super Fast Failover:** Failover ka waqt aur kam ho kar **60 seconds se bhi kam** ho jata hai.
+
+*(Note: Yeh option MySQL aur PostgreSQL engines ke liye available hai).*
+
+---
+
+## Enabling high-availability deployment for an RDS database
+
+> **WARNING (Paison Ka Dhyan):** Highly Available RDS database chalane par extra kharcha aata hai (taqreeban $0.017000 per hour ya normal instance cost se double).
+
+Pehle se chalne waale RDS database par High Availability (Multi-AZ) enable karne ke liye local terminal par yeh CloudFormation command chalayein:
+
+```bash
+aws cloudformation update-stack --stack-name wordpress --template-url \
+https://s3.amazonaws.com/awsinaction-code3/chapter10/template-multiaz.yaml \
+--parameters ParameterKey=WordpressAdminPassword,UsePreviousValue=true \
+--capabilities CAPABILITY_IAM
+
+```
+
+#### Command Ka Line-by-Line Breakdown:
+
+* **`aws cloudformation update-stack`:** Existing stack ki configuration update karne ki command.
+* **`--stack-name wordpress`:** Stack ka naam.
+* **`--template-url https://.../template-multiaz.yaml`:** Multi-AZ enabled template file ka S3 link.
+* **`--parameters ParameterKey=WordpressAdminPassword,UsePreviousValue=true`:** Puraana set kiya hua password hi use karo.
+* **`--capabilities CAPABILITY_IAM`:** IAM resources modify karne ki ijazat.
+
+---
+
+### Listing 10.7 Modifying the RDS database by enabling high availability
+
+Neeche template ka wo snippet hai jiss ne RDS ko Highly Available banaya:
+
+```yaml
+Database:
+  Type: 'AWS::RDS::DBInstance'
+  DeletionPolicy: Delete
+  Properties:
+    AllocatedStorage: 5
+    BackupRetentionPeriod: 3
+    PreferredBackupWindow: '05:00-06:00'
+    DBInstanceClass: 'db.t2.micro'
+    DBName: wordpress
+    Engine: MySQL
+    MasterUsername: wordpress
+    MasterUserPassword: wordpress
+    VPCSecurityGroups:
+      - !Sub ${DatabaseSecurityGroup.GroupId}
+    DBSubnetGroupName: !Ref DBSubnetGroup
+    MultiAZ: true # RDS database ke liye high-availability deployment ko enable karta hai
+  DependsOn: VPCGatewayAttachment
+
+```
+
+#### Code Ka Breakdown:
+
+* **`Type: 'AWS::RDS::DBInstance'`:** RDS database resource.
+* **`AllocatedStorage: 5`:** 5 GB Storage space.
+* **`BackupRetentionPeriod: 3` & `PreferredBackupWindow: '05:00-06:00'`:** Automatic backups settings.
+* **`DBInstanceClass: 'db.t2.micro'`:** Instance size.
+* **`Engine: MySQL`:** Database Engine.
+* **`MultiAZ: true`:** **Sab Se Main Magical Switch!** Sirf is ek property ko `true` set karne se AWS background mein doosre datacenter (AZ) ke andar aik bilkul same **Standby Instance** bana kar synchronous replication shuru kar deta hai.
+
+---
+
+## What is Multi-AZ?
+
+AWS ka har Region (e.g., `us-east-1` Virginia) multiple **Availability Zones (AZs)** mein takseem hota hai. Har Availability Zone ek bilkul alag, independent Data Center hota hai jis ka apna bijli, paani, aur network connection hota hai.
+
+RDS Multi-AZ setup mein:
+
+* **Primary Database** ek Availability Zone (e.g., `AZ-A`) mein launch hota hai.
+* **Standby Database** kisi doosre Availability Zone (e.g., `AZ-B`) mein launch hota hai.
+
+```
+       AWS REGION (e.g., us-east-1)
+┌─────────────────────────┐   ┌─────────────────────────┐
+│  AVAILABILITY ZONE A    │   │  AVAILABILITY ZONE B    │
+│  ┌───────────────────┐  │   │  ┌───────────────────┐  │
+│  │ Primary DB Server │  ├───┼─►│ Standby DB Server │  │
+│  └───────────────────┘  │   │  └───────────────────┘  │
+└─────────────────────────┘   └─────────────────────────┘
+
+```
+
+#### Multi-AZ Ka Ek Aur Bada Faida: Zero-Downtime Maintenance
+
+High Availability sirf crash hone se hi nahi bachati, balki **Maintenance (Updates aur Upgrades)** ke waqt bhi zero downtime deti hai:
+
+* **Single-AZ Database Mein:** Jab AWS database par security patch ya engine version update karta hai, toh database thodi der ke liye band ho jata hai (Downtime hota hai).
+* **Multi-AZ Database Mein:** AWS pehle **Standby Database** ko update karta hai. Phir automatic failover kar ke Standby ko Primary bana deta hai. Us ke baad purane Primary ko update karta hai. Is tarah aap ki website **ek second ke liye bhi band hue baghair update ho jaati hai**!
+
+
+---
