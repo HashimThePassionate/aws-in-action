@@ -108,3 +108,223 @@ Figure 10.1 mein ek mukammal production-ready WordPress architecture ko dikhaya 
 > **Paisa Bachane Ka Tarika:** Agar aap ne is book ke liye bilkul naya AWS account banaya hai aur aap is chapter ki saari exercises ko 2-3 dino mein mukammal kar ke saare resources ko delete (clean up) kar dete hain, toh aap ko koi extra charge nahi parega. Is liye zaroori hai ke aap is chapter ko kuch hi dino mein khatam karein aur aakhir mein saare banaye gaye resources ko delete kar dein.
 
 ---
+
+## Starting a MySQL database
+
+Aayein sab se pehle samajhte hain ke jab aap AWS par WordPress jaisi application chalate hain toh database ka kya kirdar hota hai. Is chapter mein hum ziada tar **MySQL** database par baat karenge jo RDS provide karta hai. Lekin achhi baat yeh hai ke jo baatein aap yahan seekhenge, wo bilkul waisi hi doosre database engines par bhi apply hoti hain—jaise ke Amazon Aurora, PostgreSQL, MariaDB, Oracle, aur Microsoft SQL Server.
+
+### Purana Tarika vs AWS RDS (Ek Aasan Misaal)
+
+Jab aap WordPress ki official tutorial dekhte hain, toh pehla step MySQL database ko set up karna hota hai.
+
+* **Purana Tarika (Self-Hosted/Same Machine):** Pehle log kya karte the ke jis aik akeli Virtual Machine (EC2 Instance) par web server/website chal rahi hoti thi, usi machine ke andar MySQL database bhi install kar dete the.
+* **Is mein masla kya tha?**
+1. **Single Point of Failure (SPOF):** Is ka matlab hai ke aap ke poore system mein kamzori ki aik hi kadi hai. Agar wo aik Virtual Machine crash ho gayi ya band ho gayi, toh aap ki website aur database **dono aik sath thapp (down)** ho jayenge.
+2. **Mushkil Management:** Database ka rozaana backup lena, usay kisi doosri jagah mehfooz rakhna, aur kharab hone par wapis sahi karna bohot ziada mushkil aur sar-dardi wala kaam hota tha.
+
+
+
+
+* **Naya Tarika (AWS RDS Managed Database):** Is maslay ko hal karne ke liye hum AWS RDS ka fully managed MySQL database istemal karte hain.
+* RDS aik aise hoshiyar aur zimmedar helper ki tarah hai jo database ke saare mushkil kaam khud sambhalti hai.
+* AWS khud ba khud aap ke database ka **Backup** leta hai aur usay wapis pehle jaisa karne (**Restore**) ki suhulat deta hai.
+* AWS aap ke database ko ek ke bajaye **do mukhtalif Data Centers (Multi-AZ)** mein baant kar rakhta hai. Agar aik Data Center mein koi masla (jaise light jana ya server crash) aa bhi jaye, toh system khud ba khud doosre data center se chalne lagta hai (Automatic Recovery).
+
+
+
+---
+
+## Launching a WordPress platform with an RDS database
+
+AWS par RDS database launch karne ke mukhya taur par **2 aasan steps** hotay hain:
+
+1. **Database Instance Launch Karna:** Cloud par database chalane ke liye aik dedicated virtual engine/server tayar karna.
+2. **Application ko Endpoint se Connect Karna:** Application (WordPress) ko database ka address (Endpoint URL) dena taake wo data save aur read kar sake.
+
+Is setup ko banane ke liye hum AWS **CloudFormation** ka istemal karenge. CloudFormation aik automatic script (template) hoti hai jo khud hi saara infrastructure tayar kar deti hai.
+
+### Infrastructure Launch Karne Ki Command
+
+Neeche di gayi command ko execute kar ke hum CloudFormation ke zariye RDS MySQL Database aur Web Server ka poora setup aik sath launch karte hain:
+
+```bash
+aws cloudformation create-stack --stack-name wordpress --template-url \
+https://s3.amazonaws.com/awsinaction-code3/chapter10/template.yaml \
+--parameters "ParameterKey=WordpressAdminPassword,ParameterValue=test1234" \
+--capabilities CAPABILITY_IAM
+
+```
+
+#### Is Command Ki Har Ek Line Aur Parameter Ka Matlab:
+
+* `aws cloudformation create-stack`: AWS CLI ko hukum diya ja raha hai ke CloudFormation ke zariye aik naya "Stack" (resources ka aik poora group) banaye.
+* `--stack-name wordpress`: Is poore setup/stack ka naam "wordpress" rakha gaya hai.
+* `--template-url [https://s3.amazonaws.com/.../template.yaml](https://s3.amazonaws.com/.../template.yaml)`: CloudFormation ko bataya ja raha hai ke blueprint (yaml file) AWS S3 bucket par parhi hui hai, wahan se parh kar saare resources banao.
+* `--parameters "ParameterKey=WordpressAdminPassword,ParameterValue=test1234"`: Template ko WordPress Admin ka password (`test1234`) pass kiya ja raha hai.
+* `--capabilities CAPABILITY_IAM`: Kyunke yeh template security permissions (IAM Roles) bhi banaye gi, is liye hum AWS ko pehle se ijazat (capability) de rahe hain ke wo IAM resources bana sake.
+
+Command run karne ke baad stack banne mein kuch minute lagte hain. Tab tak aayein dekhte hain ke RDS database ke kon kon se main attributes hotay hain.
+
+---
+
+### Table 10.2 Attributes needed to connect to an RDS database
+
+| Attribute | Description (Roman Urdu) |
+| --- | --- |
+| **AllocatedStorage** | Aap ke database ka storage size GBs mein. |
+| **DBInstanceClass** | Neeche chalne wali virtual machine ka size (jise instance type bhi kehte hain). |
+| **Engine** | Woh database engine jo aap istemal karna chahte hain (jaise Aurora, PostgreSQL, MySQL, MariaDB, Oracle Database, ya Microsoft SQL Server). |
+| **DBName** | Database ke liye identifier ya naam. |
+| **MasterUsername** | Admin user ka naam. |
+| **MasterUserPassword** | Admin user ka password. |
+
+#### Attributes Ka Aasan Matlab:
+
+* **AllocatedStorage:** Database ke paas data save karne ke liye kitni jagah (hard disk space) hogi (maslan 5 GB).
+* **DBInstanceClass:** Database ki taqat aur speed kitni hogi (jaise CPU aur RAM). High-traffic systems mein bade instance class use hotay hain.
+* **Engine:** Aap kaun sa database software chalana chahte hain (maslan MySQL).
+* **DBName:** Wo specific folder ya database jo engine ke andar bane ga.
+* **MasterUsername & MasterUserPassword:** Super-admin user ki login details jo database par poora control rakhta hai.
+
+---
+
+### Security Concept: Public Access vs VPC Access (Ahem Design Decision)
+
+AWS mein database ko **Publicly Accessible** (Internet se direct accessible) banaya ja sakta hai, lekin yeh **hargiz recommended nahi hai**.
+
+* **Risk:** Agar aap database ko public kar dein ge, toh duniya ka koi bhi hacker internet se aap ke database par attacks kar sakta hai.
+* **Best Practice:** Database ko HAMESHA **VPC (Virtual Private Cloud)** ke andar chupa kar rakha jata hai. Internet se direct access mukammal block hoti hai. Database tak sirf wahi EC2 Instance (Web Server) pohanch sakta hai jo usi VPC ke andar chal raha ho.
+
+---
+
+### Listing 10.1 Excerpt from the CloudFormation template for setting up an RDS database
+
+Neeche CloudFormation YAML template ka wo hissa diya gaya hai jo RDS Database aur us ki Security tayar karta hai:
+
+```yaml
+Resources:
+  # [...]
+  DatabaseSecurityGroup: # Database instance ke liye security group, jo web servers ke liye MySQL default port par aane wale traffic ki ijazat deta hai
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'awsinaction-db-sg'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306 # MySQL ka default port 3306 hai
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref WebServerSecurityGroup # Web server chalane wale EC2 instances ki security group ka reference deta hai
+
+  Database: # Amazon RDS ke sath aik database instance banata hai
+    Type: 'AWS::RDS::DBInstance'
+    DeletionPolicy: Delete
+    Properties:
+      AllocatedStorage: 5 # Ye database 5 GB ki storage provide karta hai
+      BackupRetentionPeriod: 0 # Backups ko disable karta hai. (Production mein isay on kar dein)
+      DBInstanceClass: 'db.t2.micro' # Database instance ka size t2.micro hai, jo sab se chhota available size hai
+      DBName: wordpress # Wordpress ke naam se aik default database banata hai
+      Engine: MySQL # Database engine ke tor par MySQL istemal karta hai
+      MasterUsername: wordpress # MySQL database ke admin user ka username
+      MasterUserPassword: wordpress # MySQL database ke admin user ka password
+      VPCSecurityGroups:
+        - !Sub ${DatabaseSecurityGroup.GroupId} # Database instance ke liye security group ka reference deta hai
+      DBSubnetGroupName: !Ref DBSubnetGroup # Un subnets ko define karta hai jin mein RDS database instance launch hoga
+    DependsOn: VPCGatewayAttachment
+
+  DBSubnetGroup: # Subnet group ...
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      Description: DB subnet group
+      SubnetIds:
+        - Ref: SubnetA
+        - Ref: SubnetB # Subnet A aur B par mushtamil hai, isliye RDS in subnets ke darmiyan database instances ko distribute karega
+
+```
+
+#### Code Ka Mukammal Breakdown:
+
+1. **`DatabaseSecurityGroup` (Firewall Rule):**
+* **`Type: 'AWS::EC2::SecurityGroup'`:** Yeh AWS ko bata raha hai ke ek virtual firewall banao.
+* **`IpProtocol: tcp` & `FromPort: 3306 / ToPort: 3306`:** Port 3306 ko khol raha hai kyunke MySQL hamesha port 3306 par baat karta hai.
+* **`SourceSecurityGroupId: !Ref WebServerSecurityGroup`:** Yeh sab se zaroori security rule hai! Yeh kehta hai ke port 3306 par **sirf aur sirf** hamare Web Server ki taraf se aane wali requests ko andar aane do, baaqi sab ko block kar do.
+
+
+2. **`Database` (RDS Instance Component):**
+* **`Type: 'AWS::RDS::DBInstance'`:** Amazon RDS database instance banane ka component.
+* **`DeletionPolicy: Delete`:** Jab hum CloudFormation stack ko delete karenge, toh yeh database bhi delete ho jayega.
+* **`AllocatedStorage: 5`:** Is database ko shuruat mein 5 Gigabytes (GB) ki disk space di ja rahi hai.
+* **`BackupRetentionPeriod: 0`:** Backups ko **0 days** par set karke temporary disable kiya gaya hai (kyunke yeh seekhne/testing ke liye hai). Production systems mein isay hamesha `7` ya `30` din set kiya jata hai.
+* **`DBInstanceClass: 'db.t2.micro'`:** Hardware ka size `db.t2.micro` hai. *(Note: Modern AWS environments mein t3.micro ya t4g.micro instance types use hote hain, lekin concept wahi hai ke yeh sab se sasta aur chhota testing size hai).*
+* **`DBName: wordpress`:** Automatic 'wordpress' naam ka database create kar dega.
+* **`Engine: MySQL`:** Database software MySQL hoga.
+* **`MasterUsername: wordpress` & `MasterUserPassword: wordpress`:** Admin credentials.
+* **`VPCSecurityGroups`:** Is database par upar banaya gaya firewall (`DatabaseSecurityGroup`) lago kar dega.
+* **`DBSubnetGroupName: !Ref DBSubnetGroup`:** Yeh batata hai ke database VPC ke kin subnets mein chalega.
+* **`DependsOn: VPCGatewayAttachment`:** Tab tak database mat banao jab tak VPC ka network rasta (Gateway) mukammal na ban jaye.
+
+
+3. **`DBSubnetGroup` (High Availability Ki Buniyaad):**
+* **`SubnetIds: [- Ref: SubnetA, - Ref: SubnetB]`:** Yeh database ko do mukhtalif Availability Zones (Datacenters) se jorta hai. Is se AWS ko pata chalta hai ke agar Multi-AZ setup banana ho toh database ko in do alag alag datacenters mein phailana hai.
+
+
+
+---
+
+### CloudFormation Stack Status Check Karna
+
+Stack banne ke baad hum yeh command chala kar check karte hain ke kya poora infrastructure ban chuka hai ya nahi:
+
+```bash
+aws cloudformation describe-stacks --stack-name wordpress
+
+```
+
+#### Listing 10.2 Checking the state of the CloudFormation stack
+
+Command ka output JSON format mein aisa dikhta hai:
+
+```json
+$ aws cloudformation describe-stacks --stack-name wordpress
+{
+  "Stacks": [{
+    "StackId": "[...]",
+    "Description": "AWS in Action: chapter 10",
+    "Parameters": [...],
+    "Tags": [],
+    "Outputs": [
+      {
+        "Description": "WordPress URL",
+        "OutputKey": "URL",
+        "OutputValue": "http://[...].us-east-1.elb.amazonaws.com"
+      }
+    ],
+    "CreationTime": "2017-10-19T07:12:28.694Z",
+    "StackName": "wordpress",
+    "NotificationARNs": [],
+    "StackStatus": "CREATE_COMPLETE",
+    "DisableRollback": false
+  }]
+}
+
+```
+
+#### JSON Output Ka Line-by-Line Breakdown:
+
+* **`"StackName": "wordpress"`:** Hamare stack ka naam.
+* **`"StackStatus": "CREATE_COMPLETE"`:** **Sab se ahem point!** Is ka matlab hai ke saara infrastructure (EC2, Load Balancer, Security Groups, aur RDS Database) kamyabi se ban chuka hai. (Agar yahan `CREATE_IN_PROGRESS` likha aaye toh aap ko thoda mazeed intezar karna hoga).
+* **`"Outputs"`:** Job khatam hone ke baad CloudFormation jo kaam ki details return karta hai.
+* **`"OutputKey": "URL"`** aur **`"OutputValue": "http://[...].us-east-1.elb.amazonaws.com"`:** Yeh Load Balancer ka public web address hai. Is URL ko copy karke browser mein open karenge toh aap ke samne live WordPress website khul jayegi jo peeche RDS MySQL database se judi hui hai.
+
+
+* **`"DisableRollback": false`:** Agar stack banate waqt koi error aata toh CloudFormation automatic sab kuch saaf (rollback) kar deta.
+
+---
+
+### Database Chalane Ke Baad Admin Ki Zimmedariyan
+
+Amazon RDS aik **Managed Service** hai, is liye OS updates, security patching, aur hardware maintenance sab AWS khud sambhalta hai. Database launch hone ke baad **System Administrator** ko sirf do main kaam karne hote hain:
+
+1. **Storage ko Monitor Karna:** Yeh dekhna ke database ki storage (5 GB) bhar toh nahi rahi. Jab space kam parne lage toh Allocated Storage ko barha dena chahiye *(modern AWS setups mein auto-scaling enable ki ja sakti hai jo storage khud barha deti hai)*.
+2. **Performance ko Monitor Karna:** Performance par nazar rakhna taake agar CPU usage ziada ho jaye ya Read/Write Speed (I/O) slow hone lage, toh Database Instance Class ko upgrade (bada) kiya ja sake.
+
+---
