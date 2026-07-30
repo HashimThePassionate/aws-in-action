@@ -625,3 +625,370 @@ $ aws cloudformation delete-stack --stack-name redis-minimal
 * **Wazahat**: Yeh command AWS CloudFormation ko instruction deti hai ke `redis-minimal` naam ke stack ke tehat banay gaye tamam resources (EC2 Instance, ElastiCache Redis Cluster, Security Groups, Subnet Groups) ko ek sath mukammal taur par delete kar de.
 
 ----
+
+## Cache deployment options
+
+Jab aap AWS par apna cache setup karne lagte hain, toh aap ko yeh tay karna hota hai ke aap ise kis tarah deploy (setup) karenge. Sahi deployment option chunne ke liye aap ko **4 ahem baaton (factors)** par ghour karna parta hai:
+
+* **Engine**: Aap ko konsa in-memory database pasand hai—**Memcached** ya **Redis**?
+* **Backup/Restore**: Kya aap ke kaam ke liye data ko save (persist) karna zaroori hai? Matlab agar server band ho jaye toh backup se data wapas laya ja sake?
+* **Replication**: Kya high availability (system ka har waqt chalte rehna) zaroori hai? Agar haan, toh aap ko kam se kam ek aur backup node (server) par data copy (replicate) karna hoga.
+* **Sharding**: Kya aap ka data itna bara hai ke woh ek single server ki memory (RAM) mein poora nahi aa raha? Ya aap ko apne system ki speed aur capacity (throughput) bohot ziada badhani hai?
+
+---
+
+## Table 11.2 Comparing ElastiCache and MemoryDB engines and deployment options
+
+Neeche di gayi table ElastiCache aur MemoryDB ke tamaam deployment options ka aamne-saamne muqabla dikhati hai:
+
+| Service | Engine | Deployment Option | Backup/Restore | Replication | Sharding |
+| --- | --- | --- | --- | --- | --- |
+| **ElastiCache** | Memcached | Default | Nahi (No) | Nahi (No) | Haan (Yes) |
+| **ElastiCache** | Redis | Single Node | Haan (Yes) | Nahi (No) | Nahi (No) |
+| **ElastiCache** | Redis | Cluster Mode **disabled** | Haan (Yes) | Haan (Yes) | Nahi (No) |
+| **ElastiCache** | Redis | Cluster Mode **enabled** | Haan (Yes) | Haan (Yes) | Haan (Yes) |
+| **MemoryDB** | Redis | Default | Haan (Yes) | Haan (Yes) | Haan (Yes) |
+
+### Table Ki Asaan Wazahat:
+
+* **Memcached (Default)**: Is mein sirf Sharding hoti hai. Backup aur Replication bilkul nahi hote.
+* **Redis (Single Node)**: Is mein Backup hota hai, lekin Replication aur Sharding nahi hoti.
+* **Redis (Cluster Mode disabled)**: Is mein Backup aur Replication dono hotay hain, lekin Sharding nahi hoti.
+* **Redis (Cluster Mode enabled)**: Is mein Teeno cheezein (Backup, Replication, aur Sharding) majood hoti hain.
+* **MemoryDB (Default)**: Is mein bhi Teeno features (Backup, Replication, aur Sharding) built-in hotay hain, lekin yeh primary database ke taur par use hota hai.
+
+---
+
+## Memcached: Cluster
+
+Amazon ElastiCache for Memcached cluster mein **1 se le kar 40 nodes (servers)** ho sakte hain.
+
+* **Client-side Sharding**: Memcached mein data ko alag alag servers par baantne (sharding) ka kaam server nahi karta, balki **Memcached Client** (aap ka application code) karta hai. Yeh ek khas formula use karta hai jise **Consistent Hashing Algorithm** kehte hain. Yeh algorithm ek gol ring ki tarah tamam keys ko nodes mein taqseem kar deta hai.
+* **Data Loss Ka Khatra**: Har node ke paas memory ka ek alag hissa hota hai. Agar koi node kharab (fail) ho jaye, toh AWS us ki jagah naya node toh laga deta hai, lekin purane node ka data hamesha ke liye zaya (lost) ho jata hai. Memcached mein backup lene ka koi option nahi hota.
+
+---
+
+### Figure 11.4 Ki Wazahat
+
+**Figure 11.4** Memcached Cluster ki deployment ko samjhati hai:
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+* **VPC Boundary**: Poora setup ek secure private network (VPC) ke andar hai.
+* **Subnets (Subnet 1 aur Subnet 2)**: Subnets ka matlab hai network ke alag alag kamray (Data Centers). High availability ke liye nodes ko alag alag subnets mein rakha gaya hai:
+* **Subnet 1**: Is mein **Node 1** aur **Node 2** majood hain.
+* **Subnet 2**: Is mein **Node 3** majood hai.
+
+
+* **Client (Application)**: Client khud yeh faisla karta hai ke kaun sa data kis node par bhejnan hai. Writes dotted arrows se teenon nodes par baanti ja rahi hain, aur Read operations solid arrows se directly specific nodes se uthaye ja rahe hain.
+
+#### Kab Use Karein?
+
+Memcached cluster tab use karein jab aap ki app ko ek simple memory storage chahiye ho aur data gum jaane se koi bara nuqsan na ho. Jaise SQL query caching: agar cache se data urr bhi jaye, toh main database mein woh data pehle se majood hota hai aur sirf simple `GET` aur `SET` commands se kaam chal jata hai.
+
+---
+
+## Redis: Single-node cluster
+
+ElastiCache for Redis Single-node cluster mein hamesha sirf **1 hi node (server)** hota hai.
+
+* **Limitations**: Kyunki server sirf ek hai, is liye is mein Sharding aur High Availability bilkul nahi ho sakti.
+* **Fayda**: Is mein aap apne data ke Snapshots/Backups le sakte hain aur zaroorat parne par restore bhi kar sakte hain.
+
+---
+
+### Figure 11.5 Ki Wazahat
+
+**Figure 11.5** Single-node Redis Cluster dikhati hai:
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+* **VPC Boundary**: Pura infrastructure VPC ke andar hai.
+* **Subnet 1**: Cluster mein sirf ek hi **Node** hai jo Subnet 1 ke andar chal raha hai.
+* **Client**: Client tamaam Writes (dash line) aur Reads (solid line) isi ek akeli node par bhejta hai.
+* **Subnet 2**: Yeh subnet khali hai kyunki koi doosra node majood hi nahi hai.
+
+#### Masla (Single Point of Failure - SPOF):
+
+Agar yeh ek akele node kisi hardware maslay ki waja se band ho jaye, toh aap ki poori application ruk jayegi. Production systems ke liye yeh deployment kabhi recommend nahi ki jati.
+
+---
+
+## Redis: Cluster with cluster mode disabled
+
+Is section ko samajhne ke liye pehle terminology ka farq samajhna zaroori hai. AWS Management Console aur CloudFormation mein alfaz thode alag use hote hain:
+
+* **Console Terminology**: Cluster, Node, Shard
+* **CLI / CloudFormation Terminology**: Replication Group, Node, Node Group
+
+### Key Features:
+
+* **No Sharding (1 Shard Only)**: Is configuration mein sirf **1 hi Shard** hota hai, matlab aap ka poora data ek hi jagah rehta hai.
+* **Replication**: Is mein ek **Primary Node** (jo write aur read dono karta hai) hota hai, aur uske sath **1 se 5 Replica Nodes** (jo sirf read kar sakte hain) jude hote hain. Primary node apna data continuously replica nodes par copy karta rehta hai.
+
+---
+
+### Figure 11.6 Ki Wazahat
+
+**Figure 11.6** Redis Cluster with cluster mode disabled ko samjhati hai:
+
+<div align="center">
+  <img src="./images/06.png" width="600"/>
+</div>
+
+* **Cluster (Replication Group)**: Yeh poore setup ka outer box hai.
+* **Shard (Node Group)**: Cluster ke andar sirf 1 hi shard hai.
+* **Primary Node (Subnet 1)**: Application tamaam Write requests (dotted line) is Primary Node par bhejti hai.
+* **Replication**: Primary node data ko auto-copy karke **Replica Node** par bhejta hai.
+* **Replica Node (Subnet 2)**: Yeh doosre subnet mein hota hai taake agar Subnet 1 fail ho jaye toh yeh kaam sambhal le.
+* **Reads**: Client Primary ya Replica dono mein se kisi se bhi data read kar sakta hai.
+
+#### Kab Use Karein?
+
+Tab use karein jab aap ko Data Replication (High Availability) chahiye ho, lekin aap ka poora data size itna chota ho ke ek hi server ki RAM mein aasaani se fit aa jaye (maslan 4 GB data, jo 6.38 GiB RAM wale `cache.m6g.large` node mein aram se aa jata hai).
+
+---
+
+## Redis: Cluster with cluster mode enabled
+
+Yeh Redis ka sab se powerful setup hai. Is mein Backups, Replication, aur Sharding teeno ek sath milti hain.
+
+* **Capacity**: Aap ek cluster mein **500 Shards** tak bana sakte hain. Har shard mein kam se kam ek Primary node aur optional Replica nodes hotay hain. Poore cluster mein total nodes ki tadad 500 se ziada nahi ho sakti.
+
+---
+
+### Figure 11.7 Ki Wazahat
+
+**Figure 11.7** Redis Cluster with cluster mode enabled ko samjhati hai:
+
+<div align="center">
+  <img src="./images/07.png" width="600"/>
+</div>
+
+* **Cluster (Replication Group)**: Poora cluster multiple shards mein baanta gaya hai.
+* **Shard 1 (Node Group 1)**: Is mein apna **Primary Node** (Subnet 1 mein) aur **Replica Node** (Subnet 2 mein) hai.
+* **Shard 2 (Node Group 2)**: Is mein bhi apna alag **Primary Node** aur **Replica Node** hai.
+* **Client**: Client data ki key ke mutabiq sahi shard ke primary node par Writes bhejta hai aur tamaam nodes se Reads kar sakta hai. Data pure cluster mein distributed hota hai.
+
+#### Memory Hesab (Math Calculation):
+
+* Maan lijiye aap ka total dataset **22 GB** ka hai.
+* Har cache node ki memory capacity **4 GB** hai.
+* Toh aap ko total capacity banani padegi: $\frac{22\text{ GB}}{4\text{ GB}} = 5.5$, matlab aap ko **6 Shards** chahiye honge (6 shards × 4 GB = **24 GB** total memory).
+* AWS ElastiCache mein ek single node 437 GB RAM tak de sakta hai, jis se max cluster capacity **6.5 TB** (15 × 437 GB) tak ja sakti hai.
+
+---
+
+### Additional benefits of enabling cluster mode
+
+1. **Tez Failover Speed**: Cluster mode disabled mein jab primary fail hota hai, toh AWS DNS ko change karta hai jiss mein **1 se 1.5 minute** lag jate hain. Cluster mode enabled mein clients Smart Configuration Endpoints use karte hain, jiss se failover **30 seconds se kam** mein ho jata hai.
+2. **High Throughput (Ziada Speed)**: Jab aap shards ki tadad badhate hain, toh traffic distribute ho jata hai. Do shards hone par har shard ko sirf 50% load milta hai.
+3. **Chota Blast Radius (Kam Nuqsan)**: Agar aap ke paas 5 shards hain aur ek shard fail hota hai, toh sirf **20% data** par temporary asar parega (15-30 seconds ke liye write rukegi). Baqi 80% data bilkul normal chalta rahega. Cluster mode disabled mein ek node kharab hone par **100% data** affect ho jata tha.
+
+---
+
+## MemoryDB: Redis with persistence
+
+ElastiCache for Redis caching ke liye behtareen hai, lekin AWS ise primary database ke taur par use karne ki sifarish nahi karta. Is ke liye AWS ne ek alag service banayi hai: **Amazon MemoryDB**.
+
+* **MemoryDB Kya Hai?**: Yeh ek aisa in-memory database hai jo Redis ke commands ke sath 100% compatible hai, lekin is ke piche ek **Distributed Transaction Log** hota hai jo data ko permanent Disk par save karta hai.
+* **Primary Database**: Data RAM se read hota hai aur permanent disk par write hota hai, is liye data kabhi gumb nahi hota. Is ko aap main database banayein.
+* **Latency Trade-off**: MemoryDB mein data disk par save hone ki waja se Write Latency thodi badh jati hai—**milliseconds** (jabke ElastiCache microseconds mein kaam karta hai).
+
+#### Main Use Cases:
+
+1. **Shopping Cart**: E-commerce website par user ke add kiye gaye items store karna.
+2. **Content Management System (CMS)**: Blog posts aur comments ko fast retrieve karna.
+3. **Device Management Service**: IoT devices ka live status update rakhna.
+
+---
+
+### CloudFormation Code Snippet (MemoryDB Minimal)
+
+Yeh CloudFormation template snippet ek basic MemoryDB cluster deploy karta hai:
+
+```yaml
+Resources:
+  # [...]
+  CacheSecurityGroup: # Cache cluster ke traffic ko control karne wala security group
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: cache
+      VpcId: !Ref VPC
+  CacheParameterGroup: # Parameter group aapko cache cluster ko configure karne ki ijazat deta hai
+    Type: 'AWS::MemoryDB::ParameterGroup'
+    Properties:
+      Description: String
+      Family: 'memorydb_redis6' # Taham, hum yahan Redis 6-compatible cluster ke liye default values ke sath ja rahe hain
+      ParameterGroupName: !Ref 'AWS::StackName'
+      
+  CacheSubnetGroup: # Subnet group un subnets ko specify karta hai jo cluster ko istemal karni chahiye
+    Type: 'AWS::MemoryDB::SubnetGroup'
+    Properties:
+      SubnetGroupName: !Ref 'AWS::StackName'
+      SubnetIds:
+        - !Ref SubnetA # High availability ke liye hum do subnets istemal kar rahe hain
+        - !Ref SubnetB
+
+  CacheCluster: # Cache cluster ko create aur configure karta hai
+    Type: 'AWS::MemoryDB::Cluster'
+    Properties:
+      ACLName: 'open-access' # Example ko asaan banane ke liye authentication aur authorization ko disable karta hai
+      ClusterName: !Ref 'AWS::StackName'
+      EngineVersion: '6.2' # Redis engine ka version
+      NodeType: 'db.t4g.small' # Hum sab se chhota available node type istemal kar rahe hain
+      NumReplicasPerShard: 0 # Example ke kharche ko kam karne ke liye hum replication ko disable kar rahe hain
+      NumShards: 1 # Testing ke maqsad ke liye aik single shard kafi hai. Shards add karne se aap cluster mein available memory ko scale kar sakte hain
+      ParameterGroupName: !Ref CacheParameterGroup
+      SecurityGroupIds:
+        - !Ref CacheSecurityGroup
+      SubnetGroupName: !Ref CacheSubnetGroup
+      TLSEnabled: false # Example ko asaan banane ke liye transit mein encryption ko disable karta hai
+
+```
+
+#### Code Breakdown:
+
+* **`AWS::MemoryDB::ParameterGroup`**:
+* **`Family: 'memorydb_redis6'`**: MemoryDB ko Redis 6 engine ke configurations aur engine rules par set karta hai.
+
+
+* **`AWS::MemoryDB::SubnetGroup`**:
+* **`SubnetIds`**: `SubnetA` aur `SubnetB` dono ko link karta hai taake cluster multi-AZ Network par phail sake.
+
+
+* **`AWS::MemoryDB::Cluster`**:
+* **`ACLName: 'open-access'`**: Security access control ko testing ke liye open karta hai (production mein proper username/password hona chahiye).
+* **`EngineVersion: '6.2'`**: Redis engine ka version 6.2 specfiy karta hai.
+* **`NodeType: 'db.t4g.small'`**: Cost-effective modern Graviton processor wala small server size.
+* **`NumReplicasPerShard: 0`**: Testing mein paisa bachane ke liye backup replica nodes 0 rakhe gaye hain.
+* **`NumShards: 1`**: Standard testing ke liye 1 Single shard rakha gaya hai.
+* **`TLSEnabled: false`**: Example ko simple rakhne ke liye SSL/TLS encryption off rakha gaya hai.
+
+
+
+---
+
+### Where is the template located?
+
+> **Template ki Location**:
+> MemoryDB ka CloudFormation template GitHub par majood hai. Repository snapshot link:
+> `[https://github.com/AWSinAction/code3/archive/main.zip](https://github.com/AWSinAction/code3/archive/main.zip)`
+> Direct template file path: `chapter11/memorydb-minimal.yaml`.
+> Direct S3 Bucket link: `[http://s3.amazonaws.com/awsinaction-code3/chapter11/memorydb-minimal.yaml](http://s3.amazonaws.com/awsinaction-code3/chapter11/memorydb-minimal.yaml)`.
+
+---
+
+### Testing MemoryDB Cluster
+
+CloudFormation stack `memorydb-minimal` banne ke baad, aap Session Manager se EC2 instance mein login karke Redis CLI ke zariye isay test kar sakte hain:
+
+```bash
+$ sudo amazon-linux-extras install -y redis6
+
+```
+
+* **Wazahat**: EC2 instance par Redis 6 client tool install karta hai.
+
+```bash
+$ redis-cli -h $CacheAddress
+
+```
+
+* **Wazahat**: MemoryDB Cluster endpoint (`$CacheAddress`) se connection establish karta hai.
+
+```text
+> SET session:gamer1 online EX 15
+OK
+
+```
+
+* **Wazahat**: Key `session:gamer1` mein value `online` save karta hai **15 seconds** TTL ke sath.
+
+```text
+> GET session:gamer1
+"online"
+
+```
+
+* **Wazahat**: Key ki value fetch karta hai (Cache Hit).
+
+```text
+> GET session:gamer1
+(nil)
+
+```
+
+* **Wazahat**: 15 seconds guzarne ke baad auto-expire hone par response `(nil)` aata hai.
+
+```text
+> ZADD highscore 100 "gamer1"
+(integer) 1
+
+```
+
+* **Wazahat**: Sorted set `highscore` mein `gamer1` ko 100 score par add karta hai.
+
+```text
+> ZADD highscore 50 "gamer2"
+(integer) 1
+
+```
+
+* **Wazahat**: `gamer2` ko 50 score par add karta hai.
+
+```text
+> ZADD highscore 150 "gamer3"
+(integer) 1
+
+```
+
+* **Wazahat**: `gamer3` ko 150 score par add karta hai.
+
+```text
+> ZADD highscore 5 "gamer4"
+(integer) 1
+
+```
+
+* **Wazahat**: `gamer4` ko 5 score par add karta hai.
+
+```text
+> ZRANGE highscore -3 -1 WITHSCORES
+1) "gamer2"
+2) "50"
+3) "gamer1"
+4) "100"
+5) "gamer3"
+6) "150"
+
+```
+
+* **Wazahat**: Top 3 high scores list ascending order mein return karta hai.
+
+```text
+> quit
+
+```
+
+* **Wazahat**: MemoryDB CLI session ko close karke terminal se exit karta hai.
+
+---
+
+### Cleaning up
+
+Testing mukammal hone ke baad bill se bachne ke liye MemoryDB stack ko delete karein:
+
+```bash
+$ aws cloudformation delete-stack --stack-name memorydb-minimal
+
+```
+
+* **Wazahat**: Yeh command `memorydb-minimal` stack aur us se jude saare resources ko AWS account se permanently delete kar deti hai.
+
+---
+
