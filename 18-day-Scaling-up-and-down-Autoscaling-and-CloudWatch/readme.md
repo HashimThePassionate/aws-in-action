@@ -1,0 +1,1 @@
+# Scaling up and down Autoscaling and CloudWatch
