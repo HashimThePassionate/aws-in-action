@@ -1446,3 +1446,250 @@ High Availability sirf crash hone se hi nahi bachati, balki **Maintenance (Updat
 
 
 ---
+
+## Tweaking database performance
+
+Search engines (jaise Google) jab yeh faisla karte hain ke search results mein kis website ko pehle number par dikhana hai, toh **Website Ki Loading Speed** ek bohot zaroori factor hoti hai. Agar aap ki WordPress site slow khulegi, toh Google usay piche fenk dega. Is liye yeh yaqeen banana zaroori hai ke MySQL database aap ki website ko slow na kar raha ho.
+
+#### Database Ko Barhane Ka Sub Se Aasan Tarika: Vertical Scaling
+
+Relational Database (SQL Database) ki performance barhane ka sab se aasan tarika **Vertical Scaling (Scaling Up)** hota hai.
+
+> **Bacho Ki Tarah Aasan Misaal:** Farz karein aap ke paas ek Chhota Hathi (Mini Truck) hai jo 500 kg saman utha sakta hai. Jab saman ziada hone lage, toh aap chhotay truck ko bech kar ek **Bada Dump Truck (Badi Machine)** khareed lete hain jo 5000 kg saman utha sakta hai. Isay hum Vertical Scaling kehte hain—yaani ek hi machine ke andar ziada taqat daal dena.
+
+Vertical Scaling mein aap database instance ke yeh 3 resources barhate hain:
+
+* **Faster CPU:** Processing ki speed tezz karna.
+* **More Memory (RAM):** Queries ko memory mein rakhne ke liye ziada jagah dena.
+* **Faster Storage:** Data ko read aur write karne ki speed barhana.
+
+#### Vertical Scaling Ki Hadd (Limitation & Comparison)
+
+Vertical scaling ki ek hadd (limit) hoti hai. Aap ek machine ko ek hadd se ziada bada nahi kar sakte *(jaise book mein zikr hai ke sab se bade RDS instances 32 cores aur 244 GiB RAM tak aate the, jabke modern 2026 AWS environments mein db.m6i/db.r6g jaise instances 128+ vCPUs aur Terabytes RAM tak bhi milte hain, lekin phir bhi un ki ek final limit hoti hai)*.
+
+Is ke muqablay mein **NoSQL Databases (jaise DynamoDB)** ya **Object Stores (jaise Amazon S3)** ko **Horizontal Scaling (Scaling Out)** ke zariye be-hisaab (without limits) barhaya ja sakta hai, kyunke wo ek badi machine lene ke bajaye hazaron chhoti machines ka cluster bana dete hain.
+
+---
+
+## Increasing database resources
+
+Jab aap RDS database launch karte hain, toh aap ek **Instance Type** chunte hain. Instance Type yeh tay karta hai ke aap ki virtual machine ke paas kitni computing power (CPU) aur RAM (Memory) hogi.
+
+Hum ne pehle `db.t2.micro` instance type se database shuru kiya tha, jo ke sab se chhota aur sasta instance size hai. Agar aap ki website par traffic barh jaye aur performance slow ho jaye, toh aap instance type ko upgrade kar sakte hain.
+
+---
+
+### Listing 10.8 Modifying the instance type to improve performance of an RDS database
+
+Neeche CloudFormation template ka wo snippet diya gaya hai jiss mein instance type ko barhaya gaya hai:
+
+```yaml
+Database:
+  Type: 'AWS::RDS::DBInstance'
+  DeletionPolicy: Delete
+  Properties:
+    AllocatedStorage: 5
+    BackupRetentionPeriod: 3
+    PreferredBackupWindow: '05:00-06:00'
+    DBInstanceClass: 'db.m3.large' # Underlying virtual machine ka size db.t2.micro se barha kar db.m3.large kiya gaya hai
+    DBName: wordpress
+    Engine: MySQL
+    MasterUsername: wordpress
+    MasterUserPassword: wordpress
+    VPCSecurityGroups:
+      - !Sub ${DatabaseSecurityGroup.GroupId}
+    DBSubnetGroupName: !Ref DBSubnetGroup
+    MultiAZ: true
+  DependsOn: VPCGatewayAttachment
+
+```
+
+#### Code Ka Mukammal Breakdown:
+
+* **`DBInstanceClass: 'db.m3.large'`:** **Main Performance Upgrade!** Pehle yahan `db.t2.micro` (jis mein 1 virtual CPU aur sirf 1 GB/615 MB RAM thi) likha hua tha. Ab isay badal kar `db.m3.large` kar diya gaya hai jis mein **2 tezz Virtual Cores aur 7.5 GB RAM** milti hai. *(Note: Modern AWS environments mein is ki jagah `db.m6g.large` ya `db.m7g.large` use hote hain).*
+
+#### Architectural Trade-off & Warnings:
+
+> **Paison Aur Downtime Ka Khayal:**
+> 1. **Downtime Warning:** Jab aap RDS ka Instance Type change karte hain, toh database thodi der ke liye restart hota hai jis waja se **chhota sa Downtime** aata hai.
+> 2. **Not Covered by Free Tier:** Bada instance type free tier mein shamil nahi hota, is ke extra hourly charges lagte hain. Is liye isay chalte hue system par trial ke liye run mat karein.
+> 
+> 
+
+---
+
+### Storage Types (Database Hard Disk Ki Types)
+
+Database ko constantly disk par data likhna (write) aur parhna (read) hota hai, is liye **I/O Performance (Input/Output Speed)** bohot zaroori hoti hai. Amazon RDS aap ko 3 kisam ki EBS storage options deta hai:
+
+1. **General Purpose (SSD) [e.g., gp2 / gp3]:**
+* **Detail:** Normal aur moderate workloads ke liye behtareen hai. Is mein performance burst karne ki salahiyat hoti hai. Is ki speed storage size ke hisab se barhti hai. Production applications ke liye yeh standard choice hai.
+
+
+2. **Provisioned IOPS (SSD) [e.g., io1 / io2]:**
+* **Detail:** High-performance production workloads ke liye istemal hoti hai. Agar aap ko guaranteed high read/write throughput (sakht IOPS requirements) chahiye ho, toh yeh option chunte hain. Yeh thodi mehangi hoti hai.
+
+
+3. **Magnetic (Standard / Legacy):**
+* **Detail:** Purani aur slow spinning hard disk storage. Yeh sirf sasti storage ke liye istemal hoti hai jahan performance aur predictable speed zaroori na ho.
+
+
+
+---
+
+### Listing 10.9 Modifying the storage type to improve performance of an RDS database
+
+Neeche template mein general-purpose SSD storage type ko configure karne ka snippet dikhaya gaya hai:
+
+```yaml
+Database:
+  Type: 'AWS::RDS::DBInstance'
+  DeletionPolicy: Delete
+  Properties:
+    AllocatedStorage: 5
+    BackupRetentionPeriod: 3
+    PreferredBackupWindow: '05:00-06:00'
+    DBInstanceClass: 'db.m3.large' # Underlying virtual machine ka size db.t2.micro se barha kar db.m3.large kiya gaya hai
+    DBName: wordpress
+    Engine: MySQL
+    MasterUsername: wordpress
+    MasterUserPassword: wordpress
+    VPCSecurityGroups:
+      - !Sub ${DatabaseSecurityGroup.GroupId}
+    DBSubnetGroupName: !Ref DBSubnetGroup
+    MultiAZ: true
+  DependsOn: VPCGatewayAttachment
+
+```
+
+#### Breakdown:
+
+Properties mein `AllocatedStorage: 5` ke sath general-purpose SSD disk attach ki jati hai taake queries fast perform hon.
+
+---
+
+## Using read replication to increase read performance
+
+Agar aap ke database par **Read Requests (data dekhne/parhne ki requests)** bohot ziada aa rahi hon, toh relational database ko **Horizontally Scale** karne ka tarika **Read Replicas** ka istemal hai.
+
+#### Synchronous Multi-AZ vs Asynchronous Read Replica (Ahem Distinction)
+
+* **Multi-AZ (Standby):** Yeh sirf Backup aur High Availability ke liye hota hai. Standby instance par koi client query nahi bhej sakta.
+* **Read Replica:** Yeh extra read-only database instance hota hai. Primary (Writable) database se data **Asynchronously (background mein)** is Read Replica par copy hota rehta hai.
+
+Application (WordPress) Read queries ko Primary aur Read Replicas ke darmiyan baant sakti hai, jis se Primary database ka bojh khatam ho jata hai.
+
+---
+
+### Figure 10.7 Read requests are distributed between the primary and read-replication databases for higher read performance.
+
+`image_3fefb3.png` mein Read Replica ka poora architecture dikhaya gaya hai:
+
+<div align="center">
+  <img src="./images/07.png" width="600"/>
+</div>
+
+#### Diagram Breakdown:
+
+* **Primary DB Instance:** Application client ki taraf se aane waali **Read aur Write** dono requests ko sambhalta hai.
+* **Replicate Asynchronously:** Primary DB par hone waali har tabdeeli (New posts, updates) background mein **Read Replica DB Instance** par automatic copy hoti rehti hai.
+* **Read Replica DB Instance:** Yeh instance **Read-Only** hota hai (is par data write nahi kiya ja sakta, sirf SELECT queries chal sakti hain).
+* **Application Client:** Write requests (new post, comment) Primary ko bhejta hai aur Read requests (website dekhna, blog search karna) Read Replica ko bhejta hai.
+
+> **Design Requirement:** Application level par code ko itna samajhdaar hona chahiye ke wo khud faisla kar sake ke kaun si query Primary ko bhejni hai aur kaun si Read Replica ko. Ziada tar web applications mein **90% Read requests hoti hain aur sirf 10% Write requests**, is liye Read Replicas se speed 10x barh jaati hai!
+
+---
+
+## CREATING A READ-REPLICATION DATABASE
+
+Amazon RDS MySQL, MariaDB, PostgreSQL, Oracle, aur SQL Server ke liye Read Replication support karta hai.
+
+> **Pre-requisite (Zaroori Shart):** Read Replica banane ke liye aap ke Primary database par **Automatic Backups (`BackupRetentionPeriod > 0`) ENABLE hone chahiye**.
+
+#### Command Line: Read Replica Create Karna
+
+Apne local terminal par yeh command chala kar RDS MySQL database ka Read Replica banayein:
+
+```bash
+aws rds create-db-instance-read-replica --db-instance-identifier awsinaction-db-read --source-db-instance-identifier $DBInstanceIdentifier
+
+```
+
+#### Command Ka Line-by-Line Breakdown:
+
+* **`aws rds create-db-instance-read-replica`:** RDS service ko Read Replica banane ka order dene wala tool.
+* **`--db-instance-identifier awsinaction-db-read`:** Is naye banne waale Read Replica database instance ka naam.
+* **`--source-db-instance-identifier $DBInstanceIdentifier`:** Main Primary database instance ka naam jis ki copy banani hai.
+
+#### Background Steps (AWS RDS Piche Kya Karta Hai?):
+
+Jab aap yeh command chalate hain, toh RDS background mein automatic 4 steps perform karta hai:
+
+1. Primary database ka ek chhota sa Snapshot leta hai.
+2. Us snapshot se ek naya database server khada karta hai.
+3. Primary aur Naye Database ke darmiyan Asynchronous Replication chalu kar deta hai.
+4. Read requests ke liye ek naya **SQL Read Endpoint** generate karke de deta hai.
+
+#### WordPress HyperDB Note:
+
+Read Replica banne ke baad wo SQL queries ka jawab dene ke liye tayar hota hai. WordPress by default Read Replicas ko support nahi karta, lekin is ke liye **HyperDB** naam ka plugin istemal hota hai jo read aur write traffic ko alag alag endpoints par divide kar deta hai.
+
+> **Zero Downtime Advantage:** Read Replica banane ya delete karne se main Primary database ki availability par **koi asar nahi parta (Zero Downtime)**.
+
+---
+
+## Using read replication to transfer data to another region
+
+AWS aap ko ek Region (e.g., North Virginia `us-east-1`) se doosre Region (e.g., Ireland `eu-west-1`) ke darmiyan **Cross-Region Read Replication** ki suhulat bhi deta hai.
+
+#### Is Feature Ke 3 Main Use Cases:
+
+1. **Disaster Recovery (DR):** Agar poora ek AWS Region kisi wajah se offline ho jaye, toh doosre region mein majood read replica par data safe rehta hai.
+2. **Global Low Latency:** Doosre mulk ya continent ke users ko fast performance dene ke liye un ke qareeb read replica rakhna.
+3. **Region Migration:** Poori application ko ek region se doosre region mein shift karna.
+
+*(Note: Cross-region replication par Data Transfer charges alag se lagte hain).*
+
+---
+
+## PROMOTING A READ REPLICA TO A STANDALONE DATABASE
+
+Farz karein aap ki WordPress site bohot ziada popular ho gayi hai. Aap ne ek region se doosre region mein database shift karne ke liye Read Replica banaya tha, ya aap database par **Index Add karne jaisa koi bohot bhari (heavy) kaam** karna chahte hain jis se main database slow hone ka khatra hai.
+
+Aise waqt mein aap Read Replica ko promote karke ek **Independent Main Primary Database** bana sakte hain!
+
+#### Command: Read Replica Ko Promote Karna
+
+```bash
+aws rds promote-read-replica --db-instance-identifier awsinaction-db-read
+
+```
+
+#### Command Ka Line-by-Line Breakdown:
+
+* **`aws rds promote-read-replica`:** Read replica ka replication rishta Primary DB se khatam karke usay khud-mukhtar (standalone) primary database banane ki command.
+* **`--db-instance-identifier awsinaction-db-read`:** Us read replica ka naam jise promote karna hai.
+
+#### System Behavior During Promotion:
+
+> **Zaroori Baat:** Process ke dauran `awsinaction-db-read` instance ek baar **Restart** hoga aur kuch minute ke liye unavailable rahega. Promotion complete hone ke baad yeh naya database **Write Requests (INSERT/UPDATE/DELETE)** bhi accept karna shuru kar dega!
+
+---
+
+## Cleaning up
+
+Extra charges aur unnecessary bills se bachne ke liye banaye gaye Read Replica ko delete kar dete hain:
+
+```bash
+aws rds delete-db-instance --db-instance-identifier awsinaction-db-read --skip-final-snapshot
+
+```
+
+#### Command Ka Line-by-Line Breakdown:
+
+* **`aws rds delete-db-instance`:** RDS instance ko permanently delete karne ka tool.
+* **`--db-instance-identifier awsinaction-db-read`:** Read replica instance ka naam.
+* **`--skip-final-snapshot`:** Extra snapshot liye bina direct delete kar do taake waqt aur storage dono bachein.
+
+
+---
