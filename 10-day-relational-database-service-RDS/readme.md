@@ -1693,3 +1693,117 @@ aws rds delete-db-instance --db-instance-identifier awsinaction-db-read --skip-f
 
 
 ---
+
+## Monitoring a database
+
+Aap ki WordPress site ko downtime (band hone) se bachane ke liye yeh behad zaroori hai ke aap apne cloud infrastructure ke har ahem hissey par nazar rakhne ke liye us ki **Monitoring** karein. Systems mein **Database** sab se mukhya (key) component hota hai. Is section mein aap RDS database ki monitoring ke baare mein detail se seekhenge.
+
+Chahe Amazon RDS ek managed service hai, phir bhi baaz mukhya metrics ki monitoring aap ko **khud karni parti hai** taake aap yeh yaqeen bana sakein ke aap ka database application se aane wali tamaam requests ka tezi se jawab de raha hai.
+
+#### CloudWatch Monitoring (Free Feature)
+
+Amazon RDS apne tamaam performance metrics bilkul **FREE** mein AWS ki monitoring service **Amazon CloudWatch** ko bhejta rehta hai. Aap in metrics ko AWS Management Console par graphs ki shakal mein dekh sakte hain aur **CloudWatch Alarms** set kar sakte hain (maslan: jab bhi CPU load 80% se upar jaye, toh aap ko email par warning alert aa jaye).
+
+---
+
+### Figure 10.8 Metrics to monitor an RDS database from the Management Console
+
+Figure 10.8 (`image_360f7f.png`) mein AWS Management Console ke andar RDS instance ka **Monitoring Tab** dikhaya gaya hai. Is screen ke mukhya hisson ko step-by-step samajhte hain:
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+#### Diagram Ka Breakdown:
+
+* **Top Summary Bar:** Database ka Unique Identifier (`wdtq7tf5caejft`), CPU status (`11.53%`), Instance Class (`db.t2.micro`), aur Engine (`MySQL Community`) dikhata hai.
+* **Monitoring Tab:** CloudWatch ke zariye live monitoring graphs dikhata hai.
+* **CPU Utilization (Percent) Graph:** Yeh batata hai ke DB server par kitna CPU load chal raha hai.
+* **DB Connections (Count) Graph:** Is waqt kitni applications ya web servers database se judi hui hain.
+* **Free Storage Space Graph:** Bachi hui khali storage space ko MBs mein dikhata hai.
+* **Freeable Memory (MB) Graph:** Is waqt system ke paas kitni free RAM (Memory) bachi hui hai.
+
+---
+
+### Table 10.4 Important metrics for RDS databases from CloudWatch
+
+Neeche CloudWatch ke un **5 ahem metrics** ka table aur detail explanation di gayi hai jin par aap ko hamesha nazar rakhni chahiye:
+
+| Name | Description (Roman Urdu) |
+| --- | --- |
+| **FreeStorageSpace** | Bytes mein available storage. Yeh yakeeni banayein ke storage khatam na ho. Hum alarm threshold < 2147483648 (2 GB) set karne ki sifarish karte hain. |
+| **CPUUtilization** | Percentage ke hisab se CPU ka istemal. Zyada utilization is baat ki nishandahi karti hai ke CPU ki na-kaafi performance ki wajah se bottleneck ban raha hai. Hum alarm threshold > 80% set karne ki sifarish karte hain. |
+| **FreeableMemory** | Bytes mein free memory. Memory khatam hone ki wajah se performance problems ho sakti hain. Hum alarm threshold < 67108864 (64 MB) set karne ki sifarish karte hain. |
+| **DiskQueueDepth** | Disk par mojood pending requests ki tadad. Lambi queue yeh batati hai ke database ki storage apni maximum I/O performance tak pohanch chuki hai. Hum alarm threshold > 64 set karne ki sifarish karte hain. |
+| **SwapUsage** | Agar database ke paas memory kam ho jaye, toh OS disk ko memory ke tor par istemal karna shuru kar deta hai (ise swapping kehte hain). Disk ko memory ke tor par istemal karna slow hota hai aur is se performance problems hongi. Hum alarm threshold > 268435456 (256 MB) set karne ki sifarish karte hain. |
+
+#### Har Metric Ki Easy Detailed Explanation & Alarm Thresholds:
+
+1. **FreeStorageSpace (Bachi Hui Storage Space):**
+* **Bacho Ki Tarah Misaal:** Jaise aap ke mobile ki storage full hone lage toh mobile hanging karna shuru kar deta hai aur photos save nahi hoti, bilkul waise hi agar database ki disk space full ho gayi toh database crash ho jayega aur naya data save nahi hoga.
+* **Recommended Alarm Threshold:** `< 2,147,483,648 bytes` (yaani jab bachi hui storage **2 GB se kam** reh jaye toh alarm bajna chahiye). *(Note: Modern AWS environments mein RDS Auto-Scaling bhi milti hai jo storage khud barha deti hai, lekin alarm rakhna behtareen practice hai).*
+
+
+2. **CPUUtilization (CPU Ka Consumption):**
+* **Bacho Ki Tarah Misaal:** Farz karein ek math teacher hai jo ek minute mein 10 sawal hal kar sakta hai. Agar 50 bachay ek sath sawal le kar aa jayein toh teacher ka dimaag 100% busy ho jayega aur baki bachon ko wait karna parega (Bottleneck ban jayega).
+* **Recommended Alarm Threshold:** `> 80%` (jab CPU istemal **80% se upar** chala jaye toh alert aana chahiye taake aap instance class ko badal kar bada kar sakein).
+
+
+3. **FreeableMemory (Khali RAM):**
+* **Explanation:** System ke paas queries ko process karne ke liye kitni free RAM bachi hai. Memory khatam hone par database slow ho jata hai.
+* **Recommended Alarm Threshold:** `< 67,108,864 bytes` (jab free RAM **64 MB se kam** reh jaye toh alert trigger hona chahiye).
+
+
+4. **DiskQueueDepth (Storage Queue Ki Lambai):**
+* **Bacho Ki Tarah Misaal:** Imagine karein ek bank mein sirf ek window (Cashier) khuli hai aur bahar 100 log line mein khade hain. Yeh lambi line (Queue) batati hai ke cashier slow kaam kar raha hai.
+* **Explanation:** DiskQueueDepth batata hai ke kitni Read/Write requests storage disk par pending parhi hain. Lambi queue ka matlab hai ke disk ki I/O limits (IOPS) khatam ho chuki hain aur aap ko Provisioned IOPS SSD par shift hona chahiye.
+* **Recommended Alarm Threshold:** `> 64` (agar pending requests ki line **64 se zyada** ho jaye toh alarm aana chahiye).
+
+
+5. **SwapUsage (Hard Disk Ko Memory Ke Tor Par Use Karna):**
+* **Explanation:** Jab database ki main RAM poori bhar jaati hai, toh Operating System (Linux) hard disk ke ek chhote hissey ko temporary RAM ki tarah use karna shuru kar deta hai (isay Swapping kehte hain). Kyunke Hard Disk RAM ki nisbat lakhon guna slow hoti hai, swapping shuru hote hi database ki speed zero ho jaati hai.
+* **Recommended Alarm Threshold:** `> 268,435,456 bytes` (agar Swap Memory **256 MB se zyada** istemal hone lage toh alarm aana chahiye).
+
+
+
+In metrics par monitoring alarms laga kar aap apni application ko crash hone se pehle hi bacha sakte hain.
+
+---
+
+## Cleaning up
+
+Chapter ke tamaam practical steps mukammal karne ke baad, ab waqt hai ke hum extra bill se bachne ke liye CloudFormation stack ko delete kar dein.
+
+Apne local terminal par yeh command chalayein:
+
+```bash
+aws cloudformation delete-stack --stack-name wordpress
+
+```
+
+#### Command Ka Line-by-Line Breakdown:
+
+* **`aws`:** AWS Command Line Interface (CLI) ka tool.
+* **`cloudformation`:** AWS CloudFormation service ko target kar raha hai.
+* **`delete-stack`:** Stack ke andar banaye gaye **SABHI resources (EC2 Virtual Machines, RDS MySQL Database, Security Groups, Load Balancer, Subnet Groups)** ko aik sath permanently delete karne ka hukum.
+* **`--stack-name wordpress`:** Stack ka naam (`wordpress`) jise mukammal taur par saaf/delete karna hai.
+
+Yeh command chalaney ke baad AWS piche saare resources ko safe tarike se tear-down (delete) kar dega aur aap ke account par koi extra charge nahi aayega.
+
+---
+
+## Summary
+
+Is chapter mein hum ne Amazon RDS service ke zariye relational databases ko launch, operate, aur scale karne ke baare mein seekha. Aayein poore chapter ke mukhya points ko revise karte hain:
+
+* **Managed Relational Service:** Amazon RDS ek fully managed service hai jo relational databases chalane ki tamam mushkilat (installation, patching, backups) ko khud sambhalti hai.
+* **Supported Database Engines:** RDS par aap **PostgreSQL, MySQL, MariaDB, Oracle Database, Microsoft SQL Server**, aur AWS ka apna cloud-native engine **Amazon Aurora** istemal kar sakte hain.
+* **Fastest Data Import Method:** Data ko jaldi import karne ke liye dump file ko pehle same AWS region ki EC2 Virtual Machine par upload karein, phir wahan se local network par RDS mein import karein.
+* **Built-in Snapshots & Restore:** RDS mein manual snapshots aur automatic backups milte hain jin se aap naya database restore kar sakte hain ya waqt mein piche ja kar **Point-in-Time Restore (PITR)** kar sakte hain.
+* **Multi-Layer Access Control:** Database ko mehfooz rakhne ke liye 3 layers use hoti hain: IAM Policies (Configuration), Security Groups (Network Firewalls), aur Database Engine Users (Data Access).
+* **Backup Retention Window:** RDS automated backups ko **1 se 35 dino** tak mehfooz rakh sakta hai.
+* **Multi-AZ High Availability:** Production workloads ke liye RDS ko **Multi-AZ mode** mein chalana chahiye jahan Primary aur Standby databases alag alag Data Centers (Availability Zones) mein synchronously replicate hotay hain.
+* **Horizontal Scaling via Read Replicas:** Read-heavy applications ki performance barhane ke liye **Read Replicas** banaye jaate hain jo Primary database ka load kam kar dete hain.
+* **CloudWatch Monitoring:** Database ki sehat aur performance dekhne ke liye FreeStorageSpace, CPUUtilization, FreeableMemory, DiskQueueDepth, aur SwapUsage jaise metrics ko CloudWatch se monitor kiya jata hai.
+
+---
