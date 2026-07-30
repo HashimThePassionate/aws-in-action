@@ -1122,3 +1122,239 @@ Jab koi server network boundary ko paar karke cache tak pohoch jaye, toh databas
 > **Encryption in Transit Warning**: Jab bhi aap Redis mein passwords ya tokens (Authentication) enable karein, toh sath mein **Encryption in Transit (TLS/SSL)** ko zaroor ON karein! Agar transit encryption ON nahi hogi, toh aap ka password network par bina kisi lock ke (plain text mein) travel karega aur koi bhi hacker usay raste se chura sakta hai.
 
 ---
+
+## Installing the sample application Discourse with CloudFormation
+
+### Real-World Example (Small Communities & Discourse Forum)
+
+Socho aap ka ek chota sa group ya community hai—jaise ek **football club**, **reading circle (kitabein parhne walo ka group)**, ya **dog school (kutte sikhane wali academy)**. In sab members ko aapas mein ek doosre ke sath baatein karne, updates share karne, aur pooch-taach karne ke liye ek achhi jagah (forum) chahiye hoti hai.
+
+**Discourse** ek aisa hi zabrdatast open-source forum software hai jahan communities aapas mein connect hoti hain. Yeh app **Ruby on Rails** framework par likhi gayi hai.
+
+---
+
+### Figure 11.8 Ki Wazahat
+
+Aap **Figure 11.8** mein Discourse ka interface (UI) dekh sakte hain:
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+* **Top Header**: Discourse ka logo, search icon, menu button, aur admin user profile dikhaye de rahe hain.
+* **Welcome & Announcement Banner**: Naye users ke liye welcome messages, guidelines, aur trust levels ki detail majood hai.
+* **Navigation Tabs**: Admin aur users topics ko explore karne ke liye `all categories`, `all tags`, `Latest`, `Top`, aur `Categories` ke buttons switch kar sakte hain.
+* **Topic List**: Niche alag alag discussions chal rahi hain jaise *Welcome to Discourse*, *Admin Quick Start Guide*, *Privacy Policy*, wagaira. Har topic ke aage us ke replies, views, aur activity ka time (maslan `17m`) nazar aa raha hai.
+
+---
+
+### Discourse Aur ElastiCache Ka Taluq
+
+Discourse humare is chapter ke liye ek perfect real-world project hai. Yeh app do databases par chalti hai:
+
+1. **PostgreSQL (Primary Database)**: Is mein forum ka permanent data save hota hai (jaise user accounts, main posts, aur categories).
+2. **Redis (In-Memory Cache Layer)**: Discourse Redis ko in-memory database ke taur par use karta hai. Yeh taaza data ko RAM mein cache karta hai aur transient ( temporary / jaldi badalney wala) data process karta hai taake website super-fast load ho.
+
+---
+
+### CloudFormation Template Ke 4 Main Components
+
+Discourse ko AWS par chalane ke liye hum CloudFormation ke zariye 4 ahem hisse banayenge:
+
+1. **VPC**: Poora network infrastructure jahan saare servers chalenge.
+2. **Cache**: Redis cluster, us ka subnet group, aur security group.
+3. **Database**: PostgreSQL database instance, us ka subnet group, aur security group.
+4. **Virtual Machine**: EC2 instance (jahan Discourse ka main web application code chalega) aur us ka security group.
+
+---
+
+## VPC: Network configuration
+
+VPC (Virtual Private Cloud) aap ke AWS account ke andar aap ka ek apna private digital network hota hai. Hum pehle network ki boundary aur raste set up karenge.
+
+---
+
+## Listing 11.1 CloudFormation template for Discourse: VPC
+
+Neeche diya gaya CloudFormation template Discourse application ke liye basic VPC, Internet Gateway, Subnets, aur Route Tables create karta hai:
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS in Action: chapter 11'
+Parameters:
+  AdminEmailAddress: # Discourse admin ka email address valid hona chahiye
+    Description: 'Email address of admin user'
+    Type: 'String'
+Resources:
+  VPC: # 172.31.0.0/16 address range mein aik VPC banata hai
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '172.31.0.0/16'
+      EnableDnsHostnames: true
+  InternetGateway: # Hum internet se Discourse ko access karna chahte hain, isliye hamein aik internet gateway ki zaroorat hai
+    Type: 'AWS::EC2::InternetGateway'
+    Properties: {}
+  VPCGatewayAttachment: # Internet gateway ko VPC ke sath attach karta hai
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  SubnetA: # Pehli availability zone (array index 0) mein 172.31.38.0/24 address range ke sath aik subnet banata hai
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: '172.31.38.0/24'
+      VpcId: !Ref VPC
+  SubnetB: # [...] # Dusri availability zone mein 172.31.37.0/24 address range ke sath dusra subnet banata hai (properties chhor di gayi hain)
+  RouteTable: # Aik route table banata hai jo default route par mushtamil hoti hai, jo VPC ke tamam subnets ko route karti hai
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+  SubnetRouteTableAssociationA: # Pehle subnet ko route table ke sath associate karta hai
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+  # [...]
+  RouteToInternet: # Internet gateway ke zariye internet ke liye aik route add karta hai
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+    DependsOn: VPCGatewayAttachment
+
+```
+
+---
+
+### Detailed Code Breakdown
+
+#### 1. Template Metadata & Input Parameters
+
+* **`AWSTemplateFormatVersion: '2010-09-09'`**: AWS CloudFormation language ka standard format version specification.
+* **`Description: 'AWS in Action: chapter 11'`**: Stack ka maqsad batata hai.
+* **`Parameters`**:
+* **`AdminEmailAddress`**: Admin user ka email address lene ke liye input field. High quality setups mein Discourse deployment ke waqt is email ko forum admin profile setup ke liye use kiya jata hai.
+
+
+
+---
+
+#### 2. Virtual Private Cloud (`VPC`)
+
+* **`Type: 'AWS::EC2::VPC'`**: Isolated virtual network create karta hai.
+* **`CidrBlock: '172.31.0.0/16'`**: Network ki total IP range set karta hai. Is mein `65,536` IP addresses bante hain (`172.31.0.0` se `172.31.255.255`).
+* **`EnableDnsHostnames: true`**: VPC ke andar chalne wale servers ko friendly DNS names (jaise `ec2-xx-xx-xx-xx.compute-1.amazonaws.com`) dene ki ijazat deta hai.
+
+---
+
+#### 3. Internet Connectivity (`InternetGateway` & `VPCGatewayAttachment`)
+
+* **`InternetGateway` (`Type: 'AWS::EC2::InternetGateway'`)**: Yeh VPC ka **Main Gate** hai. Internet aur VPC ke beech traffic aane jaane ke liye yeh gateway zaroori hota hai.
+* **`VPCGatewayAttachment` (`Type: 'AWS::EC2::VPCGatewayAttachment'`)**: Is gateway ko humare `VPC` ke sath physical hookup (attach) kar deta hai.
+
+---
+
+#### 4. Network Subnets (`SubnetA` & `SubnetB`)
+
+* **`SubnetA` (`Type: 'AWS::EC2::Subnet'`)**:
+* **`AvailabilityZone: !Select [0, !GetAZs '']`**: Region ke pehle Data Center (AZ 0) ko select karke subnet ko wahan rakhta hai.
+* **`CidrBlock: '172.31.38.0/24'`**: Pehle kamray (subnet) ke liye `256` IP addresses allocate karta hai (`172.31.38.0` se `172.31.38.255`).
+* **`VpcId: !Ref VPC`**: Subnet ko humare main VPC network se jorta hai.
+
+
+* **`SubnetB`**:
+* Region ke doosre Data Center (AZ 1) mein `172.31.37.0/24` range ke sath doosra subnet banata hai taake agar ek Data Center down ho, toh doosra chal sake (High Availability).
+
+
+
+---
+
+#### 5. Routing Infrastructure (`RouteTable`, `SubnetRouteTableAssociationA`, `RouteToInternet`)
+
+* **`RouteTable` (`Type: 'AWS::EC2::RouteTable'`)**: Traffic ki direction tay karne ke liye signposts/maps ka collection.
+* **`SubnetRouteTableAssociationA` (`Type: 'AWS::EC2::SubnetRouteTableAssociation'`)**: Is Traffic Map (`RouteTable`) ko `SubnetA` ke sath attach karta hai.
+* **`RouteToInternet` (`Type: 'AWS::EC2::Route'`)**:
+* **`DestinationCidrBlock: '0.0.0.0/0'`**: Dunya mein kisi bhi jagah (Internet) jaane wale traffic ka target.
+* **`GatewayId: !Ref InternetGateway`**: Batata hai ke internet ka sara traffic `InternetGateway` se ho kar guzre.
+* **`DependsOn: VPCGatewayAttachment`**: CloudFormation ko hukam deta hai ke pehle Internet Gateway ko VPC se attach hone do, us ke BAAD hi yeh route banao.
+
+
+
+---
+
+## Listing 11.3 CloudFormation template for Discourse: VPC NACLs
+
+Network ACLs (Network Access Control Lists) Subnets ke level par pehredar hote hain jo andar aane wale (Ingress) aur bahar jaane wale (Egress) traffic par nazar rakhte hain.
+
+```yaml
+Resources:
+  # [...]
+  NetworkAcl: # Aik khali network ACL banata hai
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref VPC
+  SubnetNetworkAclAssociationA: # Pehle subnet ko network ACL ke sath associate karta hai
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetA
+      NetworkAclId: !Ref NetworkAcl
+  # [...]
+  NetworkAclEntryIngress: # Network ACL par tamam aane wale (incoming) traffic ki ijazat deta hai. (Aap baad mein security groups ko firewall ke taur par istemal karenge.)
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryEgress: # Network ACL par tamam bahar jane wale (outgoing) traffic ki ijazat deta hai
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+
+```
+
+---
+
+### Detailed Code Breakdown
+
+#### 1. Network ACL Creation & Subnet Link
+
+* **`NetworkAcl` (`Type: 'AWS::EC2::NetworkAcl'`)**: Ek blank Network ACL container banata hai jo humare VPC se linked hota hai.
+* **`SubnetNetworkAclAssociationA` (`Type: 'AWS::EC2::SubnetNetworkAclAssociation'`)**: Is Network ACL guard post ko `SubnetA` par apply kar deta hai.
+
+---
+
+#### 2. Network ACL Traffic Rules (`NetworkAclEntryIngress` & `NetworkAclEntryEgress`)
+
+* **`NetworkAclEntryIngress`**:
+* **`RuleNumber: 100`**: Rule ki priority set karta hai (kam number pehle check hota hai).
+* **`Protocol: -1`**: `-1` ka matlab hai **All Protocols** (TCP, UDP, ICMP sab shamil hain).
+* **`RuleAction: allow`**: Traffic ko aage jane ki ijazat (Allow) deta hai.
+* **`Egress: false`**: `false` ka matlab hai yeh **Ingress (Incoming Traffic)** par lagu hoga.
+* **`CidrBlock: '0.0.0.0/0'`**: Kisi bhi IP address se traffic accept karne deta hai.
+
+
+* **`NetworkAclEntryEgress`**:
+* **`Egress: true`**: `true` ka matlab hai yeh **Egress (Outgoing Traffic)** par lagu hoga.
+* **`CidrBlock: '0.0.0.0/0'`**: Server se kisi bhi IP address par bahar data bhejne ki ijazat deta hai.
+
+
+
+---
+
+### Conceptual Architecture Wazahat
+
+* **NACL Open Kyun Rakha Gaya?**: Aap sochte honge ke sab traffic Allow kyun kar diya? Architecture design pattern ke mutabiq, Subnet-level NACLs ko bilkul open rakha gaya hai kyunki asli granular security hum **Security Groups (Stateful Firewalls)** ke zariye handle karenge jo direct EC2, ElastiCache, aur RDS Database ke gird lagaye jayenge.
+* **Current Status**: Ab humara network **2 Public Subnets** ke sath mukammal taur par setup ho chuka hai. Agle Step mein hum Discourse ke liye **Cache layer (ElastiCache Redis)** setup karenge.
+
+
+---
