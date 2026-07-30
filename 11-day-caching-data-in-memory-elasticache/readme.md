@@ -1358,3 +1358,353 @@ Resources:
 
 
 ---
+
+## Cache: Security group, subnet group, cache cluster
+
+Ab hum Discourse application ke liye **ElastiCache for Redis** cluster add karenge. Pehle hum ne basic cluster banana dekha tha, lekin is baar hum setup ko ziada secure aur behtar banane ke liye kuch zaroori extra properties shamil karenge.
+
+Neeche diye gaye CloudFormation code mein cache se judi tamam resources define ki gayi hain:
+
+```yaml
+Resources:
+  # [...]
+  CacheSecurityGroup: # Cache ke aane aur jane wale traffic ko control karne ke liye security group
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: cache
+      VpcId: !Ref VPC
+  CacheSecurityGroupIngress: # Cyclic dependency se bachne ke liye, ingress rule ko aik alag CloudFormation resource mein taqseem (split) kiya gaya hai
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref CacheSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379 # Redis port 6379 par chalta hai
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref InstanceSecurityGroup # InstanceSecurityGroup resource abhi specify nahi ki gayi; aap isay baad mein add karenge jab aap web server chalane wali EC2 instance ko define karenge
+  CacheSubnetGroup: # Cache subnet group VPC subnets ka reference deta hai
+    Type: 'AWS::ElastiCache::SubnetGroup'
+    Properties:
+      Description: cache
+      SubnetIds:
+        - Ref: SubnetA
+        - Ref: SubnetB
+  Cache: # Aik single-node Redis cluster banata hai
+    Type: 'AWS::ElastiCache::CacheCluster'
+    Properties:
+      CacheNodeType: 'cache.t2.micro'
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      Engine: redis
+      EngineVersion: '6.2' # Aap Redis ka woh exact version specify kar sakte hain jo aap chalana chahte hain. Warna, latest version istemal hota hai, jo mustaqbil mein incompatibility ke masail paida kar sakta hai. Hum hamesha version specify karne ki sifarish karte hain
+      NumCacheNodes: 1
+      VpcSecurityGroupIds:
+        - !Ref CacheSecurityGroup
+
+```
+
+---
+
+### Listing 11.4 Ki Asaan Wazahat
+
+#### 1. Security Group (`CacheSecurityGroup`)
+
+* **`Type: 'AWS::EC2::SecurityGroup'`**: Redis cluster ke chaugird ek digital boundary (firewall) banata hai.
+* **`GroupDescription: cache`**: Security group ka naam ya maqsad batata hai.
+* **`VpcId: !Ref VPC`**: Is security group ko pehle se bane hue VPC network se connect karta hai.
+
+#### 2. Security Group Ingress Rule (`CacheSecurityGroupIngress`)
+
+* **Cyclic Dependency Se Bachao**: Yahan hum ne `Ingress` (andar aane wale traffic ka rule) ko Security Group ke andar likhne ke bajaye ek **alag resource** banaya hai.
+* **Bacho Ki Tarah Samjiye (Murghi Pehle Aayi Ya Anda?)**: Cache Security Group kehta hai *"Mujhe Web Server Instance ka Security Group chahiye"* aur Web Server kehta hai *"Mujhe Cache Security Group chahiye"*. Agar dono ko ek doosre ke andar likh dein toh CloudFormation confuse ho jayega. Is liye hum ne ingress rule ko alag se define kiya.
+
+
+* **`GroupId: !Ref CacheSecurityGroup`**: Batata hai ke yeh rule `CacheSecurityGroup` par apply hoga.
+* **`IpProtocol: tcp`**: Data transfer ke liye Standard TCP protocol specify karta hai.
+* **`FromPort: 6379` & `ToPort: 6379**`: Redis server Port 6379 par communication ke liye tayyar hota hai.
+* **`SourceSecurityGroupId: !Ref InstanceSecurityGroup`**: Sirf wohi EC2 Instance Redis se baat kar sakti hai jis par `InstanceSecurityGroup` ka badge (tag) laga hoga.
+
+#### 3. Subnet Group (`CacheSubnetGroup`)
+
+* **`Type: 'AWS::ElastiCache::SubnetGroup'`**: Cache ko hamare VPC ke private subnets ke sath jortaa hai.
+* **`SubnetIds`**: `SubnetA` aur `SubnetB` dono ko list mein shamil kiya gaya hai taake cluster zaroorat parne par multi-AZ capability use kar sake.
+
+#### 4. Redis Cache Cluster (`Cache`)
+
+* **`Type: 'AWS::ElastiCache::CacheCluster'`**: Main Redis instance banata hai.
+* **`CacheNodeType: 'cache.t2.micro'`**: AWS Free Tier wala small cache server size. *(Modern 2026 infrastructure mein Graviton-based `cache.t4g.micro` zyada efficient alternative mana jata hai)*.
+* **`CacheSubnetGroupName: !Ref CacheSubnetGroup`**: Upay banaye gaye subnet group se link karta hai.
+* **`Engine: redis`**: Redis in-memory data store specify karta hai.
+* **`EngineVersion: '6.2'`**: Exact Redis engine version `6.2` specify karna zaroori hai. Agar version mention na kiya jaye toh AWS automatically newest version install kar deta hai, jiss se future mein aap ki application ka code incompatible (braking changes) ho sakta hai.
+* **`NumCacheNodes: 1`**: Testing ke liye 1 Single node cluster banata hai.
+* **`VpcSecurityGroupIds`**: `CacheSecurityGroup` ko is Redis cluster par attach kar deta hai.
+
+---
+
+## Database: Security group, subnet group, database instance
+
+Discourse ko main data (jaise user profiles, posts, categories) permanently save karne ke liye **PostgreSQL** relational database ki zaroorat hoti hai. AWS par **RDS (Relational Database Service)** fully managed PostgreSQL database provide karta hai.
+
+Neeche di gayi listing CloudFormation template ka woh hissa hai jo RDS PostgreSQL instance define karta hai:
+
+```yaml
+Resources:
+  # [...]
+  DatabaseSecurityGroup: # RDS instance tak aane aur wahan se jane wale traffic ko security group ke zariye protect kiya jata hai
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: database
+      VpcId: !Ref VPC
+  DatabaseSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432 # PostgreSQL by default port 5432 par chalta hai
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref InstanceSecurityGroup # InstanceSecurityGroup resource abhi specify nahi ki gayi; aap isay baad mein add karenge jab aap web server chalane wali EC2 instance ko define karenge
+  DatabaseSubnetGroup: # RDS bhi VPC subnets ka reference dene ke liye subnet group ka istemal karta hai
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: database
+      SubnetIds:
+        - Ref: SubnetA
+        - Ref: SubnetB
+  Database: # Database resource hai
+    Type: 'AWS::RDS::DBInstance'
+    DeletionPolicy: Delete
+    Properties:
+      AllocatedStorage: 5
+      BackupRetentionPeriod: 0 # Backups ko disable karta hai; production mein aap isay on karna chahenge (value > 0)
+      DBInstanceClass: 'db.t2.micro'
+      DBName: discourse # RDS ne aap ke liye PostgreSQL mein aik database create kar diya hai
+      Engine: postgres # Discourse ko PostgreSQL ki zaroorat hoti hai
+      EngineVersion: '12.10' # Hum hamesha engine ka version specify karne ki sifarish karte hain taake mustaqbil mein incompatibility ke masail se bacha ja sake
+      MasterUsername: discourse # PostgreSQL ka admin username
+      MasterUserPassword: discourse # PostgreSQL ka admin password; production mein aap isay tabdeel karna chahenge
+      VPCSecurityGroups:
+        - !Sub ${DatabaseSecurityGroup.GroupId}
+      DBSubnetGroupName: !Ref DBSubnetGroup
+    DependsOn: VPCGatewayAttachment
+
+```
+
+---
+
+### Listing 11.5 Ki Asaan Wazahat
+
+#### 1. Security Group & Ingress (`DatabaseSecurityGroup` & `DatabaseSecurityGroupIngress`)
+
+* **`DatabaseSecurityGroup`**: Database ke gird virtual firewall khada karta hai.
+* **`DatabaseSecurityGroupIngress`**: Ingress rule ko alag se define kiya gaya hai taake cyclic dependency ka issue na aye.
+* **`FromPort: 5432` & `ToPort: 5432**`: PostgreSQL Database by default **Port 5432** par listen karta hai.
+* **`SourceSecurityGroupId: !Ref InstanceSecurityGroup`**: Database mein entry ki ijazat sirf unhi EC2 instances ko milti hai jin ke paas `InstanceSecurityGroup` hoga.
+
+
+
+#### 2. Subnet Group (`DatabaseSubnetGroup`)
+
+* **`Type: 'AWS::RDS::DBSubnetGroup'`**: Relational Database ko `SubnetA` aur `SubnetB` ke sath attach karta hai.
+
+#### 3. Database Instance (`Database`)
+
+* **`Type: 'AWS::RDS::DBInstance'`**: Cloud par PostgreSQL Database Server create karta hai.
+* **`DeletionPolicy: Delete`**: Agar hum CloudFormation stack delete karein, toh yeh database bhi sath hi delete ho jayega.
+* **`AllocatedStorage: 5`**: Hard disk space `5 GB` allocate ki gayi hai.
+* **`BackupRetentionPeriod: 0`**: Testing environment mein kharcha aur waqt bachane ke liye automatic backups `0` (disabled) kiye gaye hain. Production setups mein isay hamesha `1` ya us se ziada rakha jata hai.
+* **`DBInstanceClass: 'db.t2.micro'`**: Small database server size jo Free Tier ka hissa hota hai. *(Modern 2026 tech standards mein `db.t3.micro` ya `db.t4g.micro` use kiya jata hai)*.
+* **`DBName: discourse`**: AWS installation ke waqt hi automatic `discourse` naam ka default database create kar deta hai.
+* **`Engine: postgres`**: Database Engine type PostgreSQL choose ki gayi hai.
+* **`EngineVersion: '12.10'`**: PostgreSQL Engine ka exact version lock kar diya gaya hai taake updates ki waja se Discourse crash na ho.
+* **`MasterUsername` & `MasterUserPassword**`: Database Admin login details (Dono `discourse` rakhe gaye hain). Production mein secure password istemal karna zaroori hota hai.
+* **`VPCSecurityGroups`**: `!Sub ${DatabaseSecurityGroup.GroupId}` ke zariye database par security group apply karta hai.
+* **`DependsOn: VPCGatewayAttachment`**: RDS ko tab tak nahi banata jab tak VPC ka Internet Gateway sahi tarah attach na ho jaye.
+
+> **Similarity Note**: Notice karein ke RDS (Relational Database) aur ElastiCache (In-Memory Database) dono ka CloudFormation code kitna milti-julta hai! Dono Subnet Groups, Security Groups, aur Instance Types ka wahi pattern follow karte hain.
+
+---
+
+## Virtual machine: Security group, EC2 instance
+
+Discourse ek **Ruby on Rails** application hai. Manual tareeqay se Ruby, environment variables, aur sub-dependencies install karna kafi pechida aur mushkil kaam hota hai. Is liye Discourse chalane ka official aur recommended tarika yeh hai ke usay **Docker Container** ke andar chalaya jaye.
+
+---
+
+### Discourse requires SMTP to send email
+
+Discourse forum software ko chalane ke liye ek **SMTP Email Server** ki zarurat hoti hai taake users ko activation emails aur notifications bheje ja sakein. Apna email server khud chalana taqreeban namumkin hota hai kyunki baqi email providers un emails ko spam qarar de dete hain. Is liye hum **AWS SES (Simple Email Service)** use karte hain.
+
+AWS SES Sandbox mode mein email verify karne ke steps:
+
+1. AWS Management Console mein **SES (Simple Email Service)** kholain.
+2. Menu se **Verified Identities** select karein.
+3. **Create Identity** button par click karein.
+4. Identity type **Email Address** chunain.
+5. Apna valid email address type karein.
+6. **Create Identity** par click karein.
+7. Apne Email Inbox mein ja kar AWS ki verification link par click karke email verify karein.
+
+---
+
+Neeche di gayi listing Discourse Application host karne wali Virtual Machine (EC2 Instance) ko define karti hai:
+
+```yaml
+Resources:
+  # [...]
+  InstanceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'vm'
+      SecurityGroupIngress:
+        - CidrIp: '0.0.0.0/0' # Public internet se HTTP traffic ki ijazat deta hai
+          FromPort: 80
+          IpProtocol: tcp
+          ToPort: 80
+      VpcId: !Ref VPC
+  Instance: # Woh virtual machine jo Discourse chalati hai
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      InstanceType: 't2.micro'
+      IamInstanceProfile: !Ref InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: 0
+          GroupSet:
+            - !Ref InstanceSecurityGroup
+          SubnetId: !Ref SubnetA
+      BlockDeviceMappings:
+        - DeviceName: '/dev/xvda'
+          Ebs:
+            VolumeSize: 16 # Default volume size ko 8 GB se barhakar 16 GB kar deta hai
+            VolumeType: gp2
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -x
+          bash -ex << "TRY"
+          # [...]
+          # install and start docker # Docker ko install aur start karta hai
+          yum install -y git
+          amazon-linux-extras install docker -y
+          systemctl start docker
+          
+          docker run --restart always -d -p 80:80 --name discourse \ # Docker container create aur launch karta hai
+            -e "UNICORN_WORKERS=3" \
+            # [...]
+            -e "RUBY_ALLOCATOR=/usr/lib/libjemalloc.so.1" \
+            public.ecr.aws/awsinaction/discourse:3rd /sbin/boot
+            
+          docker exec discourse /bin/sh -c \ # Database ko initialize ya migrate karne ke liye database migration script chalata hai
+          "cd /var/www/discourse && rake db:migrate"
+          docker restart discourse # Container ko restart karta hai taake yakeeni banaya ja sake ke database migration apply ho chuki hai
+          TRY
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+          --resource Instance --region ${AWS::Region}
+      CreationPolicy:
+        ResourceSignal:
+          Timeout: PT15M
+    DependsOn:
+      - VPCGatewayAttachment
+
+```
+
+---
+
+### Listing 11.6 Ki Asaan Wazahat
+
+#### 1. Instance Security Group (`InstanceSecurityGroup`)
+
+* **`FromPort: 80` & `ToPort: 80**`: Standard Web Traffic (**HTTP Port 80**) ko allow karta hai.
+* **`CidrIp: '0.0.0.0/0'`**: Dunya ke kisi bhi kone se users ko forum website open karne ki access deta hai.
+
+#### 2. Virtual Machine Server (`Instance`)
+
+* **`Type: 'AWS::EC2::Instance'`**: Main Web Server banana.
+* **`InstanceType: 't2.micro'`**: Standard Free Tier Instance Type.
+* **`AssociatePublicIpAddress: true`**: Server ko ek Public IP address deta hai taake web browser mein site khul sake.
+* **`BlockDeviceMappings`**:
+* **`VolumeSize: 16`**: Normal 8 GB disk size ke bajaye disk size ko **16 GB** kiya gaya hai taake Docker containers aur Discourse ka images scale aasaani se fit aa sake.
+
+
+
+#### 3. Startup Script (`UserData` Line-by-Line Breakdown)
+
+* **`yum install -y git`**: Amazon Linux par `git` version control tool install karta hai.
+* **`amazon-linux-extras install docker -y`**: Server par Docker container engine install karta hai.
+* **`systemctl start docker`**: Docker service ko start/activate kar deta hai.
+* **`docker run --restart always -d -p 80:80 ...`**:
+* AWS ECR (Elastic Container Registry) se Discourse ka official Docker Image pull karke chalata hai.
+* `-p 80:80`: External Port 80 ko Docker Container ke internal Port 80 se jortaa hai.
+* `--restart always`: Agar server restart bhi ho, toh Docker container automatically dobara chal parega.
+
+
+* **`docker exec discourse ... rake db:migrate`**: Container ke andar ja kar Rails command `rake db:migrate` chalata hai jo RDS PostgreSQL database mein Discourse ke saare tables aur schema structure tayyar kar deta hai.
+* **`docker restart discourse`**: Schema banne ke baad container ko restart karta hai taake saari new settings apply ho jayein.
+* **`/opt/aws/bin/cfn-signal ...`**: CloudFormation ko signal bhejta hai ke installation kamyabi se poori ho chuki hai.
+* **`CreationPolicy` (`Timeout: PT15M`)**: CloudFormation ko 15 minute tak wait karne ki ijazat deta hai. Agar 15 minute mein installation signal na aaye toh stack create failure mark ho jaye.
+
+---
+
+## Testing the CloudFormation template for Discourse
+
+Ab hum AWS CLI ka istemal karte hue CloudFormation stack run karenge.
+
+Terminal par yeh command chalaayein (`$AdminEmailAddress` ko apne verified email se replace karein):
+
+```bash
+$ aws cloudformation create-stack --stack-name discourse \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/chapter11/discourse.yaml \
+  --parameters "ParameterKey=AdminEmailAddress,ParameterValue=$AdminEmailAddress" \
+  --capabilities CAPABILITY_NAMED_IAM
+
+```
+
+* **Wazahat**: Yeh command AWS CloudFormation ko instruction deti hai ke woh S3 par majood `discourse.yaml` template utha kar `discourse` naam ka stack banaye. IAM roles banane ke liye `--capabilities CAPABILITY_NAMED_IAM` ka flag zaroori hota hai.
+
+---
+
+### Where is the template located?
+
+> **Template ki Location**:
+> GitHub repository: `[https://github.com/AWSinAction/code3/archive/main.zip](https://github.com/AWSinAction/code3/archive/main.zip)`
+> Local File path: `chapter11/discourse.yaml`
+> S3 URL: `[https://s3.amazonaws.com/awsinaction-code3/chapter11/discourse.yaml](https://s3.amazonaws.com/awsinaction-code3/chapter11/discourse.yaml)`
+
+---
+
+### Public IP Retrieve Karna
+
+Stack banne mein **15 se 20 minute** tak lag sakte hain. Jab status `CREATE_COMPLETE` ho jaye, toh yeh command chala kar server ka Public IP Address hasil karein:
+
+```bash
+$ aws cloudformation describe-stacks --stack-name discourse \
+  --query "Stacks[0].Outputs[1].OutputValue"
+
+```
+
+---
+
+### Figure 11.9 Ki Wazahat
+
+Obtain kiye gaye IP address ko apne browser ke address bar mein daalein. Aap ke samne **Figure 11.9** waali screen nazar aayegi:
+
+<div align="center">
+  <img src="./images/09.png" width="600"/>
+</div>
+
+* **Screen Title**: **Discourse Setup** ("Congratulations, you installed Discourse!").
+* **Center Graphic**: Party Popper graphic dikhayi de raha hai jo kamyab installation ko jahir karta hai.
+* **Action Call**: Screen par `register a new account to get started` likha hua hai.
+* **Register Button**: Niche neela **Register** button majood hai jis par click karke aap forum ka pehla Admin Account create kar sakte hain.
+
+---
+
+### Setup Completing Steps
+
+1. Browser mein IP address kholain aur Screen par majood **Register** button par click karein.
+2. Apni Admin Details fill karein. Aap ke email address par ek activation link aayega (Spam folder bhi check karein).
+3. Email link par click karke account activate karein aur Setup Wizard complete karein.
+
+> **Ahem Note**: Setup poora hone ke baad **CloudFormation stack ko delete mat kijiyega**, kyunki hum agle sections mein isi Discourse infrastructure ke ElastiCache Redis performance ki monitoring seekhenge!
+
+
+---
