@@ -451,3 +451,192 @@ Neeche ek medium-sized RDS database instance ki mahana (monthly) cost ki misaal 
 
 
 ---
+
+## Importing data into a database
+
+Khali (empty) database kisi kaam ka nahi hota. Aam tor par jab aap koi naya database banate hain, toh aap ko apne purane database ka backup (jise hum **Database Dump** kehte hain) naye database ke andar daalna (import karna) parta hai.
+
+### Real-World Scenario (Ek Aasan Misaal)
+
+> **Misaal:** Farz karein aap ki ek WordPress website pehle se aap ke apne office ya ghar ke physical server (On-premises data center) par chal rahi thi. Ab aap ne faisla kiya hai ke aap is website ko AWS Cloud (Amazon RDS) par shift (migrate) karenge. Is ke liye aap ko apne office ke MySQL database se saara data RDS database ke andar shift karna hoga.
+
+Yeh process har kisam ke database engine (Aurora, PostgreSQL, MySQL, MariaDB, Oracle, Microsoft SQL Server) ke liye taqreeban ek jaisa hi rehta hai.
+
+---
+
+### On-Premises se RDS mein Database Import karne ke 4 Main Steps
+
+1. **Database Export:** Pehle purane database se saara data nikal kar ek `.sql` file (Dump file) banao.
+2. **Virtual Machine Launch:** Same AWS Region aur Same VPC ke andar ek EC2 Virtual Machine chalao jahan aap ka RDS database chal raha hai.
+3. **Dump File Upload:** Us `.sql` file ko apni local machine se us EC2 Virtual Machine par upload karo.
+4. **RDS mein Import Execute:** EC2 Virtual Machine ke andar se command chala kar RDS database ke andar data import kar do.
+
+---
+
+## Exporting a MySQL database
+
+MySQL (aur baaqi tamaam database systems) data ko export aur import karne ke liye built-in tools dete hain. Hum mashwera dete hain ke database ko export/import karne ke liye **MySQL Command-Line Tools** ka istemal kiya jaye. Is ke liye aap ke system par MySQL client install hona chahiye, jis ke sath `mysqldump` naam ka tool aata hai.
+
+### 1. Tamaam Databases Export Karne Ki Command
+
+```bash
+mysqldump -u $UserName -p --all-databases > dump.sql
+
+```
+
+#### Command Breakdown:
+
+* **`mysqldump`:** Yeh MySQL ka wo tool hai jo database ke tamam tables, schema, aur data ki SQL file banata hai.
+* **`-u $UserName`:** Yeh database ke Admin User ka naam dene ke liye use hota hai (jaise `-u root` ya `-u admin`).
+* **`-p`:** Yeh terminal se keh raha hai ke command run hone ke baad user se Password maango.
+* **`--all-databases`:** Yeh flag database engine ke andar maujood tamaam databases ko ek sath export kar deta hai.
+* **`>` (Redirection Operator):** Yeh operator terminal par output dikhane ke bajaye tamam data ko ek file mein bhej deta hai.
+* **`dump.sql`:** Us output file ka naam jahan saara data save ho raha hai.
+
+---
+
+### 2. Kisi Ek Specific Database Ko Export Karne Ki Command
+
+Agar aap poore server ke bajaye sirf kisi ek khas database (maslan `wordpress_db`) ko export karna chahte hain:
+
+```bash
+mysqldump -u $UserName -p $DatabaseName > dump.sql
+
+```
+
+#### Command Breakdown:
+
+* **`$DatabaseName`:** Yahan par aap us makhsoos database ka naam likhte hain jise aap export karna chahte hain (maslan `mysqldump -u root -p wordpress > dump.sql`).
+
+---
+
+### 3. Network Ke Zariye Remote Server Se Export Karne Ki Command
+
+Agar database aap ki apni machine par nahi balki kisi doosre server par chal raha hai:
+
+```bash
+mysqldump -u $UserName -p $DatabaseName --host $Host > dump.sql
+
+```
+
+#### Command Breakdown:
+
+* **`--host $Host`:** Yahan us remote server ka IP address ya Domain Name diya jata hai jahan database maujood hai (maslan `--host 192.168.1.50`).
+
+---
+
+### Design Decision & Latency Trade-off (Ahem Concept)
+
+Nazaaryati tor par (theoretically) aap apne ghar ya office ke computer se direct command chala kar AWS RDS mein data import kar sakte hain. Lekin **Internet ya VPN connection par Latency (Network Delay)** bohot ziada hoti hai.
+
+* **Direct Import via Internet:** Internet slow hone ki waja se hazaron SQL queries jane mein ghanton lag jayenge.
+* **EC2 Jump-box Solution (Recommended):** Is liye best practice yeh hai ke dump file ko pehle AWS ke andar maujood EC2 instance par upload kiya jaye, aur wahan se local AWS network ke zariye RDS mein import kiya jaye. AWS ke androoni network ki speed super-fast hoti hai, jiss se import seconds mein ho jata hai.
+
+---
+
+## AWS Database Migration Service (DMS)
+
+Agar aap ka database **bohot bada (terabytes mein)** hai aur aap chahte hain ke website ek second ke liye bhi band na ho (Minimal Downtime), toh AWS ka ek khas tool **AWS Database Migration Service (AWS DMS)** istemal hota hai. Yeh live database se continuously data read kar ke RDS mein sync karta rehta hai.
+
+---
+
+## WordPress Database Import Hands-On Practice
+
+Ab hum practical step-by-step tareeqay se ek tayar database dump ko RDS MySQL database mein import karenge:
+
+### Step 1: EC2 Instance (WordPress Server) Se Connect Hona
+
+Hum Session Manager ke zariye terminal kholenge:
+
+1. AWS Management Console mein **EC2** service open karein.
+2. Un do instances mein se kisi ek ko select karein jis ka naam `wordpress` hai.
+3. Upar **Connect** button par click karein.
+4. **Session Manager** tab select karein aur dobara **Connect** par click karein.
+
+---
+
+### Step 2: SSM User Ki Home Directory Mein Jaana
+
+Terminal khulne ke baad, sab se pehle directory change karein:
+
+```bash
+cd /home/ssm-user/
+
+```
+
+#### Command Breakdown:
+
+* **`cd` (Change Directory):** Folder badalney ki command.
+* **`/home/ssm-user/`:** AWS Session Manager ke default user (`ssm-user`) ka home folder.
+
+---
+
+### Step 3: Sample Database Dump Download Karna
+
+Hum ne pehle se ek WordPress blog ka sample database dump (jis mein posts aur comments shamil hain) S3 bucket par rakha hua hai. Isay download karne ke liye yeh command chalayein:
+
+```bash
+wget https://s3.amazonaws.com/awsinaction-code3/chapter10/wordpress-import.sql
+
+```
+
+#### Command Breakdown:
+
+* **`wget`:** Internet se file download karne ka Linux tool.
+* **`[https://s3.amazonaws](https://s3.amazonaws).../wordpress-import.sql`:** S3 Bucket par pari SQL dump file ka link.
+
+---
+
+### Step 4: Local Machine Se RDS Endpoint Pata Karna
+
+Apne local terminal par yeh command chala kar RDS ka Endpoint address haasil karein:
+
+```bash
+aws rds describe-db-instances --query "DBInstances[0].Endpoint"
+
+```
+
+* Output mein aap ko `Address` milega (maslan: `wdtq7tf5caejft.cd0o57zo3ohr.us-east-1.rds.amazonaws.com`).
+
+---
+
+### Step 5: Dump File Ko RDS Database Mein Import Karna
+
+Ab EC2 terminal (Session Manager) par wapis aakar yeh command chalayein. **`$DBAddress`** ki jagah apna nikaala hua RDS Address likhein:
+
+```bash
+mysql --host $DBAddress --user wordpress -p < wordpress-import.sql
+
+```
+
+When prompted for password, enter: `wordpress`
+
+#### Command Breakdown:
+
+* **`mysql`:** MySQL Database Client tool jo database se connect hone ke liye use hota hai.
+* **`--host $DBAddress`:** RDS database ka DNS address (destination path).
+* **`--user wordpress`:** Master Username jo hum ne stack banate waqt rakha tha.
+* **`-p`:** System aap se password maangega (Password enter karte waqt screen par characters dikhai nahi denge, enter daba dein).
+* **`<` (Input Redirection Operator):** Yeh operator `wordpress-import.sql` file ke saare SQL commands ko ek ek karke RDS database ke andar feed (run) kar deta hai.
+
+---
+
+### Step 6: WordPress Website Par Data Verify Karna
+
+Database import hone ke baad, jab aap browser mein WordPress website kholein ge toh aap ko naye blog posts aur comments dikhai denge!
+
+Website ka URL wapis hasil karne ke liye apne local machine terminal par yeh command chalaayein:
+
+```bash
+aws cloudformation describe-stacks --stack-name wordpress --query "Stacks[0].Outputs[0].OutputValue" --output text
+
+```
+
+#### Command Breakdown:
+
+* **`aws cloudformation describe-stacks`:** Stack ki details check karne ki command.
+* **`--stack-name wordpress`:** Stack ka naam.
+* **`--query "Stacks[0].Outputs[0].OutputValue"`:** Output URL ko extract karne ke liye filtering.
+* **`--output text`:** Response ko plain text format mein display karne ke liye flag.
+
+---
