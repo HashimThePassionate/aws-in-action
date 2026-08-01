@@ -422,3 +422,345 @@ Aap ko yeh **Business Decision** lena padega ke aap ka business kis cheez ko bar
 
 
 ---
+
+
+## Building a fault-tolerant web application: Imagery
+
+Pehle is se pehle ke hum **Imagery** naam ki fault-tolerant application ki architecture aur design shuru karein, aaein aasaan alfaz mein samajhte hain ke yeh application asal mein karegi kya:
+
+1. User apni koi bhi aam photo (raw image) upload karega.
+2. System us image par **Sepia Filter** (vintage/brownish purana effect) apply karega taake photo khoobsoorat lagay.
+3. User us sepia photo ko dekh aur download kar sakega.
+
+* **Figure 16.7 Ka Hawala Aur Breakdown:**
+
+<div align="center">
+  <img src="./images/07.png" width="600"/>
+</div>
+
+`Figure 16.7` mein is process ko **Synchronous** tareeqay se dikhaya gaya hai:
+* User request bhejta hai aur image upload karta hai.
+* Web server request ke dauran hi filter apply karta hai aur response mein sepia image wapas bhejta hai.
+* **Sab Se Bada Masla:** Yeh process **Synchronous** hai. Agar image process hone ke dauran web server crash ho jaye, toh user ki tasveer zaya ho jaye gi. Is ke ilawa jab aik sath bohot saare users app use karenge, toh server par bojh barh jaye ga, system slow ho jaye ga ya crash ho jaye ga.
+
+
+
+Is maslay ko hal karne ke liye hum is process ko **Asynchronous** banayein ge.
+
+* **Figure 16.8 Ka Hawala Aur Breakdown:**
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+`Figure 16.8` mein SQS Queue ke zariye **Asynchronous Decoupling** ka bunyadi usool dikhaya gaya hai:
+* **Message Producers** (Web servers) request ko **SQS Queue** ke pichle hisse (Queue tail) mein daalte hain.
+* **Message Consumers** (Worker machines) SQS Queue ke aglay hisse (Queue head) se messages utha kar azaadana tareeqay se process karti hain.
+
+
+
+### Asynchronous Process Kaise Kaam Karta Hai?
+
+Jab process asynchronous hota hai, toh har kaam par nazar rakhna zaroori hota hai. Is ke liye hum har process ko aik **Unique Identifier (Process ID)** dete hain.
+
+* **Figure 16.9 Ka Hawala Aur Step-by-Step Breakdown:**
+
+<div align="center">
+  <img src="./images/09.png" width="600"/>
+</div>
+
+`Figure 16.9` mein asynchronous process ke 5 steps ko do hisson (User aur Worker) mein baanta gaya hai:
+1. **1. Create (User):** User sab se pehle image process create karta hai aur usay aik Unique ID milti hai.
+2. **2. Upload (User):** Us Unique ID ke sath user apni raw image upload karta hai.
+3. **3. Process (Worker):** Background mein **Worker** us job ko uthata hai aur image par sepia filter apply karta hai.
+4. **4. Wait (User):** Jab tak background mein worker kaam kar raha hota hai, user us Unique ID ke zariye status check karta hai (wait karta hai).
+5. **5. View (User):** Jaise hi processing 100% khatam hoti hai, lookup request user ko final sepia image dikha deti hai.
+
+
+
+### Process Ko AWS Services Par Map Karna
+
+Ab hum is asynchronous process ko AWS ki services par map karenge. Kyunki AWS ki aksar services by default fault-tolerant hain, hum unka bharpoor faida uthayein ge.
+
+* **Figure 16.10 Ka Hawala Aur AWS Service Breakdown:**
+
+<div align="center">
+  <img src="./images/10.png" width="600"/>
+</div>
+
+`Figure 16.10` mein poora system AWS services ke sath joda gaya hai:
+1. **1. Create:** User Unique ID ke sath process create karta hai. Yeh entry **DynamoDB** table mein save hoti hai.
+2. **2. Upload:** Process ID ka istemal karke user raw image ko **Amazon S3** bucket mein upload karta hai. S3 ki key DynamoDB mein update hoti hai aur **SQS Queue** mein aik message trigger hota hai.
+3. **3. Process:** Aik **EC2 instance (Worker)** SQS message ko consume karta hai, S3 se raw image download karta hai, sepia filter apply karta hai, aur new sepia image ko dobara S3 mein upload kar deta hai. Phir DynamoDB mein state ko `"processed"` set kar deta hai.
+4. **4. Wait:** User DynamoDB se continuous polling karke state change hone ka intizar karta hai.
+5. **5. View:** State `"processed"` hote hi user S3 se sepia image hasil kar leta hai.
+
+
+
+Tamam actions **REST API** ke zariye accessible honge jo EC2 instances par chal rahe honge. EC2 instances by default fault-tolerant nahi hotay, is liye hum **Idempotent State Machine** ka istemal karenge.
+
+### Example is 100% covered by the Free Tier
+
+Yeh poora chapter project **AWS Free Tier** ke andar aata hai. Agar aap ka AWS account naya hai aur aap 2-3 din ke andar practice mukammal karke resources delete kar dete hain, toh aap ko aik rupeya bhi pay nahi karna parega.
+
+---
+
+## The idempotent state machine
+
+"Idempotent State Machine" ka naam sun kar ghabrana nahi hai! Yeh Imagery application ka **dil (heart)** hai. Aaein isay bilkul aasaan alfaz mein samajhte hain.
+
+### THE FINITE STATE MACHINE
+
+Finite State Machine ko aap aik seedhi (ladder) ya game ke levels ki tarah samjhne ki koshish karein:
+
+* Is mein kam az kam aik **Start State** (shuruat) aur aik **End State** (aakhir) hoti hai.
+* In ke darmiyan baqi states aur un ke darmiyan aage barhne ke raste (**Transitions**) tay hotay hain.
+
+*Misaal:* `(A) -> (B) -> (C)`
+Is ka matlab hai aap A se B par ja sakte hain, B se C par ja sakte hain. Lekin aap A se seedha C par nahi phand sakte, na hi B se wapas A par aa sakte hain.
+
+#### Imagery Application Ki State Machine:
+
+$$\text{(Created)} \longrightarrow \text{(Uploaded)} \longrightarrow \text{(Processed)}$$
+
+1. **Created:** Naya process bana.
+2. **Uploaded:** Raw image S3 par upload hui. Is transition ke liye hum $uploaded(s3Key)$ function chalate hain.
+3. **Processed:** Sepia image S3 par save hui. Is transition ke liye hum $processed(s3Key)$ function chalate hain.
+
+> **Ghaor Talab Baat:** State machine ko is se koi lene dena nahi ke 10% image upload hui hai ya 30% filter apply hua hai. Isay sirf is baat se matlab hai ke kaam **100% Complete** hua hai ya nahi.
+
+---
+
+### IDEMPOTENT STATE TRANSITIONS
+
+Idempotent State Transition ka matlab hai ke **kisi transition ko chahe 1 baar chalao ya 100 baar, natija hamesha aik hi nikle**. Agar transition idempotent ho, toh failure aane par hum bina kisi dar ke poori transition ko dobara **Retry** kar sakte hain.
+
+#### Pseudocode 1: Non-Idempotent Transition (Kharab Code)
+
+```javascript
+uploaded(s3Key) {
+ process = DynamoDB.getItem(processId)
+ if (process.state !== 'Created') {
+   throw new Error('transition not allowed')
+ }
+ DynamoDB.updateItem(processId, {'state': 'Uploaded', 'rawS3Key': s3Key})
+ SQS.sendMessage({'processId': processId, 'action': 'process'});
+}
+
+```
+
+* **Masla:** Farz karein pehli baar code chala, `DynamoDB.updateItem` kamyab ho gaya lekin `SQS.sendMessage` network issue ki wajah se fail ho gaya.
+* Phir system ne **Retry** kiya. Retry par jab code dubara chala, toh `process.state` pehle hi `'Uploaded'` ho chuka hai. Code `if (process.state !== 'Created')` par aakar ruk jaye ga aur `"transition not allowed"` ka error phenk dega! Target SQS message kabhi bhej hi nahi payega.
+
+#### Pseudocode 2: Idempotent Transition Fix (Behtar Code)
+
+```javascript
+uploaded(s3Key) {
+ process = DynamoDB.getItem(processId)
+ if (process.state !== 'Created' && process.state !== 'Uploaded') {
+   throw new Error('transition not allowed')
+ }
+ DynamoDB.updateItem(processId, {'state': 'Uploaded', 'rawS3Key': s3Key})
+ SQS.sendMessage({'processId': processId, 'action': 'process'});
+}
+
+```
+
+* **Yeh Kyun Kamyab Hai?:** Ab hum ne `if` condition mein `'Uploaded'` state ko bhi allow kar diya hai. Agar pehli baar DynamoDB update hone ke baad system crash hua tha, toh retry karne par error nahi aayega balkey code aage barh kar SQS message bhej dega! DynamoDB par dobara update hone se koi nuksan nahi hoga.
+
+#### Pseudocode 3: DynamoDB Conditional Update (Professional Solution)
+
+Puraane code mein aik masla yeh tha ke wo pehle `getItem` karta tha aur phir `updateItem`. Is beech mein kisi doosre process ne state badal di toh panga ho sakta hai. DynamoDB atomic conditional updates support karta hai, jisse hum poori logic ko aik single DB request mein samet sakte hain:
+
+```javascript
+uploaded(s3Key) {
+ process = DynamoDB.getItem(processId)
+ DynamoDB.updateItem(processId, {
+   'state': 'Uploaded',
+   'rawS3Key': s3Key,
+   condition: 'NOT state IN(Created, Uploaded)'
+ })
+ SQS.sendMessage({'processId': processId, 'action': 'process'});
+}
+
+```
+
+* **Aasaan Samjh:** DynamoDB khud hi pehle check karega ke agar state `Created` ya `Uploaded` ke alawa koi aur hai toh error de, warna aik hi jatke mein item update kar de.
+
+---
+
+## Implementing a fault-tolerant web service
+
+Imagery application ko do (2) mukhya hisson mein baanta gaya hai:
+
+1. **Web Servers:** Jo user ko REST API ki sahulat dete hain.
+2. **Workers:** Jo background mein images ko process karte hain.
+
+* **Figure 16.11 Ka Hawala Aur Breakdown:**
+`Figure 16.11` mein architecture ke do mukhya hisse dikhaye gaye hain:
+* **User** Application Load Balancer (**ALB**) ke zariye **Web servers** se connect hota hai (jo REST API aur static assets provide karte hain).
+* Web servers **SQS queue** mein task bhejte hain jahan se **Workers** (EC2 instances) tasks utha kar images process karte hain.
+
+
+
+---
+
+### Where is the code located?
+
+Is book ka tamaam code official GitHub repository par majood hai:
+`[https://github.com/AWSinAction/code3](https://github.com/AWSinAction/code3)` -> Folder: `/chapter16/`.
+
+#### Web Server Ki REST API Routes Table:
+
+| HTTP Method | Route Endpoint | Description / Maqsad |
+| --- | --- | --- |
+| **POST** | `/image` | Image processing ka aik naya process create karta hai. |
+| **GET** | `/image/:id` | Specific ID wale process ki maujuda state wapas karta hai. |
+| **POST** | `/image/:id/upload` | Specific process ID ke liye file upload ki sahulat deta hai. |
+
+---
+
+### SETTING UP THE WEB SERVER PROJECT
+
+Web server banane ke liye hum **Node.js** aur **Express framework** ka istemal karenge.
+
+#### Listing 16.1 Initializing the Imagery server (`server/server.js`)
+
+```javascript
+const express = require('express');
+const bodyParser = require('body-parser');
+const AWS = require('aws-sdk');
+const { v4: uuidv4 } = require('uuid');
+const multiparty = require('multiparty');
+
+const db = new AWS.DynamoDB({});
+const sqs = new AWS.SQS({});
+const s3 = new AWS.S3({});
+
+const app = express();
+app.use(bodyParser.json());
+
+// [...]
+
+app.listen(process.env.PORT || 8080, function() {
+  console.log('Server started. Open http://localhost:' 
+    + (process.env.PORT || 8080) + ' with browser.');
+});
+
+```
+
+#### Code Ki Line-By-Line Detail Explanation:
+
+* `const express = require('express');`: Express web framework ko project mein import karta hai taake HTTP routes banaye ja sakein.
+* `const bodyParser = require('body-parser');`: Incoming JSON request bodies ko parse karne ke liye middleware import karta hai.
+* `const AWS = require('aws-sdk');`: Official AWS SDK import karta hai taake AWS services se communicate kiya ja sake.
+* `const { v4: uuidv4 } = require('uuid');`: Unique IDs generate karne ke liye UUID library v4 import karta hai.
+* `const multiparty = require('multiparty');`: Multipart form data (file uploads) ko handle karne wali library load karta hai.
+* `const db = new AWS.DynamoDB({});`: DynamoDB service se rabtay ke liye client object tayar karta hai.
+* `const sqs = new AWS.SQS({});`: SQS queue service ka client object create karta hai.
+* `const s3 = new AWS.S3({});`: Amazon S3 storage service ka client object create karta hai.
+* `const app = express();`: Express application ka aik instance banata hai.
+* `app.use(bodyParser.json());`: Express ko bolta hai ke aane waali tamaam Requests ki JSON body ko automatically read aur parse kare.
+* `app.listen(process.env.PORT || 8080, ...)`: Web server ko port 8080 (ya environment variable PORT) par start karta hai aur terminal par message print karta hai.
+
+---
+
+### CREATING A NEW IMAGERY PROCESS
+
+Naya process banane ke liye Node.js application Load Balancer ke pichay EC2 instances par chalay gi aur data DynamoDB mein store hoga.
+
+* **Figure 16.12 Ka Hawala Aur Step-by-Step Breakdown:**
+`Figure 16.12` mein `POST /image` request ka pura flow dikhaya gaya hai:
+1. User `POST /image` request bhejta hai.
+2. **ALB (Application Load Balancer)** request ko kisi aik healthy EC2 instance par bhejtay hain.
+3. EC2 instance par chalne wala **Node.js code** execute hota hai aur Unique UUID banata hai.
+4. Code **DynamoDB table** mein naya item add karta hai aur user ko Process ID wapas lauta deta hai.
+
+
+
+#### Listing 16.2 Creating an image process with `POST /image`
+
+```javascript
+app.post('/image', function(request, response) {
+  const id = uuidv4();
+  db.putItem({
+    'Item': {
+      'id': {
+        'S': id
+      },
+      'version': {
+        'N': '0'
+      },
+      'created': {
+        'N': Date.now().toString()
+      },
+      'state': {
+        'S': 'created'
+      }
+    },
+    'TableName': 'imagery-image',
+    'ConditionExpression': 'attribute_not_exists(id)'
+  }, function(err, data) {
+    if (err) {
+      throw err;
+    } else {
+      response.json({'id': id, 'state': 'created'});
+    }
+  });
+});
+
+```
+
+#### Code Ki Line-By-Line Detail Explanation:
+
+* `app.post('/image', function(request, response) {`: `/image` path par HTTP POST request ke liye route handler register karta hai.
+* `const id = uuidv4();`: Naye image process ke liye aik bilkul unique random UUID (`id`) generate karta hai.
+* `db.putItem({`: DynamoDB table mein naya record (Item) daalne ke liye method call karta hai.
+* `'id': { 'S': id }`: Process ID ko String (`S`) format mein DynamoDB ki Primary Key set karta hai.
+* `'version': { 'N': '0' }`: Version number ko Number (`N`) format mein `'0'` set karta hai (jo Optimistic Locking ke liye istemal hoga).
+* `'created': { 'N': Date.now().toString() }`: Process banne ka current timestamp Store karta hai.
+* `'state': { 'S': 'created' }`: Initial state ko String format mein `'created'` set karta hai.
+* `'TableName': 'imagery-image'`: Target DynamoDB table ka naam batata hai.
+* `'ConditionExpression': 'attribute_not_exists(id)'`: **Ahem Security Check!** Agar yeh ID pehle se DB mein majood ho toh insertion roak deta hai taake data overwrite na ho.
+* `if (err) { throw err; }`: Agar DynamoDB mein write karte hue koi masla aaye toh error throw karta hai.
+* `else { response.json({'id': id, 'state': 'created'}); }`: Kamyabi par user ko JSON response bhejta hai jismein Process ID aur state hoti hai.
+
+---
+
+### Optimistic locking
+
+Data ko ek hi waqt mein do mukhtalif jagaho se overwrite hone se bachane ke liye hum **Optimistic Locking** ka istemal karte hain.
+
+#### Bacho Ki Tarah Aasaan Misaal:
+
+Maan lijiye do dost (Ali aur Bilal) aik hi notebook ke page par likhna chahte hain.
+
+1. Notebook ke page par likha hai **"Version 0"**.
+2. Ali aur Bilal dono ne page par "Version 0" dekha.
+3. Ali ne apna sentence likha aur page ka version badal kar **"Version 1"** kar diya aur notebook band kar di.
+4. Ab Bilal "Version 0" samajh kar likhne laga, lekin system ne dekh liya ke ab toh page "Version 1" ban chuka hai! System Bilal ko roak dega ke *"Ruko! Aap purane version par kaam kar rahe thay, pehle naya version parho!"*
+5. Bilal **Retry** karega, naya Version 1 parhega aur phir apna update karega.
+
+#### Optimistic Locking vs Pessimistic Locking:
+
+```
++-------------------------------------------------------------------------------------------------+
+|                                    LOCKING STRATEGIES COMPARISON                                |
++------------------------------------+------------------------------------------------------------+
+| Optimistic Locking                 | Pessimistic Locking                                        |
++------------------------------------+------------------------------------------------------------+
+| • Assume karta hai ke conflict     | • Assume karta hai ke conflict ZAROOR aayega.              |
+|   bohot kam aayega.                |                                                            |
+| • Pehle koi lock nahi lagata,      | • Data touch karne se pehle poore record ko Lock           |
+|   sirf Version match karta hai.    |   (Semaphore) kar deta hai.                                |
+| • Conflict aane par RETRY karta    | • Doosre processes ko wait karna parhta hai jab tak        |
+|   hai.                             |   lock khule na.                                           |
+| • Low-concurrency ke liye best hai.| • High-concurrency write heavy systems ke liye hota hai.   |
++------------------------------------+------------------------------------------------------------+
+
+```
+
+Imagery application mein ek item par bohot zyada concurrent writes nahi hote, is liye **Optimistic Locking** sab se best choice hai!
+
+
+----
