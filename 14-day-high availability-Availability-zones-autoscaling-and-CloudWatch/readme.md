@@ -1483,4 +1483,145 @@ aws ec2 describe-availability-zones --region us-east-1
 ----
 
 
+## Architecting for high availability
+
+Pehle is se pehle ke aap AWS par High Availability (HA) ya Fault-Tolerant systems banana shuru karein, aap ko apne karobar (business) ki **Disaster-Recovery (aafat se bachne ki) zarooriyat** ka tajziya (analysis) karna chahiye.
+
+Cloud mein disaster recovery purane zamaane ke traditional data centers ki nisbat bohat aasan aur sasti hai. Lekin system ko Highly Available banane se uski complexity (mushkilat) barh jati hai, jis se shuruaati kharcha (initial cost) aur chalane ka kharcha (operating cost) dono barh jaate hain.
+
+Karobar (business) ke nuqte-nazar se Disaster Recovery ki ehammiyat ko naapne ke liye 2 standard metrics istemal hote hain:
+
+1. **RTO (Recovery Time Objective)**
+2. **RPO (Recovery Point Objective)**
+
+---
+
+### 1. Recovery Time Objective (RTO) Kya Hai?
+
+**RTO** woh waqt (duration) hai jo kisi system ko kharab hone ke baad dobara pehle ki tarah sahi chalne mein lagta hai. Simple lafzon mein: **"Downtime kitna lamba raha?"**
+
+* **Aasan Misaal:** Jenkins server ke mamlay mein, jab machine ya poora availability zone baith jata hai, toh naye Virtual Machine ke launch hone, Jenkins ke install hone, aur service ke wapas online aane mein jo **10 minute** lagte hain, woh aap ka **RTO** hai.
+
+---
+
+### 2. Recovery Point Objective (RPO) Kya Hai?
+
+**RPO** data ke zaya (loss) hone ka woh waqt hai jo karobar bardasht kar sakta hai. Isay waqt (time) mein naapa jata hai. Simple lafzon mein: **"Aafat aane par aap ka data kitna piche (purana) chala gaya?"**
+
+* **Aasan Misaal 1:** Agar subah 10:00 baje system crash ho jaye aur aap backup snapshot se data wapas layein jo subah 09:00 baje liya gaya tha, toh aap ka 1 ghante ka data zaya hua. Yahan **RPO = 1 Ghanta** hai.
+* **Aasan Misaal 2:** Auto Scaling ke sath EFS storage use karne wale Jenkins setup mein, data live EFS par save ho raha hota hai jo AZ outage par bhi zaya nahi hota. Is liye wahan **RPO = 0 (Zero)** hai.
+
+---
+
+### Figure 13.8 Analysis
+
+Referencing **Figure 13.8** (`image_c1883b.png`):
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+**Figure 13.8** RTO aur RPO ke darmeyan farq ko ek time-line ke zariye darshata hai:
+
+* **Last Backup:** Woh aakhri waqt jab data ka backup liya gaya tha.
+* **Failure (System Outage):** Jab system crash hua. Last Backup aur Failure ke darmeyan ka jo fasla hai woh **RPO** hai (yaani kitne waqt ka data zaya hua).
+* **Recovery:** Jab system dobara chal para. Failure aur Recovery ke darmeyan ka jo fasla hai woh **RTO** hai (yaani kitne waqt tak service band rahi).
+
+---
+
+## RTO and RPO comparison for a single EC2 instance
+
+Ek single EC2 instance ko Highly Available banane ke alag alag tareeqay hain. Sahi tareeqah chunne ke liye aap ko apne karobar ki zarooriyat dekhni hongi:
+
+* Kya aap ka karobar Data Center / AZ baithne par thodi der band rehna bardasht kar sakta hai? Agar haan, toh **CloudWatch Alarm Auto-Recovery** sab se aasan hal hai jahan koi data loss nahi hota.
+* Agar aap ke system ka AZ outage se bachna lazmi hai, toh **Autoscaling + EFS** sab se safe tareeqah hai (lekin EFS ki performance EBS se thodi mukhtalif hoti hai).
+
+Cloud mein koi ek aisa solution nahi hai jo har jagah fit aaye ("no one-size-fits-all"). Aap ko apne business maslay ke mutabaq sahi hal chunna padta hai.
+
+---
+
+### Table 13.2 Comparison of high availability for a single EC2 instance
+
+Neeche di gayi table tamam scenarios ke RTO, RPO, aur Availability ka muqabla karti hai:
+
+| Setup / Scenario | RTO | RPO | Availability |
+| --- | --- | --- | --- |
+| **EC2 instance, data stored on EBS root volume: recovery triggered by a CloudWatch alarm** | Taqreeban 10 minat | Koi data loss nahi (RPO = 0) | Virtual machine ke failure se recover kar leta hai lekin poori availability zone ke outage se nahi. |
+| **EC2 instance, data stored on EBS root volume: recovery triggered by autoscaling** | Taqreeban 10 minat | Sara data zaya (loss) ho jata hai | Virtual machine ke failure aur poori availability zone ke outage dono se recover kar leta hai. |
+| **EC2 instance, data stored on EBS root volume with regular snapshots: recovery triggered by autoscaling** | Taqreeban 10 minat | Snapshots ke liye realistic time span: 30 minat se 24 ghante ke darmiyan | Virtual machine ke failure aur poori availability zone ke outage dono se recover kar leta hai. |
+| **EC2 instance, data stored on EFS filesystem: recovery triggered by autoscaling** | Taqreeban 10 minat | Koi data loss nahi (RPO = 0) | Virtual machine ke failure aur poori availability zone ke outage dono se recover kar leta hai. |
+
+#### Table 13.2 Ka Deep Breakdown:
+
+1. **CloudWatch Alarm (Row 1):** Single AZ ke andar hardware fail hone par machine 10 minute mein wahi EBS volume attach karke recover ho jati hai (Zero Data Loss). Lekin agar poora AZ doob jaye toh yeh kaam nahi karega.
+2. **Autoscaling + Plain EBS (Row 2):** AZ outage par Auto Scaling doosre AZ mein naye blank disk ke sath machine khari kar dega (10 min RTO), lekin purana sara data lost ho jayega.
+3. **Autoscaling + EBS Snapshots (Row 3):** Outage hone par naye AZ mein aakhri EBS snapshot se disk bana li jaye gi. Data sirf utna lose hoga jitna purana snapshot tha (30 min se 24 ghante).
+4. **Autoscaling + EFS (Row 4):** Sab se best setup! AZ outage par machine doosre AZ mein launch hoti hai aur wahi EFS network drive dobara connect kar leti hai. Zero Data Loss aur Full Multi-AZ Recovery!
+
+---
+
+### Stateless Server Strategy
+
+Agar aap AZ Outage se bachna chahte hain aur RPO ko zero ke kareeb lana chahte hain, toh aap ko apne server ko **Stateless** (yaani bina local state wala) banana chahiye. Server ka sara data managed storage services mein rakhein jaise:
+
+* **RDS** (Databases ke liye)
+* **EFS** (Network Filesystem ke liye)
+* **S3** (Files & Objects ke liye)
+* **DynamoDB** (Fast NoSQL ke liye)
+
+---
+
+## AWS services come with different high availability guarantees
+
+AWS ki tamam services ek jaisi nahi hoti. Kuch services **by default** pehle se High Available ya Fault-Tolerant hoti hain, jabke kuch services humein "Building Blocks" deti hain jinhein jor kar humein khud HA system banana padta hai.
+
+---
+
+### Figure 13.9 Analysis
+
+Referencing **Figure 13.9** (`image_c18819.png`):
+
+<div align="center">
+  <img src="./images/09.png" width="600"/>
+</div>
+
+**Figure 13.9** batata hai ke konsi AWS service kis level par High Availability deti hai:
+
+1. **Global Level (Multiple Regions):**
+* **Route 53 (DNS)** aur **CloudFront (CDN)** poori duniya ke tamaam regions aur edge locations par chalte hain. Yeh default taur par highly available aur fault-tolerant hote hain.
+
+
+2. **Region Level (Multi-AZ by Default):**
+* **S3** (Object Store), **EFS** (Network Filesystem), aur **DynamoDB** (NoSQL Database) ek region ke tamaam Availability Zones mein data ko automatically copy (replicate) rakhte hain. Is liye yeh data center outage se khud hi bach jaate hain.
+
+
+3. **Regional Failover (Multi-AZ Setup):**
+* **RDS (Relational Database Service):** Multi-AZ deployment option ke sath Primary-Standby setup banata hai. Agar AZ 1 wala main database fail ho jaye, toh auto-failover ho kar AZ 2 wala Standby database active ho jata hai.
+
+
+4. **Single Availability Zone Level:**
+* **EC2 Virtual Machines:** Single EC2 instance sirf ek hi Availability Zone mein chalta hai. Multi-AZ recovery ke liye humein **Auto Scaling** ka zariya istemal karna padta hai.
+
+
+
+---
+
+### Service-Level Agreements (SLA) Aur SLO
+
+Cloud architecture banate waqt AWS ki taraf se di gayi **SLA (Service-Level Agreement)** aur **SLO (Service-Level Objective)** ko dekhna zaroori hai. SLA yeh batata hai ke AWS kitne percent uptime ki qanooni guarantee deta hai (jaise 99.9% ya 99.99%). AWS documentation mein har service ke resilience aur SLA specifications maujood hote hain.
+
+---
+
+## Summary
+
+* **Virtual Machine Failures:** Ek Virtual Machine tab fail hoti hai jab piche maujood physical hardware ya virtualization layer crash ho jaye.
+* **CloudWatch Alarm Recovery:** Aap CloudWatch alarm ke zariye failed virtual machine ko recover kar sakte hain. Default taur par EBS volume ka data, Private IP, aur Public IP wahi rehta hai.
+* **Availability Zones (AZs):** AWS Region azad data centers ke giroh se mil kar banta hai jinhein Availability Zones kehte hain.
+* **Multi-AZ Recovery:** Multiple availability zones ka istemal kar ke poore data center outage se bacha ja sakta hai.
+* **Autoscaling Role:** Auto Scaling group failed Virtual Machine ko replace kar deta hai, chahe poora data center hi kyun na baith jaye. Iske do main maslay (pitfalls) yeh hain ke EBS volume direct doosre AZ mein access nahi hota aur IP address change ho jata hai.
+* **Storage Challenges:** EBS volumes par rakha data doosre AZ mein recover karna mushkil hota hai; is liye RDS, EFS, S3, ya DynamoDB jaise managed services istemal kiye jaate hain.
+* **AWS Service Behavior:** Kuch AWS services default taur par multiple availability zones istemal karti hain, jabke virtual machines (EC2) sirf single availability zone mein chalti hain.
+
+
+----
 
