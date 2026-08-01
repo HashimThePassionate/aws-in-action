@@ -760,3 +760,685 @@ node index.js task-add emma "put out the garbage" "housekeeping" --dueat "202202
 
 
 ---
+
+## Retrieving data
+
+Aap ne pehle yeh seekha ke DynamoDB ki alag alag tables mein Users aur Tasks ka data kaise insert (save) kiya jata hai. Ab hum seekhenge ke us data ko wapas kaise nikala (query/read) jata hai—maslan, Emma ke tamam tasks ki list dekhna.
+
+DynamoDB ek **Key-Value Store** hai. Is tarah ke database se data nikalne ka sab se aam aur main tarika us item ki **Key** istemal karna hai. Is limitation ko samajhna tabhi zaroori hota hai jab aap table design kar rahe hote hain. Agar aap sirf primary key se data dhoond sakte hain, toh aage chal kar aap ko maslay aa sakte hain.
+
+Khush-qismati se, DynamoDB humein data dhoondne ke **2 mazeed tarike** bhi deta hai:
+
+1. **Secondary Index Lookup** (Doosri key ke zariye search karna)
+2. **Scan Operation** (Poori table ko ek ek karke dekhna)
+
+Hum shuruat Primary Key ke zariye data retrieve karne se karenge aur phir aage advanced tarikon ko seekhenge.
+
+---
+
+### DynamoDB Streams
+
+**DynamoDB Streams kya hai? (Bacho ki tarah samjhein):**
+Socho aap ki class mein ek monitor baitha hai. Jab bhi koi bacha blackboard par koi naya labz likhta hai, mitaata hai, ya badalta hai, monitor fauran apni notebook mein record kar leta hai ke *"Aap ne yeh change kiya hai!"*
+
+DynamoDB Streams bilkul wahi kaam karta hai:
+
+* Jab bhi table mein koi naya data aata hai (`create`), update hota hai, ya delete hota hai, DynamoDB Stream us ki ek khabar (event) record kar leta hai.
+* Yeh tamam changes usi tartiib (order) mein deta hai jis tartiib mein wo Partition Key par aaye the.
+
+#### DynamoDB Streams Ke 2 Barray Faide:
+
+1. **Polling Se Nijat:** Agar aap ki app baar baar database se poochti rehti thi ke *"Kya naya data aaya? Kya naya data aaya?"* (jise Polling kehte hain), toh DynamoDB Streams is masley ko bohot khubsurati se hal karta hai. Data badalte hi app ko automatic pata chal jata hai.
+2. **Cache Ko Update Karna:** Agar aap ne fast speed ke liye koi Cache (jaise Redis) lagaya hua hai, toh table mein data change hote hi DynamoDB Streams ke zariye Cache ko fauran updated rakha ja sakta hai.
+
+---
+
+## Getting an item by key
+
+Aaiye ek bilkul simple misal se shuru karte hain. Aap Emma ki contact details dekhna chahte hain jo `todo-user` table mein store hain.
+
+Data retrieve karne ka sab se simple tarika yeh hai ke aap us item ki **Primary Key** (User ID) batayein aur DynamoDB se us single item ki tafseel maang lein. SDK ka **`getItem`** operation is kaam ke liye istemal hota hai.
+
+---
+
+### Listing 12.7 DynamoDB: Query a single item (index.js)
+
+```javascript
+const params = {
+  Key: { // Primary key ke attributes ko specify karta hai
+    attr1: {S: 'val1'}
+  },
+  TableName: 'app-entity'
+};
+db.getItem(params, (err, data) => { // DynamoDB par getItem operation ko invoke karta hai
+  if (err) {
+    console.error('error', err);
+  } else {
+    if (data.Item) { // Check karta hai ke item mila ya nahi
+      console.log('item', data.Item);
+    } else {
+      console.error('no item found');
+    }
+  }
+});
+
+```
+
+#### Code Breakdown:
+
+* **`const params = { ... };`**
+* `getItem` request ke parameters setup karta hai.
+
+
+* **`Key: { attr1: {S: 'val1'} }`**
+* Target item ki Primary Key batata hai. `attr1` attribute ki value `'val1'` hai aur type String (`S`) hai.
+
+
+* **`TableName: 'app-entity'`**
+* Us table ka naam jisse data retrieve karna hai.
+
+
+* **`db.getItem(params, (err, data) => { ... });`**
+* DynamoDB ko `getItem` request bhejta hai.
+
+
+* **`if (err)`**
+* Agar network issue ya koi error aaye toh error print karega.
+
+
+* **`if (data.Item)`**
+* Agar key table mein mil gayi, toh DynamoDB `data.Item` mein wo record wapas bhejta hai.
+
+
+* **`else { console.error('no item found'); }`**
+* Agar us primary key se koi record match nahi hua, toh `data.Item` empty (`undefined`) hota hai aur code "no item found" print karta hai.
+
+
+
+---
+
+### Listing 12.8 nodetodo: Retrieving a user (index.js)
+
+`user <uid>` command user ki ID ke zariye uski mukammal details fetch karti hai.
+
+```javascript
+const mapUserItem = (item) => { // DynamoDB result ko transform karne ke liye helper function
+  return {
+    uid: item.uid.S,
+    email: item.email.S,
+    phone: item.phone.S
+  };
+};
+
+if (input['user'] === true) {
+  const params = {
+    Key: {
+      uid: {S: input['<uid>']} // Primary key ke zariye user ko talaash karta hai
+    },
+    TableName: 'todo-user' // User table ko specify karta hai
+  };
+  db.getItem(params, (err, data) => { // DynamoDB par getItem operation ko invoke karta hai
+    if (err) {
+      console.error('error', err);
+    } else {
+      if (data.Item) { // Check karta hai ke primary key ke liye data mila ya nahi
+        console.log('user', mapUserItem(data.Item));
+      } else {
+        console.error('user not found');
+      }
+    }
+  });
+}
+
+```
+
+#### Code Breakdown:
+
+* **`const mapUserItem = (item) => { ... }`**
+* Yeh ek chota helper function hai. DynamoDB ka raw output complex hota hai (jaise `{ uid: { S: 'emma' } }`). Yeh function us complex structure ko clean JavaScript Object (`{ uid: 'emma', email: '...', phone: '...' }`) mein convert kar deta hai.
+
+
+* **`if (input['user'] === true)`**
+* Check karta hai ke kya user ne CLI par `user <uid>` command chalai hai.
+
+
+* **`Key: { uid: {S: input['<uid>']} }`**
+* Command line par di gayi User ID (`<uid>`) ko Partition Key ke tor par pass karta hai.
+
+
+* **`TableName: 'todo-user'`**
+* Target table set karta hai.
+
+
+* **`db.getItem(...)`**
+* DynamoDB se query karta hai. Agar Emma mil jaye toh `mapUserItem` function us ka data clean format mein print kar deta hai.
+
+
+
+#### Execution Command Example:
+
+Emma ki details nikalne ke liye terminal par yeh command chalayein:
+
+```bash
+node index.js user emma
+
+```
+
+> **Mahaam Note:** Agar aap kisi aisi table se single item fetch karna chahte hain jis mein Composite Primary Key (**Partition Key + Sort Key**) ho, toh `getItem` mein aap ko dono keys deni padengi. `getItem` hamesha **sirf ek item (1 item ya 0 item)** wapas karta hai. Agar aap ek se zyada items (collection) nikalna chahte hain, toh aap ko `query` operation istemal karna padega!
+
+---
+
+## Querying items by key and filter
+
+Emma apne to-do tasks dekhna chahti hai. Is ke liye hum `todo-task` table ko query karenge taake Emma ko assign kiye gaye **tamam tasks** mil sakein.
+
+Agar aap single item ke bajaye items ka ek poora group/collection nikalna chahte hain, toh aap ko **`query`** operation chalana padta hai. Multi-item retrieval tabhi possible hota hai jab aap ki table mein **Partition Key aur Sort Key dono** hon.
+
+---
+
+### Listing 12.9 DynamoDB: Querying a table
+
+```javascript
+const params = {
+  KeyConditionExpression: 'attr1 = :attr1val AND attr2 = :attr2val',
+  ExpressionAttributeValues: {
+    ':attr1val': {S: 'val1'},
+    ':attr2val': {N: '2'}
+  },
+  TableName: 'app-entity'
+};
+db.query(params, (err, data) => { // DynamoDB par query operation ko invoke karta hai
+  if (err) {
+    console.error('error', err);
+  } else {
+    console.log('items', data.Items);
+  }
+});
+
+```
+
+#### Code Breakdown:
+
+* **`KeyConditionExpression: 'attr1 = :attr1val AND attr2 = :attr2val'`**
+* Yeh wo shart (condition) hai jiske mutabiq keys ko dhoonda jaye.
+* **Partition Key Rule:** Partition Key ke liye **sirf `=` (Equal)** operator use ho sakta hai.
+* **Sort Key Rule:** Sort Key ke liye aap `=`, `>`, `<`, `>=`, `<=`, `BETWEEN x AND y`, aur `begins_with` operators use kar sakte hain. Sort Key ke queries fast hotay hain kyun ke data pehle se sorted hota hai.
+
+
+* **`ExpressionAttributeValues`**
+* Expression ke andar placeholders (jaise `:attr1val`) ko actual values aur data types se replace karta hai (`:attr1val` = String `'val1'`, `:attr2val` = Number `2`).
+
+
+* **`db.query(...)`**
+* Operation run hone par `data.Items` (array of items) wapas milta hai.
+
+
+
+---
+
+### Listing 12.10 nodetodo: Retrieving tasks (index.js)
+
+Tasks nikalne se pehle do chote helper functions samjhein:
+
+```javascript
+const getValue = (attribute, type) => { // Optional attributes ko access karne ke liye helper function
+  if (attribute === undefined) {
+    return null;
+  }
+  return attribute[type];
+};
+
+const mapTaskItem = (item) => { // DynamoDB result ko transform karne ke liye helper function
+  return {
+    tid: item.tid.N,
+    description: item.description.S,
+    created: item.created.N,
+    due: getValue(item.due, 'N'),
+    category: getValue(item.category, 'S'),
+    completed: getValue(item.completed, 'N')
+  };
+};
+
+```
+
+#### Code Breakdown:
+
+* **`getValue(attribute, type)`:** DynamoDB mein optional attributes (jaise `due` date ya `category`) har task mein hona zaroori nahi hain. Agar attribute missing ho (`undefined`), toh yeh function application ko crash hone se bachata hai aur `null` return karta hai.
+* **`mapTaskItem(item)`:** Task item ke JSON structure ko simplified JavaScript Object mein convert karta hai.
+
+---
+
+### Listing 12.11 nodetodo: Retrieving tasks (index.js)
+
+Is listing mein `task-ls` command ka poora logic implement kiya gaya hai:
+
+```javascript
+if (input['task-ls'] === true) {
+  const yyyymmdd = moment().format('YYYYMMDD');
+  const params = {
+    KeyConditionExpression: 'uid = :uid', // Primary key query. Task table partition key aur sort key ka istemal karti hai. Query mein sirf partition key define ki gayi hai, is liye user se talluq rakhne wale tamam tasks wapas mil jate hain
+    ExpressionAttributeValues: {
+      ':uid': {S: input['<uid>']} // Query attributes ko is tareeqay se pass kiya jana chahiye
+    },
+    TableName: 'todo-task',
+    Limit: input['--limit']
+  };
+  if (input['--next'] !== null) {
+    params.KeyConditionExpression += ' AND tid > :next';
+    params.ExpressionAttributeValues[':next'] = {N: input['--next']};
+  }
+  if (input['--overdue'] === true) { // Filter attributes ko is tareeqay se pass kiya jana chahiye
+    params.FilterExpression = 'due < :yyyymmdd'; // Filtering kisi index ka istemal nahi karti; yeh primary key query se wapas milne wale tamam elements par apply hoti hai
+    params.ExpressionAttributeValues[':yyyymmdd'] = {N: yyyymmdd};
+  } else if (input['--due'] === true) {
+    params.FilterExpression = 'due = :yyyymmdd';
+    params.ExpressionAttributeValues[':yyyymmdd'] = {N: yyyymmdd};
+  } else if (input['--withoutdue'] === true) {
+    params.FilterExpression =
+      'attribute_not_exists(due)'; // attribute_not_exists(due) us waqt true hota hai jab attribute mojood na ho (attribute_exists ke bar aks)
+  } else if (input['--futuredue'] === true) {
+    params.FilterExpression = 'due > :yyyymmdd';
+    params.ExpressionAttributeValues[':yyyymmdd'] = {N: yyyymmdd};
+  } else if (input['--dueafter'] !== null) {
+    params.FilterExpression = 'due > :yyyymmdd';
+    params.ExpressionAttributeValues[':yyyymmdd'] =
+      {N: input['--dueafter']};
+  } else if (input['--duebefore'] !== null) {
+    params.FilterExpression = 'due < :yyyymmdd';
+    params.ExpressionAttributeValues[':yyyymmdd'] =
+      {N: input['--duebefore']};
+  }
+  if (input['<category>'] !== null) {
+    if (params.FilterExpression === undefined) {
+      params.FilterExpression = '';
+    } else {
+      params.FilterExpression += ' AND '; // Multiple filters ko logical operators ke sath combine kiya ja sakta hai
+    }
+    params.FilterExpression += 'category = :category';
+    params.ExpressionAttributeValues[':category'] =
+      {S: input['<category>']};
+  }
+  db.query(params, (err, data) => { // DynamoDB par query operation ko invoke karta hai
+    if (err) {
+      console.error('error', err);
+    } else {
+      console.log('tasks', data.Items.map(mapTaskItem));
+      if (data.LastEvaluatedKey !== undefined) {
+        console.log('more tasks available with --next=' +
+          data.LastEvaluatedKey.tid.N);
+      }
+    }
+  });
+}
+
+```
+
+#### Code Breakdown:
+
+* **`KeyConditionExpression: 'uid = :uid'`**
+* Chunke hum ne Sort Key (`tid`) par koi condition nahi lagai, is liye DynamoDB us specific User ID (`uid`) ke saare tasks fetch kar ke le aayega.
+
+
+* **Paging (`Limit` aur `ExclusiveStartKey / --next`):**
+* `params.Limit`: Ek waqt par kitne tasks laane hain.
+* `params.KeyConditionExpression += ' AND tid > :next'`: Paging ke liye aglay task par jane ki ID set karta hai.
+
+
+* **`FilterExpression` Logic (Bache Ki Tarah Samjhein):**
+* **Mahaam Concept:** `FilterExpression` kisi Index ka istemal **nahi** karta. Pehle DynamoDB Primary Key ki madad se tamam tasks memory mein lata hai, aur us ke baad un sab par Filters apply karta hai!
+* `--overdue`: Due date aaj ki date se purani ho (`due < :yyyymmdd`).
+* `--due`: Due date aaj hi ki date ho (`due = :yyyymmdd`).
+* `--withoutdue`: Task mein due date attribute set hi na ho (`attribute_not_exists(due)`).
+* `--futuredue`: Due date aane wale dino ki ho (`due > :yyyymmdd`).
+
+
+* **Category Combine Filter:**
+* Agar user ne category bhi select ki hai, toh code `AND category = :category` jod deta hai.
+
+
+* **`LastEvaluatedKey`:**
+* Agar tasks zyada hain, toh DynamoDB `data.LastEvaluatedKey` bhejta hai taake terminal par user ko agla page dekhne ki info di ja sake (`--next=...`).
+
+
+
+#### Command Example:
+
+Emma ke shopping wale tasks list karne ke liye:
+
+```bash
+node index.js task-ls emma shopping
+
+```
+
+---
+
+### Primary Key Querying Aur Filtering Ke 2 Barray Maslay (Trade-offs):
+
+1. **Filtering Slow Aur Expensive Hai:**
+* Filter lagane se pehle DynamoDB tamam primary key matching elements read karta hai.
+* *Stock Prices Example:* Farz karein DynamoDB mein Apple stock (`AAPL`) ke 5 saal ka data hai. Aap 2010 se 2015 ke sare prices query karte hain lekin filter lagate hain *"Only Mondays"*. DynamoDB pehle 100% data read karega aur phir us mein se 80% reject karke sirf 20% (Mondays) wapas karega. Is se aap ki read capacity (paisa) aur time zaya hota hai!
+
+
+2. **Aap Sirf Primary Key Par Query Kar Sakte Hain:**
+* Aap poori app se yeh nahi pooch sakte ke *"Tamam users ke shopping tasks dikhao"*, kyun ke `category` primary key nahi hai.
+
+
+
+Is masley ka hal **Secondary Indexes** hain!
+
+---
+
+## Using global secondary indexes for more flexible queries
+
+**Global Secondary Index (GSI) Kya Hai? (Bacho ki tarah samjhein):**
+Socho aap ke paas ek kitaab hai jis ke aakhir mein ek Index page hota hai. Kitaab ke aam pages User ID ke hisab se lage hain. Lekin Index page par Category ke hisab se sabhi topics listed hain.
+
+GSI bilkul wahi kaam karta hai! Yeh aap ki asal table ka ek **chota/shadow copy (Projection)** hota hai jisko DynamoDB khud background mein sambhalta hai.
+
+* **Non-Unique Keys:** GSI mein Primary key ki tarah unique hona lazmi nahi hai. Jaise ek `country` attribute par agar GSI banayein toh bohot se users ka country Same ("Pakistan") ho sakta hai.
+* **Asynchronous Updates:** Jab bhi aap original table mein koi data change karte hain, DynamoDB background mein GSI ko bhi update kar deta hai (**Eventually Consistent**).
+
+---
+
+### Figure 12.4 Detailed Breakdown
+
+Diye gaye **Figure 12.4** ko dekhein:
+
+```text
+               Original Task Table
+┌──────────┬─────┬──────────────────────┐
+│   uid    │ tid │ description,category │
+├──────────┼─────┼──────────────────────┤
+│ michael  │  1  │ ..., home            │
+│ michael  │  4  │ ..., work            │
+│ andreas  │  2  │ ..., home            │
+└──────────┴─────┴──────────────────────┘
+                   │
+                   │ (DynamoDB updates secondary index
+                   │  asynchronously on table changes)
+                   ▼
+             Secondary Index (GSI)
+┌──────────┬─────┬──────────────────────┐
+│ category │ tid │   description, uid   │
+├──────────┼─────┼──────────────────────┤
+│   home   │  1  │ ..., michael         │
+│   home   │  2  │ ..., andreas         │
+│   work   │  4  │ ..., michael         │
+└──────────┴─────┴──────────────────────┘
+
+```
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+* **Left Side (Task Table):** Primary Key `uid` (Partition Key) aur `tid` (Sort Key) se bani hai. Is table par Read aur Write dono kaam hotay hain.
+* **Right Side (Secondary Index):** Ab hum ne Partition Key `category` ko banaya aur Sort Key `tid` ko banaya. Is GSI par **sirf Read operations** hotay hain.
+* **Data Flow:** Asal table mein data "home" category ka store hua, DynamoDB ne aapas mein connect karke GSI mein categories ko ek sath group (home: tid 1, tid 2) karke arrange kar diya!
+
+#### GSI Ki Keemat (Cost & Trade-offs):
+
+GSI muft nahi milta!
+
+1. **Extra Storage Cost:** GSI storage ki jagah leta hai (utni hi cost jitni original table ki hoti hai).
+2. **Extra Write Capacity Units:** Original table mein data add karne par GSI mein bhi background write hota hai, is liye GSI ke liye alag se Write Capacity Units buy karni parti hain.
+
+---
+
+### Local Secondary Index (LSI)
+
+GSI ke ilawa DynamoDB mein **Local Secondary Index (LSI)** bhi hota hai:
+
+* LSI mein **Partition Key wahi rehni chahiye** jo table ki hoti hai (`uid`).
+* Aap sirf **Sort Key** ko badal sakte hain (jaise `tid` ki jagah `due` date ko sort key banana).
+* LSI alag capacity nahi leta, balki original table ki Read/Write capacity hi share karta hai.
+
+---
+
+## Creating and querying a global secondary index
+
+John shahhar ja raha hai aur usay Emma aur apna shopping list ek sath dekhna hai. Is ke liye hum `todo-task` table par **`category-index`** naam ka GSI banayenge.
+
+Is GSI ka structure:
+
+* **Partition Key:** `category`
+* **Sort Key:** `tid`
+
+### GSI Create Karne Ki AWS CLI Command:
+
+```bash
+aws dynamodb update-table --table-name todo-task \
+  --attribute-definitions AttributeName=uid,AttributeType=S \
+  AttributeName=tid,AttributeType=N \
+  AttributeName=category,AttributeType=S \
+  --global-secondary-index-updates '[{
+  "Create": {
+  "IndexName": "category-index",
+  "KeySchema": [{"AttributeName": "category", "KeyType": "HASH"},
+  {"AttributeName": "tid", "KeyType": "RANGE"}],
+  "Projection": {"ProjectionType": "ALL"},
+  "ProvisionedThroughput": {"ReadCapacityUnits": 5, "WriteCapacityUnits": 5}
+  }}]'
+
+```
+
+#### Command Breakdown:
+
+* **`update-table`:** Pehle se bani `todo-task` table ko modify kar raha hai.
+* **`AttributeName=category,AttributeType=S`:** `category` ko naye string attribute ke tor par declare kar raha hai.
+* **`IndexName: "category-index"`:** GSI ka naam rakha gaya.
+* **`KeySchema`:** `category` ko `HASH` (Partition Key) aur `tid` ko `RANGE` (Sort Key) set kiya.
+* **`Projection: {"ProjectionType": "ALL"}`:** Table ke tamam attributes ko Index mein copy (project) karne ka hukam diya.
+* **`ProvisionedThroughput`:** GSI ke liye separate 5 Read / 5 Write capacity units assign ki gain.
+
+Index banne mein taqriban **5 minutes** lagte hain. Status check karne ke liye yeh command chalayein:
+
+```bash
+aws dynamodb describe-table --table-name=todo-task --query "Table.GlobalSecondaryIndexes"
+
+```
+
+---
+
+### Listing 12.12 nodetodo: Retrieving tasks from a global secondary index (index.js)
+
+`task-la` command GSI ko query karke kisi khas category ke sabhi tasks list karti hai.
+
+```javascript
+if (input['task-la'] === true) {
+  const yyyymmdd = moment().format('YYYYMMDD');
+  const params = {
+    KeyConditionExpression: 'category = :category', // Index ke khilaf query karna waise hi kaam karta hai jaise table ke khilaf query karna...
+    ExpressionAttributeValues: {
+      ':category': {S: input['<category>']}
+    },
+    TableName: 'todo-task',
+    IndexName: 'category-index', // ...lekin aap ko woh index specify karna lazmi hai jo aap istemal karna chahte hain
+    Limit: input['--limit']
+  };
+  if (input['--next'] !== null) {
+    params.KeyConditionExpression += ' AND tid > :next';
+    params.ExpressionAttributeValues[':next'] = {N: input['--next']};
+  }
+  if (input['--overdue'] === true) {
+    params.FilterExpression = 'due < :yyyymmdd';
+    params.ExpressionAttributeValues[':yyyymmdd'] = {N: yyyymmdd}; // Filtering waise hi kaam karti hai jaise tables ke sath hoti hai
+  }
+  // [...]
+  db.query(params, (err, data) => {
+    if (err) {
+      console.error('error', err);
+    } else {
+      console.log('tasks', data.Items.map(mapTaskItem));
+      if (data.LastEvaluatedKey !== undefined) {
+        console.log('more tasks available with --next=' +
+          data.LastEvaluatedKey.tid.N);
+      }
+    }
+  });
+}
+
+```
+
+#### Code Breakdown:
+
+* **`IndexName: 'category-index'` (Sab Se Main Point):**
+* Table query karne aur GSI query karne ke code mein sirf ek hi bada farq hota hai: Aap ko `IndexName` parameter mein batana padta hai ke aap Table par query nahi kar rahe, balki **GSI (`category-index`)** par query kar rahe hain.
+
+
+* **`KeyConditionExpression: 'category = :category'`**
+* Ab Query User ID par nahi, balki Category par ho rahi hai.
+
+
+
+#### Execution Command Example:
+
+Shopping category ke sare users ke tasks list karne ke liye run karein:
+
+```bash
+node index.js task-la shopping
+
+```
+
+---
+
+## Scanning and filtering all of your table’s data
+
+Pura data nikalne ka ek situation aisa hota hai jahan aap ke paas koi key nahi hoti aur aap ko poori table ka ek ek item parhna padta hai. Is operation ko **`scan`** kehte hain.
+
+Scan bilkul bhi efficient nahi hai, lekin aam taur par daily batch jobs ya rare administrative requests ke liye yeh istemal hota hai.
+
+---
+
+### Listing 12.13 DynamoDB: Scan through all items in a table
+
+```javascript
+const params = {
+  TableName: 'app-entity',
+  Limit: 50 // Wapas karne ke liye items ki ziyada se ziyada tadad specify karta hai
+};
+db.scan(params, (err, data) => { // DynamoDB par scan operation ko invoke karta hai
+  if (err) {
+    console.error('error', err);
+  } else {
+    console.log('items', data.Items);
+    if (data.LastEvaluatedKey !== undefined) { // Yeh check karta hai ke mazeed items mojood hain jinhein scan kiya ja sake
+      console.log('more items available');
+    }
+  }
+});
+
+```
+
+#### Code Breakdown:
+
+* **`db.scan(params, ...)`**: Key condition ke bager poori table ko pehli line se aakhir tak read karta hai.
+* **`Limit: 50`**: Ek bar mein max 50 items laaye ga taake memory overflow na ho.
+
+---
+
+### Listing 12.14 nodetodo: Retrieving all users with paging (index.js)
+
+`user-ls` command sabhi users ki list dikhane ke liye `scan` istemal karti hai:
+
+```javascript
+if (input['user-ls'] === true) {
+  const params = {
+    TableName: 'todo-user',
+    Limit: input['--limit'] // Wapas milne wale items ki ziyada se ziyada tadad
+  };
+  if (input['--next'] !== null) {
+    params.ExclusiveStartKey = {
+      uid: {S: input['--next']} // Named parameter next mein aakhri evaluated key hoti hai
+    };
+  }
+  db.scan(params, (err, data) => { // DynamoDB par scan operation ko invoke karta hai
+    if (err) {
+      console.error('error', err);
+    } else {
+      console.log('users', data.Items.map(mapUserItem));
+      if (data.LastEvaluatedKey !== undefined) { // Yeh check karta hai ke aakhri item tak pohanch gaye hain ya nahi
+        console.log('page with --next=' + data.LastEvaluatedKey.uid.S);
+      }
+    }
+  });
+}
+
+```
+
+#### Code Breakdown:
+
+* **`params.ExclusiveStartKey`**: Page break ke liye last scan ki gayi User ID pass ki jati hai taake agli baar scan wahan se aage shuru ho.
+* **`LastEvaluatedKey`**: Agar data mazeed baki ho toh aglay page ki key batata hai.
+
+#### Execution Command Example:
+
+Subhi users ko fetch karne ke liye command run karein:
+
+```bash
+node index.js user-ls
+
+```
+
+> **Warning:** Scan operation ko zyada use mat karein. Yeh flexible toh hai lekin aap ke AWS bill ko bohot tezi se barha deta hai!
+
+---
+
+## Eventually consistent data retrieval
+
+Default taur par, DynamoDB se data read karna **Eventually Consistent** hota hai.
+
+**Eventually Consistent Kya Hota Hai? (Bacho Ki Tarah Samjhein):**
+Farz karein aap ne apni class ke aik dost (Machine 1) ko bataya ke *"Mera naya phone number 123 hai"*. Abhi us ne doosre dost (Machine 2) ko yeh baat nahi batayi.
+
+Agar koi teesra bacha fauran Machine 2 se poocha ga, toh usay purana number hi milega. Lekin 1 second baad jab Machine 1 sab ko update kar dega, toh sab ke paas naya number aajaye ga. Is late synchronization ko **Eventually Consistent** kehte hain.
+
+---
+
+### Figure 12.5 Detailed Breakdown
+
+Diye gaye **Figure 12.5** ko dekhein:
+
+```text
+Machine 2  │ [Item v1] ────────────── Eventually consistent ─────────────► [Item v2]
+           │                                 ▲
+Machine 1  │ [Item v1] ───► [Item v2] ───────┤
+           └─────────────────────────────────┴──────────────────────────────────────►
+ Time ────►  Write item     Update item     Read item                   Read item
+             (Version 1)    (Version 2)    (Returns Version 1!)        (Returns Version 2)
+
+```
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+* **Step 1:** Data Version 1 save hua.
+* **Step 2:** User ne Machine 1 par data update karke Version 2 kar diya.
+* **Step 3 (Immediate Read):** User ne fauran read request bheji. Request Machine 2 ke paas gayi (jis ke paas abhi tak sync nahi hua tha). Machine 2 ne **Purana Data (Version 1)** wapas bhej diya!
+* **Step 4 (Later Read):** Kuch milliseconds baad jab background synchronization mukammal ho gayi, toh dobara read karne par **Naya Data (Version 2)** mil gaya.
+
+---
+
+### Strongly Consistent Reads
+
+Agar aap chahte hain ke hamesha *latest update* hi mile, toh aap request mein `"ConsistentRead": true` add kar sakte hain. Isay **Strongly Consistent Read** kehte hain.
+
+#### Consistent Reads Ke Trade-offs:
+
+* **getItem, query, scan** par Strongly Consistent Read mil sakta hai.
+* **Mehanga & Slow:** Strongly Consistent Read zyada Read Capacity Units consume karta hai aur thoda slow hota hai.
+* **GSI Limitation:** Global Secondary Index (GSI) se read hamesha **Eventually Consistent** hi hota hai, us par Strongly Consistent Read kaam nahi karta.
+
+---
+
+### DynamoDB Transactions (`TransactWriteItems` / `TransactGetItems`)
+
+Aam taur par NoSQL databases mein ACID Transactions nahi hoti. Lekin DynamoDB aap ko **Transactions** ki sahoolat deta hai:
+
+* **`TransactWriteItems`**: Multiple write requests ko ek group mein bundle karta hai (jaise Bank Transfer: Ek account se paise deduct hon aur doosre mein add hon—dono ek sath honge ya dono fail honge).
+* **`TransactGetItems`**: Multiple read requests ko group karta hai.
+* **Pabandi:** Aap reads aur writes ko aapas mein mix nahi kar sakte.
+* **Trade-off:** Transactions bohot mehangi hoti hain aur latency (time) barhati hain, is liye jab tak bohot zaroori na ho unhein avoid karna chahiye.
+
+---
