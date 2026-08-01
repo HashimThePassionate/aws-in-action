@@ -521,3 +521,269 @@ Writer batata hai ke CodeDeploy **Blue-Green deployments** ko bhi support karta 
 
 
 ---
+
+## Rolling update with AWS CloudFormation and user data
+
+**CloudFormation** ek **Infrastructure as Code (IaC)** tool hai jise AWS resources ko automated tareeqay se manage karne ke liye design kiya gaya hai. Is ke alawa, aap CloudFormation ko Auto Scaling group mein EC2 instances ke **rolling update** ko orchestrate (manage) karne ke liye bhi istemal kar sakte hain.
+
+In-place update ke muqable mein, **rolling update** mein users ke liye **zero downtime** hota hai (yaani app ek second ke liye bhi band nahi hoti).
+
+> **Bacho ki tarah samajhne wali baat:**
+> Sochiyay aap ki ek dukan hai jise aap ne renovate karna hai.
+> * **In-place update:** Aap dukan ka shutter gira kar andar kaam karte hain, jisse customers wapas chale jatay hain (downtime).
+> * **Rolling update:** Aap barabar mein ek nayi dukan kholte hain, naya samaan wahan shift karte hain, customers ko wahan bhejna shuru karte hain, aur phir purani dukan ko band kar dete hain. Customer ko pata bhi nahi chalta ke peeche kya badla!
+> 
+> 
+
+Hum yeh rolling update wala tareeqa tab istemal karte hain jab humari Virtual Machines **disposable** (kisi bhi waqt delete hone wali) hon. Yaani jab humari application local disk ya memory mein koi data permanent save na karti ho.
+For example: **WordPress, Jenkins**, ya web scrape karne wale custom worker scripts.
+
+---
+
+### Process Breakdown & Figure 15.3 Detailed Breakdown
+
+Figure 15.3 mein CloudFormation aur user data ke zariye hone wale rolling update ko step-by-step samjhaya gaya hai:
+
+<div align="center">
+  <img src="./images/02.png" width="600"/>
+</div>
+
+1. **Updates stack:** Engineer CloudFormation stack ka update initiate (shuru) karta hai.
+2. **Orchestrates rolling update:** CloudFormation Auto Scaling group ko nayi machine launch karne ka hukam deta hai.
+3. **Launches EC2 instance:** Auto Scaling group updated launch template ke mutabiq ek **nayi EC2 instance** launch karta hai, jis mein naya deployment script hota hai.
+4. **Fetches and executes User data:** Nayi EC2 instance boot (start) hotay hi user data script ko fetch aur run karti hai.
+5. **Fetches Source code:** User data script **GitHub** se source code fetch karti hai, `settings.json` file banati hai, aur Etherpad application ko start kar deti hai.
+6. **Terminates old EC2 instance:** Jab nayi instance sahi tarah chal padti hai aur CloudFormation ko signal mil jata hai, toh Auto Scaling group **purani EC2 instance ko terminate (delete)** kar deta hai.
+
+---
+
+### Deploying Etherpad via CloudFormation
+
+Etherpad ko deploy karne ke liye pehle terminal par yeh command chalayein:
+
+```bash
+aws cloudformation deploy --stack-name etherpad-cloudformation \
+  --template-file chapter15/cloudformation.yaml \
+  --parameter-overrides EtherpadVersion=1.8.17 \
+  --capabilities CAPABILITY_IAM
+
+```
+
+##### Command Breakdown:
+
+* **`aws cloudformation deploy`**: CloudFormation stack create ya update karne ki command.
+* **`--stack-name etherpad-cloudformation`**: Stack ko `etherpad-cloudformation` ka naam deta hai.
+* **`--template-file chapter15/cloudformation.yaml`**: Local system par maujood YAML template file.
+* **`--parameter-overrides EtherpadVersion=1.8.17`**: Template ko batata hai ke Etherpad ka kaun sa version (`1.8.17`) install karna hai.
+* **`--capabilities CAPABILITY_IAM`**: AWS ko IAM roles create karne ki permission deta hai.
+
+Is command ko complete hone aur stack create hone mein taqriban **10 minute** lagen ge. Stack create hone ke baad app ka URL haasil karne ke liye yeh command run karein:
+
+```bash
+aws cloudformation describe-stacks --stack-name etherpad-cloudformation \
+  --query "Stacks[0].Outputs[0].OutputValue" --output text
+
+```
+
+Is URL ko browser mein kholein, ek naya pad banayein, aur settings icon par click karke version check karein. Version **`c85ab49`** hoga, jo ke v1.8.17 ka latest Git commit ID hai.
+
+---
+
+#### Listing 15.4 Adding a bash script to the user data
+
+CloudFormation template (`chapter15/cloudformation.yaml`) ka yeh hissa dikhata hai ke EC2 instance boot hote hi user data script kaise chalata hai:
+
+```yaml
+# [...]
+LaunchTemplate: # Auto Scaling group EC2 instances launch karte waqt launch template ko aik blueprint ke taur par istemal karta hai
+  Type: 'AWS::EC2::LaunchTemplate'
+  Properties:
+    LaunchTemplateData:
+      # [...]
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI] # Maujuda region par munhasir Amazon Linux 2 AMI ko select karta hai
+      InstanceType: 't2.micro' # Free Tier ke liye qabil-e-amal instance type ko select karta hai
+      UserData: # Yahan jadoo hota hai: yahan define ki gayi user data runtime ke doran EC2 instance ke zariye accessible hoti hai
+        'Fn::Base64': !Sub |
+          #!/bin/bash -ex
+          trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} \
+          --resource AutoScalingGroup --region ${AWS::Region}' ERR # Agar koi bhi step fail ho jaye, toh script abort ho jayegi aur cfn-signal ko call kar ke CloudFormation ko notify karegi
+          
+          # Install nodejs and git
+          curl -fsSL https://rpm.nodesource.com/setup_14.x | bash -
+          yum install -y nodejs git
+          
+          # Fetch, configure, and start Etherpad as non-root user
+          su ec2-user -c '
+          cd /home/ec2-user/
+          git clone --depth 1 --branch ${EtherpadVersion} \
+            https://github.com/AWSInAction/etherpad-lite.git # GitHub repository se Etherpad ko fetch karta hai
+          cd etherpad-lite/
+          echo "
+          {
+            \"title\": \"Etherpad\",
+            \"dbType\": \"mysql\",
+            \"dbSettings\": {
+              \"host\": \"${Database.Endpoint.Address}\",
+              \"port\": \"3306\",
+              \"database\": \"etherpad\",
+              \"user\": \"etherpad\",
+              \"password\": \"etherpad\"
+            },
+            \"exposeVersion\": true
+          }
+          " > settings.json # Database host name par mushtamil Etherpad ke liye aik settings file create karta hai
+          ./src/bin/run.sh &' # Etherpad ko start karta hai
+          
+          /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} \
+            --resource AutoScalingGroup --region ${AWS::Region} # Kamyab deployment ke baray mein CloudFormation ko notify karta hai
+# [...]
+
+```
+
+##### Detailed Code Breakdown:
+
+1. **`LaunchTemplate:`**: EC2 instance launch karne ka blueprint/map.
+2. **`ImageId: !FindInMap [...]`**: Region ke hisab se sahi Amazon Linux 2 AMI select karta hai.
+3. **`InstanceType: 't2.micro'`**: Free Tier mein aane wali basic instance type.
+4. **`UserData: 'Fn::Base64': !Sub |`**: User data script ko Base64 encoding mein convert karta hai aur variables ko inject karne ki permission deta hai.
+5. **`#!/bin/bash -ex`**: Shell script header (`-e` error aane par ruko, `-x` har command print karo).
+6. **`trap '... cfn-signal -e 1 ...' ERR`**: **(Bacho ki tarah samajhein)** Yeh ek guard-dog ki tarah hai. Agar script mein koi bhi error aati hai (`ERR`), toh yeh foran CloudFormation ko paigham bhejta hai ke `-e 1` (Error Code 1) hua hai, deployment fail ho gaya hai.
+7. **`curl ... | bash -` aur `yum install -y nodejs git**`: Node.js package repository add karke runtime dependencies (Node.js aur Git) install karta hai.
+8. **`su ec2-user -c '...'`**: Security ke liye root (admin) account ke bajaye aam user (`ec2-user`) ban kar aglay commands chalata hai.
+9. **`git clone --depth 1 --branch ${EtherpadVersion} ...`**: GitHub se required version ka code download karta hai.
+10. **`echo "{...}" > settings.json`**: RDS Database host endpoint (`${Database.Endpoint.Address}`) ke sath configuration file generate karta hai.
+11. **`./src/bin/run.sh &`**: Application ko background mein execute karta hai.
+12. **`/opt/aws/bin/cfn-signal -e 0 ...`**: CloudFormation ko paigham bhejta hai ke `-e 0` (Exit Code 0 = Everything Success), deployment successfully mukammal ho gayi hai!
+
+---
+
+### User Data Deployment Summary
+
+Yeh deployment 4 steps mein kaam karti hai:
+
+1. Launch template EC2 instance launch karte waqt user data script attach karta hai.
+2. Auto Scaling group Amazon Linux 2 image se EC2 instance chalata hai.
+3. Server boot hone ke bilkul aakhri step par EC2 user data wala bash script run karta hai.
+4. Bash script Etherpad ko GitHub se lata hai, configure karta hai, aur start kar deta hai.
+
+> **Important Note:** User data script **sirf pehli baar boot hone par (first boot only)** chalta hai. Is liye agar server restart ho jaye, toh yeh script dobara nahi chalega. Services ko restart karne ke liye is script par depend na karein!
+
+---
+
+## Debugging a user data script
+
+Agar aap ka user data script fail ho jaye ya sahi kaam na kar raha ho, toh debug karne ke liye:
+
+1. **AWS Systems Manager (SSM) Session Manager** ke zariye EC2 instance se connect karein.
+2. Termial par log file check karein jahan user data script ke saare outputs save hote hain:
+
+```bash
+less /var/log/cloud-init-output.log
+
+```
+
+---
+
+#### Listing 15.5 Updating the Auto Scaling group or the referenced launch template
+
+Jab hum Etherpad ko v1.8.17 se v1.8.18 par update karte hain, toh CloudFormation ka Auto Scaling Group aur UpdatePolicy yeh kaam sambhalti hai:
+
+```yaml
+AutoScalingGroup:
+  Type: 'AWS::AutoScaling::AutoScalingGroup' # Yeh resource Auto Scaling group ko define karta hai
+  Properties:
+    TargetGroupARNs:
+      - !Ref LoadBalancerTargetGroup
+    LaunchTemplate:
+      LaunchTemplateId: !Ref LaunchTemplate
+      Version: !GetAtt 'LaunchTemplate.LatestVersionNumber' # Hum ne jo launch template pehle dekha tha usay refer karta hai
+    MinSize: '1' # Etherpad clustering ko support nahi karta; is liye hum aik single machine launch kar rahe hain
+    MaxSize: '2' # Zero-downtime deployments enable karne ke liye, hamein deployment process ke doran doosri machine launch karni parti hai
+    HealthCheckGracePeriod: 300
+    HealthCheckType: ELB
+    VPCZoneIdentifier:
+      - !Ref SubnetA
+      - !Ref SubnetB
+    Tags:
+      - PropagateAtLaunch: true
+        Value: etherpad
+        Key: Name
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: 'PT10M' # Auto Scaling group 10 minutes ke andar EC2 instance launch hone ka success signal expect karta hai (user data script mein cfn-signal dekhein)
+    UpdatePolicy: # Update policy launch template mein tabdeeliyon ki soorat mein CloudFormation ke behavior ko specify karti hai
+      AutoScalingRollingUpdate: # Yahan jadoo hota hai: rolling update ki configuration
+        PauseTime: PT10M
+        WaitOnResourceSignals: true # Auto Scaling group EC2 instance ki taraf se signal ka intezar karta hai
+        MinInstancesInService: 1 # Yeh yakeeni banata hai ke zero downtime deployment ko ensure karne ke liye update ke doran instance up aur running ho
+
+```
+
+##### Detailed Code Breakdown:
+
+* **`TargetGroupARNs`**: Load Balancer ke Target Group ka reference deta hai.
+* **`Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'`**: Hamesha Launch Template ke sab se naye version ko pick karta hai.
+* **`MinSize: '1'` & `MaxSize: '2'**`:
+* **Trade-off:** Etherpad clustering support nahi karta, is liye normal waqt mein `MinSize: 1` rahega.
+* Deployment ke dauran `MaxSize: 2` allow karta hai taake zero-downtime rolling update ke liye doosri nayi machine chal sake.
+
+
+* **`HealthCheckGracePeriod: 300`**: Nayi machine ko start hone aur app set up karne ke liye 300 seconds (5 minute) deta hai, is se pehle ELB use unhealthy mark nahi karega.
+* **`CreationPolicy / ResourceSignal / Timeout: 'PT10M'`**: Instance banne par 10 minutes tak `cfn-signal` ka intezar karta hai.
+* **`UpdatePolicy / AutoScalingRollingUpdate`**:
+* **`PauseTime: PT10M`**: Suspend time limit 10 minutes.
+* **`WaitOnResourceSignals: true`**: Nayi machine se `cfn-signal -e 0` milne tak purani machine ko nahi maarta.
+* **`MinInstancesInService: 1`**: Update ke dauran kam az kam 1 machine hamesha running rahe gi taake users ko downtime ka samna na karna pare.
+
+
+
+---
+
+### Step-by-Step Update Execution (v1.8.17 to v1.8.18)
+
+Etherpad ko v1.8.18 par update karne ke liye terminal par yeh command run karein:
+
+```bash
+aws cloudformation deploy --stack-name etherpad-cloudformation \
+  --template-file cloudformation.yaml \
+  --parameter-overrides EtherpadVersion=1.8.18 \
+  --capabilities CAPABILITY_IAM
+
+```
+
+#### Backstage Sequence:
+
+1. CloudFormation ek nayi EC2 instance chalaye ga.
+2. Nayi EC2 instance user data ke zariye v1.8.18 download kare gi aur run kare gi.
+3. Nayi instance CloudFormation ko success signal (`cfn-signal`) bheje gi.
+4. CloudFormation purani v1.8.17 wali instance ko delete/terminate kar dega.
+
+Update hone ke baad browser mein URL refresh karein aur version check karein. Ab commit ID **`4b96ff6`** hoga. Congratulations! Aap ne bina kisi downtime ke naya version deploy kar liya hai.
+
+---
+
+## Cleaning up
+
+Practical khatam hone ke baad apne AWS account se CloudFormation stack aur resources delete karne ke liye yeh command run karein:
+
+```bash
+aws cloudformation delete-stack --stack-name etherpad-cloudformation
+
+```
+
+---
+
+### Architectural Flaw & Trade-off (Limitations of User Data)
+
+Writer ek bohot aham architectural khami (flaw) ki taraf ishara karta hai:
+
+Base OS image (jaise Amazon Linux 2) se EC2 instance chala kar user data script par poora deployment chorna **100% reliable (qabil-e-itmaad) nahi hai**.
+
+* **Kyun?** User data script run hotay waqt agar internet par mojood koi external dependency down ho jaye (jaise GitHub down ho jaye ya Node.js/RPM repository responsive na ho), toh script fail ho jaye gi aur aap ki EC2 instance launch nahi ho paye gi.
+
+#### Agla Solution (Preview):
+
+Is risk ko khatam karne ke liye hum aglay section mein **Custom AMIs (using Packer)** banana seekhein ge. Jis mein hum pehle se sab kuch (Node.js, Etherpad source code, dependencies) install karke image tayyar kar lete hain. Is se external dependencies khatam ho jati hain aur EC2 instance ka boot time bhi bohot fast ho jata hai.
+
+
+---

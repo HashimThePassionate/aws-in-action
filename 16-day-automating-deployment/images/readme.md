@@ -1,1 +1,0 @@
-# Automating deployment: CodeDeploy, CloudFormation, and Packer
