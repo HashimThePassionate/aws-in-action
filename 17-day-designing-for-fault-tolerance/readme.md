@@ -597,6 +597,11 @@ Imagery application ko do (2) mukhya hisson mein baanta gaya hai:
 2. **Workers:** Jo background mein images ko process karte hain.
 
 * **Figure 16.11 Ka Hawala Aur Breakdown:**
+
+<div align="center">
+  <img src="./images/11.png" width="600"/>
+</div>
+
 `Figure 16.11` mein architecture ke do mukhya hisse dikhaye gaye hain:
 * **User** Application Load Balancer (**ALB**) ke zariye **Web servers** se connect hota hai (jo REST API aur static assets provide karte hain).
 * Web servers **SQS queue** mein task bhejte hain jahan se **Workers** (EC2 instances) tasks utha kar images process karte hain.
@@ -670,6 +675,11 @@ app.listen(process.env.PORT || 8080, function() {
 Naya process banane ke liye Node.js application Load Balancer ke pichay EC2 instances par chalay gi aur data DynamoDB mein store hoga.
 
 * **Figure 16.12 Ka Hawala Aur Step-by-Step Breakdown:**
+
+<div align="center">
+  <img src="./images/12.png" width="600"/>
+</div>
+
 `Figure 16.12` mein `POST /image` request ka pura flow dikhaya gaya hai:
 1. User `POST /image` request bhejta hai.
 2. **ALB (Application Load Balancer)** request ko kisi aik healthy EC2 instance par bhejtay hain.
@@ -761,6 +771,879 @@ Maan lijiye do dost (Ali aur Bilal) aik hi notebook ke page par likhna chahte ha
 ```
 
 Imagery application mein ek item par bohot zyada concurrent writes nahi hote, is liye **Optimistic Locking** sab se best choice hai!
+
+
+----
+
+
+## LOOKING UP AN IMAGERY PROCESS
+
+Jab user apni upload ki gayi image ka status (state) dekhna chahta hai, toh wo Express application ke route `GET /image/:id` par request bhejta hai. Express framework URL ke andar se `:id` ko nikaal kar `request.params.id` mein store kar leta hai.
+
+* **Figure 16.13 Ka Hawala Aur Breakdown:**
+* `Figure 16.13` mein `GET /image/:id` request ka poora flow dikhaya gaya hai:
+
+<div align="center">
+  <img src="./images/13.png" width="600"/>
+</div>
+
+
+1. **User** apne browser se `GET /image/:id` request bhejta hai.
+2. **ALB (Application Load Balancer)** is request ko Auto Scaling group mein majood kisi aik **EC2 instance** par forward kar deta hai.
+3. EC2 instance par chalne wala **Node.js code** execute hota hai.
+4. Node.js code **DynamoDB table** se us ID ke mutabiq item fetch (Get) karta hai aur user ko process ka current status wapas bhej deta hai.
+
+
+
+### Listing 16.3 GET /image/:id looks up an image process (server/server.js)
+
+```javascript
+const mapImage = function(item) {
+  return {
+    'id': item.id.S,
+    'version': parseInt(item.version.N, 10),
+    'state': item.state.S,
+    'rawS3Key': // [...]
+    'processedS3Key': // [...]
+    'processedImage': // [...]
+  };
+}; // DynamoDB result ko JavaScript object mein map karne ke liye helper function
+
+function getImage(id, cb) {
+  db.getItem({
+    'Key': {
+      'id': {
+        'S': id // id partition key hai
+      }
+    },
+    'TableName': 'imagery-image'
+  }, function(err, data) {
+    if (err) {
+      cb(err);
+    } else {
+      if (data.Item) {
+        cb(null, mapImage(data.Item));
+      } else {
+        cb(new Error('image not found'));
+      }
+    }
+  });
+}; // DynamoDB par getItem operation ko invoke karta hai
+
+app.get('/image/:id', function(request, response) { // Express ke sath route register karta hai
+  getImage(request.params.id, function(err, image) {
+    if (err) {
+      throw err;
+    } else {
+      response.json(image); // Image process ke sath response deta hai
+    }
+  });
+});
+
+```
+
+#### Code Detailed Breakdown:
+
+* `const mapImage = function(item) {`: DynamoDB se aane wale raw data format ko ek saaf aur aasaan JavaScript object mein convert karne ke liye helper function banaya gaya hai.
+* `'id': item.id.S,`: DynamoDB ke String (`S`) format se `id` nikaal kar assign karta hai.
+* `'version': parseInt(item.version.N, 10),`: DynamoDB ke Number (`N`) format wali string ko base-10 integer mein convert karta hai.
+* `'state': item.state.S,`: Process ki current state (jaise `'created'`, `'uploaded'`, ya `'processed'`) ko read karta hai.
+* `'rawS3Key'`, `'processedS3Key'`, `'processedImage'`: Raw image aur processed image ke S3 paths ko object mein extract karta hai.
+* `function getImage(id, cb) {`: DynamoDB se specific ID ka data laane ke liye reusable function hai.
+* `db.getItem({`: DynamoDB SDK ka `getItem` method call karke data read karne ki request bhejta hai.
+* `'Key': { 'id': { 'S': id } },`: Search karne ke liye Partition Key (`id`) batata hai.
+* `'TableName': 'imagery-image'`: DynamoDB ke table ka naam specify karta hai.
+* `if (err) { cb(err); }`: Agar DynamoDB read operation mein error aaye, toh callback ko error pass kar deta hai.
+* `if (data.Item) { cb(null, mapImage(data.Item)); }`: Agar record mil jaye, toh `mapImage` se clean karke data callback ko bhejta hai.
+* `else { cb(new Error('image not found')); }`: Agar ID DB mein na milay, toh `'image not found'` ka error deta hai.
+* `app.get('/image/:id', function(request, response) {`: Express mein GET route register karta hai jahan `:id` URL parameter hai.
+* `getImage(request.params.id, function(err, image) {`: URL se aane wali ID ko `getImage` function mein pass karta hai.
+* `if (err) { throw err; } else { response.json(image); }`: Error aane par throw karta hai, warna client ko JSON format mein image process ki detail return kar deta hai.
+
+---
+
+## UPLOADING AN IMAGE
+
+HTTP POST request ke zariye image upload karne ke poore amal ko **3 steps** mein baanta gaya hai:
+
+1. **Upload the raw image to S3:** Raw image ko Amazon S3 bucket mein upload karna.
+2. **Modify the item in DynamoDB:** DynamoDB mein record ka status aur version badalna.
+3. **Send an SQS message to trigger processing:** Image filter apply karne walay worker ko signal dene ke liye SQS queue mein message bhejna.
+
+* **Figure 16.14 Ka Hawala Aur Breakdown:**
+
+<div align="center">
+  <img src="./images/14.png" width="600"/>
+</div>
+
+`Figure 16.14` mein image upload ka poora flow step-by-step dikhaya gaya hai:
+1. **User** `POST /image/:id/upload` request bhejta hai.
+2. **ALB** request ko Auto Scaling group ke kisi **EC2 instance** par bhejta hai.
+3. **Node.js Code** execute hota hai aur original tasveer ko **Amazon S3 bucket** mein store karta hai.
+4. Tasveer S3 par save hote hi **DynamoDB table** mein process state update ho jati hai.
+5. State update hone ke baad **SQS queue** mein ek message bhej diya jata hai taake Worker ko pata chal sake ke nayi image process karni hai.
+
+
+
+### Listing 16.4 POST /image/:id/upload uploads an image (server/server.js)
+
+```javascript
+// S3 bucket ka naam environment variable ke taur par pass kiya jata hai (bucket chapter mein baad mein create ki jaye gi)
+function uploadImage(image, part, response) {
+  const raws3Key = 'upload/' + image.id + '-' // S3 object ke liye aik key create karta hai
+    + Date.now();
+  s3.putObject({ // Object upload karne ke liye S3 API ko call karta hai
+    'Bucket': process.env.ImageBucket,
+    'Key': raws3Key,
+    'Body': part, // Body uploaded stream of data hai
+    'ContentLength': part.byteCount
+  }, function(err, data) {
+    if (err) { /* [...] */ } else {
+      db.updateItem({ // Object ko update karne ke liye DynamoDB API ko call karta hai
+        'Key': {'id': {'S': image.id}},
+        'UpdateExpression': 'SET #s=:newState, ' // State, version, aur raw S3 key ko update karta hai
+          + 'version=:newVersion, raws3Key=:rawS3Key',
+        'ConditionExpression': 'attribute_exists(id) ' // Sirf tab update karta hai jab item mojood ho. Version expected version ke barabar ho, aur state ijazat shuda states mein se ho
+          + 'AND version=:oldVersion '
+          + 'AND #s IN (:stateCreated, :stateUploaded)',
+        'ExpressionAttributeNames': {'#s': 'state'},
+        'ExpressionAttributeValues': {
+          ':newState': {'S': 'uploaded'},
+          ':oldVersion': {'N': image.version.toString()},
+          ':newVersion': {'N': (image.version + 1).toString()},
+          ':rawS3Key': {'S': raws3Key},
+          ':stateCreated': {'S': 'created'},
+          ':stateUploaded': {'S': 'uploaded'}
+        },
+        'ReturnValues': 'ALL_NEW',
+        'TableName': 'imagery-image'
+      }, function(err, data) {
+        if (err) { /* [...] */ } else {
+          sqs.sendMessage({ // Message publish karne ke liye SQS API ko call karta hai
+            'MessageBody': JSON.stringify({ // Image ki ID aur matlooba state par mushtamil message body create karta hai
+              'imageId': image.id, 'desiredState': 'processed'
+            }),
+            'QueueUrl': process.env.ImageQueue, // Queue URL environment variable ke taur par pass ki jati hai
+          }, function(err) {
+            if (err) {
+              throw err;
+            } else {
+              response.redirect('/#view=' + image.id);
+              response.end();
+            }
+          });
+        }
+      });
+    }
+  });
+}
+
+app.post('/image/:id/upload', function(request, // Express ke sath route register karta hai
+  response) {
+  getImage(request.params.id, function(err, image) {
+    if (err) { /* [...] */ } else {
+      const form = new multiparty.Form(); // Hum multipart uploads ko handle karne ke liye multiparty module istemal kar rahe hain
+      form.on('part', function(part) {
+        uploadImage(image, part, response);
+      });
+      form.parse(request);
+    }
+  });
+});
+
+```
+
+#### Code Detailed Breakdown:
+
+* `function uploadImage(image, part, response) {`: File upload, DynamoDB state update, aur SQS notification bhejney ka mukhya function.
+* `const raws3Key = 'upload/' + image.id + '-' + Date.now();`: S3 bucket ke liye unique file path/key banata hai taake files aapas mein na takrayein.
+* `s3.putObject({ ... })`: S3 API call karke raw image data stream (`part`) ko target bucket (`process.env.ImageBucket`) mein save karta hai.
+* `db.updateItem({ ... })`: S3 par file upload hone ke baad DynamoDB mein Record update karta hai.
+* `'UpdateExpression': 'SET #s=:newState, version=:newVersion, raws3Key=:rawS3Key'`: DynamoDB field `#s` (state) ko `'uploaded'`, `version` ko increment, aur `raws3Key` ko new S3 path par set karta hai.
+* `'ConditionExpression': 'attribute_exists(id) AND version=:oldVersion AND #s IN (:stateCreated, :stateUploaded)'`: **Idempotency aur Optimistic Locking Check!** Update sirf tabhi kamyab hoga agar Record majood ho, Version expected `oldVersion` se match kare, aur State pehle se `'created'` ya `'uploaded'` ho.
+* `'ExpressionAttributeNames': {'#s': 'state'}`: `state` DynamoDB ka reserved word hai, is liye `#s` alias ka istemal kiya gaya hai.
+* `sqs.sendMessage({ ... })`: DynamoDB update hone ke baad SQS Queue (`process.env.ImageQueue`) mein message bhejta hai.
+* `'MessageBody': JSON.stringify({ 'imageId': image.id, 'desiredState': 'processed' })`: Queue mein JSON string bhejta hai jisse Worker ko pata chalta hai ke kis Image ID par filter laga kar state ko `'processed'` banana hai.
+* `response.redirect('/#view=' + image.id); response.end();`: Kamyabi par browser ko frontend view page par redirect kar deta hai.
+* `app.post('/image/:id/upload', ...)`: File upload ke liye Express POST route handle karta hai aur `multiparty` module se file stream parse karke `uploadImage` ko deta hai.
+
+---
+
+## Implementing a fault-tolerant worker to consume SQS messages
+
+Worker ka kaam background mein SQS Queue se messages ko parhna aur images par **Sepia Filter** lagana hai. Worker aik kabhi na khatam hone wale loop (**Endless Loop**) mein chalta rehta hai. Is ki sab se achi baat yeh hai ke aik se zyada Workers ek hi waqt mein parallel chal sakte hain.
+
+Worker har loop mein in **7 steps** par amal karta hai:
+
+1. **Poll the queue for new messages:** SQS Queue se check karta hai ke kya koi naya kaam (message) aaya hai.
+2. **Fetch the process data from the database:** Message se Image ID nikaal kar DynamoDB se us process ka poora data laata hai.
+3. **Download the image from S3:** Raw S3 key ke zariye S3 bucket se original image file download karta hai.
+4. **Apply the sepia filter to the image:** Code library ke zariye tasveer par sepia filter (vintage effect) apply karta hai.
+5. **Upload the modified image to S3:** Filter lagi hui nayi tasveer ko S3 bucket ke `processed/` folder mein upload karta hai.
+6. **Update the process state in the database:** DynamoDB mein status ko badal kar `'processed'` aur new S3 key save kar deta hai.
+7. **Mark the message as done by deleting it from the queue:** SQS Queue se us message ko Delete kar deta hai taake baqi workers usay dobara na uthayein.
+
+---
+
+## SETTING UP THE WORKER
+
+Worker ko chalane ke liye pehle required modules aur AWS services ke clients (DynamoDB, S3, SQS) initialize kiye jaate hain.
+
+### Listing 16.5 Initializing the Imagery worker (worker/worker.js)
+
+```javascript
+const AWS = require('aws-sdk');
+const assert = require('assert-plus');
+const Jimp = require('jimp');
+const fs = require('fs/promises'); // Node.js modules (dependencies) load karta hai
+
+const db = new AWS.DynamoDB({});
+const s3 = new AWS.S3({});
+const sqs = new AWS.SQS({}); // AWS services ke sath interact karne ke liye clients ko configure karta hai
+
+const states = {
+  'processed': processed
+};
+
+async function processMessages() { // Yeh function queue se messages read karta hai, unhein process karta hai, aur aakhir mein message ko queue se delete kar deta hai
+  let data = await sqs.receiveMessage({
+    QueueUrl: process.env.ImageQueue,
+    MaxNumberOfMessages: 1
+  }).promise(); // Queue se aik message read karta hai; agar queue mein koi message na ho toh khali result return kar sakta hai
+  if (data.Messages && data.Messages.length > 0) {
+    var task = JSON.parse(data.Messages[0].Body);
+    var receiptHandle = data.Messages[0].ReceiptHandle;
+    assert.string(task.imageId, 'imageId');
+    assert.string(task.desiredState, 'desiredState'); // Yeh yakeeni banata hai ke message mein tamam zaroori properties mojood hain
+    let image = await getImage(task.imageId); // Database se process data haasil karta hai
+    if (typeof states[task.desiredState] === 'function') { // State machine ko trigger karta hai
+      await states[task.desiredState](image);
+      await sqs.deleteMessage({
+        QueueUrl: process.env.ImageQueue,
+        ReceiptHandle: receiptHandle
+      }).promise(); // Agar message kamyabi ke sath process ho gaya ho, toh message ko queue se delete kar deta hai
+    } else {
+      throw new Error('unsupported desiredState');
+    }
+  }
+}
+
+async function run() {
+  while (true) { // Aik endless loop jo lagataar chalta rehta hai
+    try {
+      await processMessages();
+      await new Promise(resolve => setTimeout(resolve, 10000)); // 10 seconds ke liye sleep karta hai
+    } catch (e) {
+      console.log('ERROR', e); // Tamam exceptions ko catch karta hai, unhein ignore karta hai, aur dobara koshish karta hai
+    }
+  }
+};
+
+run();
+
+```
+
+#### Code Detailed Breakdown:
+
+* `const Jimp = require('jimp');`: Image processing ke liye Pure JavaScript Image Processing (Jimp) library load karta hai.
+* `const fs = require('fs/promises');`: Local file system ke sath async/await tareeqay se kaam karne ke liye Node.js fs Promises module load karta hai.
+* `const db = new AWS.DynamoDB({}); const s3 = new AWS.S3({}); const sqs = new AWS.SQS({});`: DynamoDB, S3, aur SQS ke SDK clients initialize karta hai.
+* `const states = { 'processed': processed };`: Desired state ke mutabiq sahi handler function map karne wali Dictionary.
+* `async function processMessages() { ... }`: Queue polling aur execution ka main asynchronous function.
+* `sqs.receiveMessage({ QueueUrl: process.env.ImageQueue, MaxNumberOfMessages: 1 }).promise();`: SQS Queue se aik (1) message receive karta hai.
+* `if (data.Messages && data.Messages.length > 0) {`: Check karta hai ke kya Queue mein sach mein koi message mila hai ya nahi.
+* `var task = JSON.parse(data.Messages[0].Body);`: Message ki string body ko JSON object mein parse karta hai.
+* `var receiptHandle = data.Messages[0].ReceiptHandle;`: Message ko baad mein SQS se delete karne ke liye zaroori `ReceiptHandle` save karta hai.
+* `assert.string(task.imageId, 'imageId'); assert.string(task.desiredState, 'desiredState');`: Validation check karta hai ke JSON object mein required keys majood hain ya nahi.
+* `let image = await getImage(task.imageId);`: Process ID ke zariye DynamoDB se current image record fetch karta hai.
+* `await states[task.desiredState](image);`: Desired state (`'processed'`) ke mutabiq handler function execute karta hai jo image transform karega.
+* `sqs.deleteMessage({ ... }).promise();`: Processing kamyab hone par SQS queue se message ko humesha ke liye delete kar deta hai.
+* `async function run() { while (true) { ... } }`: **Endless Loop!** Loop hamesha chalta rehta hai. `processMessages()` chalane ke baad 10 seconds (`10000 ms`) intizar karta hai. Agar koi bhi error/exception aaye, toh `catch` block usay catch karke log karta hai aur loop dobara agle cycle par chala jata hai (Crash nahi hota!).
+
+---
+
+## HANDLING SQS MESSAGES AND PROCESSING THE IMAGE
+
+Jab Worker ko SQS se message mil jata hai, toh wo S3 se raw image download karta hai, sepia filter apply karta hai, aur processed image ko wapas S3 par upload karke DynamoDB state change kar deta hai.
+
+* **Figure 16.15 Ka Hawala Aur Step-by-Step Breakdown:**
+`Figure 16.15` mein SQS message se lekar processing aur storage tak ka poora flow dikhaya gaya hai:
+
+<div align="center">
+  <img src="./images/15.png" width="600"/>
+</div>
+
+1. **SQS queue** se Worker ko message milta hai.
+2. EC2 Instance par chalne wala **Node.js Code** S3 bucket se raw image file **download** karta hai.
+3. Code image par sepia filter apply karta hai aur processed sepia image ko **S3 bucket** par dubara **upload** kar deta hai.
+4. Processed image upload hone ke baad **DynamoDB table** mein status badal kar `'processed'` kar diya jata hai.
+
+
+
+### Listing 16.6 Imagery worker: Handling SQS messages (worker/worker.js)
+
+```javascript
+async function processImage(image) {
+  let processedS3Key = 'processed/' + image.id + '-' + Date.now() + '.png';
+  let rawFile = './tmp_raw_' + image.id;
+  let processedFile = './tmp_processed_' + image.id;
+  let data = await s3.getObject({
+    'Bucket': process.env.ImageBucket,
+    'Key': image.rawS3Key
+  }).promise(); // S3 se original image fetch karta hai
+  await fs.writeFile(rawFile, data.Body,
+    {'encoding': null}); // Original image ko disk par aik temporary folder mein write karta hai
+  let lenna = await Jimp.read(rawFile); // Image manipulation library ke zariye file ko read karta hai
+  await lenna.sepia().write(processedFile); // Sepia filter apply karta hai aur processed image ko disk par write karta hai
+  await fs.unlink(rawFile); // Temporary folder se original image ko delete kar deta hai
+  let buf = await fs.readFile(processedFile,
+    {'encoding': null}); // Processed image ko read karta hai
+  await s3.putObject({
+    'Bucket': process.env.ImageBucket,
+    'Key': processedS3Key,
+    'ACL': 'public-read',
+    'Body': buf,
+    'ContentType': 'image/png'
+  }).promise(); // Processed image ko S3 par upload karta hai
+  await fs.unlink(processedFile); // Temporary folder se processed file ko delete kar deta hai
+  return processedS3Key;
+}
+
+async function processed(image) {
+  let processedS3Key = await processImage(image);
+  await db.updateItem({
+    'Key': {
+      'id': {
+        'S': image.id
+      }
+    },
+    'UpdateExpression':
+      'SET #s=:newState, version=:newVersion, '
+      + 'processedS3Key=:processedS3Key', // State, version, aur processed S3 key ko update karta hai
+    'ConditionExpression':
+      'attribute_exists(id) AND version=:oldVersion '
+      + 'AND #s IN (:stateUploaded, :stateProcessed)', // Sirf tab update karta hai jab item mojood ho, version expected version ke barabar ho, aur state ijazat shuda states mein se ho
+    'ExpressionAttributeNames': {
+      '#s': 'state'
+    },
+    'ExpressionAttributeValues': {
+      ':newState': {'S': 'processed'},
+      ':oldVersion': {'N': image.version.toString()},
+      ':newVersion': {'N': (image.version + 1).toString()},
+      ':processedS3Key': {'S': processedS3Key},
+      ':stateUploaded': {'S': 'uploaded'},
+      ':stateProcessed': {'S': 'processed'}
+    },
+    'ReturnValues': 'ALL_NEW',
+    'TableName': 'imagery-image'
+  }).promise(); // updateItem operation ko call kar ke database item ko update karta hai
+}
+
+```
+
+#### Code Detailed Breakdown:
+
+* `async function processImage(image) { ... }`: Image manipulation aur S3 transfer ka dedicated function.
+* `let processedS3Key = 'processed/' + image.id + '-' + Date.now() + '.png';`: S3 bucket ke `processed/` folder ke liye target key banata hai.
+* `let rawFile = ...; let processedFile = ...;`: EC2 instance ke local disk par temporary files ke paths create karta hai.
+* `s3.getObject({ 'Bucket': process.env.ImageBucket, 'Key': image.rawS3Key }).promise();`: S3 se raw image object ko download karne ki request bhejta hai.
+* `await fs.writeFile(rawFile, data.Body, {'encoding': null});`: Download hui binary image ko EC2 ke local disk par temporary raw file ke taur par save karta hai.
+* `let lenna = await Jimp.read(rawFile);`: Jimp library ke zariye local raw file ko memory mein load karta hai.
+* `await lenna.sepia().write(processedFile);`: **Main Filter Operation!** Image par sepia filter apply karke updated file ko local disk par `processedFile` ke naam se write kar deta hai.
+* `await fs.unlink(rawFile);`: Temporary raw file ko disk se delete karke space khaali karta hai.
+* `let buf = await fs.readFile(processedFile, {'encoding': null});`: Disk se filter hui processed image file ko binary buffer mein read karta hai.
+* `s3.putObject({ ... 'ACL': 'public-read', 'ContentType': 'image/png' }).promise();`: Filtered image ko S3 par `public-read` permission aur PNG image format ke sath upload kar deta hai.
+* `await fs.unlink(processedFile);`: Temporary processed file ko local disk se delete kar deta hai aur `processedS3Key` return kar deta hai.
+* `async function processed(image) { ... }`: State machine ka main handler jo image process karwane ke baad DynamoDB update karta hai.
+* `db.updateItem({ ... })`: DynamoDB mein record update karke status ko `'processed'`, version ko increment, aur `processedS3Key` add kar deta hai.
+* `'ConditionExpression': 'attribute_exists(id) AND version=:oldVersion AND #s IN (:stateUploaded, :stateProcessed)'`: **Idempotent Retry Condition!** Agar retry ho raha ho aur pehle hi state `'processed'` ho chuki ho, tab bhi condition allow kare gi taake code crash na ho.
+
+---
+
+## Deploying the application
+
+Poori application ko deployment karne ke liye CloudFormation ka istemal kiya jaata hai. System ke main building blocks yeh hain:
+
+* **S3 Bucket:** Raw aur processed images store karne ke liye.
+* **DynamoDB Table (`imagery-image`):** Process metadata aur state track karne ke liye.
+* **SQS Queue & Dead-Letter Queue (DLQ):** Task processing ko decouple aur failed tasks handle karne ke liye.
+* **Application Load Balancer (ALB):** Public HTTP traffic receive karke web servers tak phanchane ke liye.
+* **Two Auto Scaling Groups:** Web Servers aur Workers ke EC2 instances ko alag alag manage karne ke liye.
+* **IAM Roles:** Web Server aur Worker instances ko AWS services access karne ki ijazat dene ke liye.
+
+### Application Stack Deploy Karne Ki Terminal Command:
+
+```bash
+aws cloudformation create-stack --stack-name imagery \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/chapter16/template.yaml \
+  --capabilities CAPABILITY_IAM
+
+```
+
+---
+
+## BUNDLING RUNTIME AND APPLICATION INTO A MACHINE IMAGE (AMI)
+
+Cloud mein **Immutable Infrastructure** ka usool kehta hai ke chalte hue server ke andar badlao karne ke bajaye pehle se sab kuch pre-install karke aik tayar **AMI (Amazon Machine Image)** bana li jaye. Phir jab bhi naye servers khade karne hon, toh isi AMI se launch kiye jayein. Author ne AMIs build karne ke liye **HashiCorp Packer** ka istemal kiya hai.
+
+### Listing 16.7 Configuring Packer to build an AMI containing the Imagery app (`chapter16/imagery.pkr.hcl`)
+
+```hcl
+packer { # Packer ko initialize aur configure karta hai
+  required_plugins {
+    amazon = { # AMIs build karne ke liye zaroori plug-in add karta hai
+      version = ">= 0.0.2"
+      source  = "github.com/hashicorp/amazon"
+    }
+  }
+}
+
+source "amazon-ebs" "imagery" { # Configure karta hai ke Packer AMI kaise banayega
+  ami_name = "awsinaction-imagery-{{timestamp}}" # Packer ke zariye banaye gaye AMI ka naam
+  tags = {
+    Name = "awsinaction-imagery" # Packer ke zariye banaye gaye AMI ke liye tags
+  }
+  instance_type = "t2.micro"    # AMI build karne ke liye virtual machine start karte waqt Packer ka istemal kardah instance type
+  region        = "us-east-1"   # AMI banane ke liye Packer ke zariye istemal hone wala region
+  source_ami_filter {           # Yeh filter batata hai ke base AMI—Amazon Linux 2 ka latest version—kaise talaash karna hai jahan se shuru karna hai
+    filters = {
+      name                = "amzn2-ami-hvm-2.0.*-x86_64-gp2"
+      root-device-type    = "ebs"
+      virtualization-type = "hvm"
+    }
+    most_recent = true
+    owners      = ["137112412989"]
+  }
+  ssh_username = "ec2-user" # SSH ke zariye build instance se connect karne ke liye zaroori username
+  ami_groups   = ["all"]    # Kisi ko bhi AMI ko access karne ki ijazat deta hai
+  ami_regions = [
+    "us-east-1",
+    # [...]
+  ] # AMI ko tamam commercial regions mein copy karta hai
+}
+
+build { # Image build karte waqt Packer ke execute kiye jane wale steps ko configure karta hai
+  name    = "awsinaction-imagery" # Build ka naam
+  sources = [
+    "source.amazon-ebs.imagery" # Build ke liye sources (ooper wale source ko refer karta hai)
+  ]
+
+  provisioner "file" {
+    source      = "./"           # Maujuda directory se tamam files aur folders ko...
+    destination = "/home/ec2-user/" # ...AMI build karne ke liye istemal hone wali EC2 instance ki home directory mein copy karta hai
+  }
+
+  provisioner "shell" { # AMI build karne ke liye istemal hone wali EC2 instance par shell script execute karta hai
+    inline = [
+      "curl -sL https://rpm.nodesource.com/setup_14.x | sudo bash -", # Imagery server aur worker ke runtime, Node.js 14 ke liye repository add karta hai
+      "sudo yum update",
+      "sudo yum install -y nodejs cairo-devel libjpeg-turbo-devel", # Node.js aur images ko manipulate karne ke liye zaroori libraries install karta hai
+      "cd server/ && npm install && cd -", # Server aur worker ke liye Node.js packages install karta hai
+      "cd worker/ && npm install && cd -"
+    ]
+  }
+}
+
+```
+
+#### Configuration File Ki Detail Explanation:
+
+* `packer { required_plugins { ... } }`: Packer ko HashiCorp Amazon plugin download aur configure karne ki hidayat deta hai.
+* `source "amazon-ebs" "imagery"`: AMI banane ke liye temporary EC2 instance chalane ka setup define karta hai.
+* `ami_name = "awsinaction-imagery-{{timestamp}}"`: Har nayi banne wali AMI ko unique timestamp ke sath naam deta hai.
+* `instance_type = "t2.micro"`: AMI build karne ke liye sasti `t2.micro` machine launch karta hai.
+* `source_ami_filter { ... }`: AWS par majood Official Amazon Linux 2 ka sab se latest x86_64 EBS AMI talaash karke use base image banata hai.
+* `ami_groups = ["all"]`: Is AMI ko publicly share kar deta hai taake baqi log bhi access kar sakein.
+* `provisioner "file"`: Local computer se Imagery application ka tamam code EC2 ki `/home/ec2-user/` directory mein copy karta hai.
+* `provisioner "shell"`: Temporary EC2 instance par commands chalata hai: Node.js 14 setup karta hai, image graphics processing libraries (`cairo-devel`, `libjpeg-turbo-devel`) install karta hai, aur `npm install` se Server aur Worker ke packages download karta hai.
+
+---
+
+## DEPLOYING S3, DYNAMODB, AND SQS
+
+CloudFormation template ke zariye core resources (VPC, S3, DynamoDB, SQS) deploy kiye jaate hain.
+
+### Listing 16.8 Imagery CloudFormation template: S3, DynamoDB, and SQS
+
+```yaml
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS in Action: chapter 16'
+Mappings:
+  RegionMap:
+    'us-east-1':
+      AMI: 'ami-0ad3c79dfb359f1ba' # Yeh map aisi key-value pairs par mushtamil hai jo regions ko hamare banaye gaye AMIs (jismein Imagery server aur worker bhi shamil hain) ke sath map karti hain
+# [...]
+Resources:
+  VPC: # CloudFormation template mein aik typical public VPC configuration mojood hai
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '172.31.0.0/16'
+      EnableDnsHostnames: true
+# [...]
+  Bucket: # Uploaded aur processed images ke liye aik S3 bucket, jismein web hosting enabled hai
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'imagery-${AWS::AccountId}' # Bucket ke naam mein account ID shamil hoti hai taake naam unique ban sake
+      WebsiteConfiguration:
+        ErrorDocument: error.html
+        IndexDocument: index.html
+  Table: # Image processes par mushtamil DynamoDB table
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id # Id attribute ko partition key ke taur par istemal kiya jata hai
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: 'imagery-image'
+  SQSDLQueue: # Woh SQS queue jo un messages ko receive karti hai jo process nahi ho sakte
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      QueueName: 'imagery-dlq'
+  SQSQueue: # Image processing ko trigger karne wali SQS queue
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      QueueName: 'imagery'
+      RedrivePolicy:
+        deadLetterTargetArn: !Sub '${SQSDLQueue.Arn}'
+        maxReceiveCount: 10 # Agar koi message 10 baar se ziyada receive ho jaye, toh usay dead-letter queue mein muntaqil kar diya jata hai
+# [...]
+Outputs:
+  EndpointURL: # Imagery ko istemal karne ke liye apne browser ke sath output par visit karein
+    Value: !Sub 'http://${LoadBalancer.DNSName}'
+    Description: Load Balancer URL
+
+```
+
+#### Template Breakdown & Dead-Letter Queue (DLQ) Concept:
+
+* `Bucket`: Unique S3 Bucket create karta hai jiska naam AWS Account ID milakar `imagery-[ACCOUNT_ID]` banta hai.
+* `Table`: DynamoDB Table `imagery-image` banata hai jiski Partition Key `id` (String) hai.
+* `SQSDLQueue` & `SQSQueue`: Main queue (`imagery`) aur Dead-Letter Queue (`imagery-dlq`) create karta hai.
+
+#### Dead-Letter Queue (DLQ) Kya Hai? (Bacho Ki Tarah Aasaan Samjhein):
+
+Maan lijiye SQS queue mein ek aisa message aa gaya hai jismein koi bug ya kharab image link hai. Worker usay uthata hai, code crash ho jata hai. Retry hota hai, Worker dobara uthata hai, phir crash hota hai.
+
+* **Masla:** Agar yeh chalta raha, toh Worker isi ek kharab message ke chakkar mein hamesha phasa rahega aur baki hazaron achi images ka kaam ruk jaye ga!
+* **Hal (DLQ):** Hum `maxReceiveCount: 10` set karte hain. Agar koi message **10 baar retry** hone par bhi fail hota hai, toh SQS bolta hai "Yeh message kharab hai!" aur usay original queue se nikaal kar **Dead-Letter Queue (DLQ)** mein fenk deta hai.
+* DLQ par koi Worker listen nahi kar raha hota. Developers **CloudWatch Alarm** lagate hain jo DLQ mein message aate hi alert bhejta hai taake developer manual check karke bug fix kare aur message wapas main queue mein daalay.
+
+---
+
+## IAM ROLES FOR SERVER AND WORKER EC2 INSTANCES
+
+Security ka **Principle of Least Privilege** kehta hai ke har component ko sirf utni hi permissions do jitni us ke kaam ke liye lazmi hon.
+
+### 1. Server Instances Ki Permissions:
+
+* `sqs:SendMessage`: Image process trigger karne ke liye SQS queue mein message bhejne ke liye.
+* `s3:PutObject`: S3 bucket ke `upload/` folder mein user ki image save karne ke liye.
+* `dynamodb:GetItem`, `dynamodb:PutItem`, `dynamodb:UpdateItem`: DynamoDB table par records create, read, aur update karne ke liye.
+
+### 2. Worker Instances Ki Permissions:
+
+* `sqs:ReceiveMessage`, `sqs:DeleteMessage`: SQS queue se tasks parhne aur complete hone par delete karne ke liye.
+* `s3:PutObject`: S3 bucket ke `processed/` folder mein filtered image upload karne ke liye.
+* `dynamodb:GetItem`, `dynamodb:UpdateItem`: DynamoDB se image data parhne aur final status update karne ke liye.
+
+### 3. Shared SSM Permissions (Server Aur Worker Dono Ke Liye):
+
+SSH keys handle kiye bina AWS Systems Manager Session Manager ke zariye EC2 instances mein login hone ke liye yeh permissions lazmi hain:
+
+* `ssmmessages:*`
+* `ssm:UpdateInstanceInformation`
+* `ec2messages:*`
+
+---
+
+## DEPLOYING THE SERVER WITH A LOAD BALANCER AND AN AUTO SCALING GROUP
+
+Server architecture ke liye **Application Load Balancer (ALB)** front door ka kaam karta hai. Is ke pichay **Auto Scaling Group** EC2 instances ko manage karta hai aur ALB ke health checks ke mutabiq unhein replace karta rehta hai.
+
+### Listing 16.9 CloudFormation template: Load balancer for the Imagery server
+
+```yaml
+LoadBalancer: # Load balancer virtual machines ke group mein aane wali requests ko distribute karta hai
+  Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+  Properties:
+    Subnets:
+      - Ref: SubnetA
+      - Ref: SubnetB
+    SecurityGroups:
+      - !Ref LoadBalancerSecurityGroup
+    Scheme: 'internet-facing'
+  DependsOn: VPCGatewayAttachment
+LoadBalancerListener: # Load balancer ke liye listener configure karta hai
+  Type: 'AWS::ElasticLoadBalancingV2::Listener'
+  Properties:
+    DefaultActions:
+      - Type: forward
+        TargetGroupArn: !Ref LoadBalancerTargetGroup # HTTP listener tamam requests ko neechay define kiye gaye default target group ko forward karta hai
+        LoadBalancerArn: !Ref LoadBalancer
+    Port: 80 # Listener port 80/TCP par HTTP requests ke liye listen karega
+    Protocol: HTTP
+LoadBalancerTargetGroup: # Default target group
+  Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+  Properties:
+    HealthCheckIntervalSeconds: 5 # Target group port 8080/TCP par HTTP requests bhej kar registered EC2 instances ki health check karega
+    HealthCheckPath: '/'
+    HealthCheckPort: 8080
+    HealthCheckProtocol: HTTP
+    HealthCheckTimeoutSeconds: 3
+    HealthyThresholdCount: 2
+    UnhealthyThresholdCount: 2
+    Matcher:
+      HttpCode: '200,302'
+    Port: 8080 # By default, target group registered virtual machines ke port 8080/TCP par requests forward karega
+    Protocol: HTTP
+    VpcId: !Ref VPC
+LoadBalancerSecurityGroup: # Load balancer ke liye aik security group
+  Type: 'AWS::EC2::SecurityGroup'
+  Properties:
+    GroupDescription: 'awsinaction-elb-sg'
+    VpcId: !Ref VPC
+    SecurityGroupIngress:
+      - CidrIp: '0.0.0.0/0' # Kahin se bhi port 80/TCP par incoming traffic ki ijazat deta hai
+        FromPort: 80
+        IpProtocol: tcp
+        ToPort: 80
+
+```
+
+#### Component Details:
+
+* `LoadBalancer`: Internet-facing ALB banata hai jo 2 Availability Zones (`SubnetA`, `SubnetB`) par phaila hota hai.
+* `LoadBalancerListener`: Port 80 (HTTP) par public traffic sunta hai aur target group ko forward karta hai.
+* `LoadBalancerTargetGroup`: Target EC2 instances ke Port 8080 par har 5 seconds baad HTTP Health Check bhejta hai. Agar HTTP status `200` ya `302` aaye toh instance ko healthy maanta hai.
+* `LoadBalancerSecurityGroup`: Duniya mein kahin se bhi (`0.0.0.0/0`) Port 80 par traffic allow karta hai.
+
+---
+
+### Listing 16.10 CloudFormation template: Auto Scaling group for the Imagery server
+
+```yaml
+ServerSecurityGroup: # Server run karne wale EC2 instances ke liye aik security group
+  Type: 'AWS::EC2::SecurityGroup'
+  Properties:
+    GroupDescription: 'imagery-worker'
+    VpcId: !Ref VPC
+    SecurityGroupIngress:
+      - FromPort: 8080 # Sirf load balancer se port 8080/TCP par incoming traffic ki ijazat deta hai
+        IpProtocol: tcp
+        SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+        ToPort: 8080
+ServerLaunchTemplate: # EC2 instances spin up karne ke liye blueprint ke taur par istemal hone wala launch template
+  Type: 'AWS::EC2::LaunchTemplate'
+  Properties:
+    LaunchTemplateData:
+      IamInstanceProfile:
+        Name: !Ref ServerInstanceProfile
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI] # Region map se preinstalled Imagery server wala AMI talaash karta hai
+      Monitoring:
+        Enabled: false
+      InstanceType: 't2.micro' # Free Tier ke tehat examples run karne ke liye t2.micro type ki virtual machines launch karta hai
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true # Aik public IP address aur server ki security group ke sath network interface (ENI) configure karta hai
+          DeviceIndex: 0
+          Groups:
+            - !Ref ServerSecurityGroup
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -ex
+          trap '/opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+          --region ${AWS::Region} --resource ServerAutoScalingGroup' ERR
+          cd /home/ec2-user/server/
+          sudo -u ec2-user ImageQueue=${SQSQueue} ImageBucket=${Bucket} \
+          nohup node server.js > server.log & # Har virtual machine boot process ke aakhir mein yeh script execute kare gi jo Node.js server start karti hai
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource ServerAutoScalingGroup --region ${AWS::Region}
+ServerAutoScalingGroup: # Aik Auto Scaling group create karta hai jo Imagery server run karne wali virtual machines ko manage karta hai
+  Type: 'AWS::AutoScaling::AutoScalingGroup'
+  Properties:
+    LaunchTemplate:
+      LaunchTemplateId: !Ref ServerLaunchTemplate # Launch template ko refer karta hai
+      Version: !GetAtt 'ServerLaunchTemplate.LatestVersionNumber'
+    MinSize: 1 # Auto Scaling group kam az kam aik aur ziyada se ziyada do EC2 instances spin up karega
+    MaxSize: 2
+    DesiredCapacity: 1
+    TargetGroupARNs:
+      - !Ref LoadBalancerTargetGroup # Auto Scaling group target group par virtual machines ko register aur deregister karega
+    HealthCheckGracePeriod: 120
+    HealthCheckType: ELB # Auto Scaling group target group ki health check mein fail hone wale EC2 instances ko replace kar dega
+    VPCZoneIdentifier:
+      - !Ref SubnetA # Do subnets aur is tarah do AZs ke darmiyaan distribute ki gayi EC2 instances spin up karta hai
+      - !Ref SubnetB
+    DependsOn: VPCGatewayAttachment
+# [...]
+
+```
+
+#### Component Details:
+
+* `ServerSecurityGroup`: Security best practice! Directly internet se access block karta hai. Sirf Load Balancer Security Group se Port 8080 par traffic allow karta hai.
+* `ServerLaunchTemplate`: EC2 instances ke liye blueprint: `t2.micro` instance type, custom AMI, aur `UserData` script. Script boot hotay hi `node server.js` ko background mein start kar deti hai.
+* `ServerAutoScalingGroup`: `MinSize: 1`, `MaxSize: 2`, `DesiredCapacity: 1`. Health check type `ELB` hai. Agar ELB health check fail hota hai, toh Auto Scaling Group kharab EC2 ko khatam karke doosra naya instance launch kar deta hai.
+
+---
+
+## DEPLOYING THE WORKER WITH AN AUTO SCALING GROUP
+
+Worker ko deploy karna Server ki tarah hi hai, bas farq yeh hai ke yahan Load Balancer ki jagah **SQS Queue** decoupling ka kaam karti hai.
+
+### Listing 16.11 Load balancer and Auto Scaling group for the Imagery worker
+
+```yaml
+WorkerLaunchTemplate: # EC2 instances spin up karne ke liye blueprint ke taur par istemal hone wala launch template
+  Type: 'AWS::EC2::LaunchTemplate'
+  Properties:
+    LaunchTemplateData:
+      IamInstanceProfile:
+        Name: !Ref WorkerInstanceProfile # Worker ko SQS, S3, aur DynamoDB access karne ki ijazat dene ke liye EC2 instances ke sath IAM role attach karta hai
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI] # Region map se preinstalled Imagery worker wala AMI talaash karta hai
+      Monitoring:
+        Enabled: false # Kharchon (costs) se bachne ke liye EC2 instances ki detailed monitoring disable karta hai
+      InstanceType: 't2.micro' # Free Tier ke tehat examples run karne ke liye t2.micro type ki virtual machines launch karta hai
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true # Aik public IP address aur worker ki security group ke sath network interface (ENI) configure karta hai
+          DeviceIndex: 0
+          Groups:
+            - !Ref WorkerSecurityGroup
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -ex
+          trap '/opt/aws/bin/cfn-signal -e 1 --region ${AWS::Region} \
+          --stack ${AWS::StackName} --resource WorkerAutoScalingGroup' ERR
+          cd /home/ec2-user/worker/
+          sudo -u ec2-user ImageQueue=${SQSQueue} ImageBucket=${Bucket} \
+          nohup node worker.js > worker.log & # Har virtual machine boot process ke aakhir mein yeh script execute kare gi jo Node.js worker start karti hai
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource WorkerAutoScalingGroup --region ${AWS::Region}
+WorkerAutoScalingGroup: # Imagery worker run karne wali virtual machines ko manage karne wala Auto Scaling group create karta hai
+  Type: 'AWS::AutoScaling::AutoScalingGroup'
+  Properties:
+    LaunchTemplate:
+      LaunchTemplateId: !Ref WorkerLaunchTemplate # Launch template ko refer karta hai
+      Version: !GetAtt 'WorkerLaunchTemplate.LatestVersionNumber'
+    MinSize: 1 # Auto Scaling group kam az kam aik aur ziyada se ziyada do EC2 instances spin up karega
+    MaxSize: 2
+    DesiredCapacity: 1
+    HealthCheckGracePeriod: 120
+    HealthCheckType: EC2 # Auto Scaling group fail hone wale EC2 instances ko replace kar dega
+    VPCZoneIdentifier:
+      - !Ref SubnetA # Do subnets ke darmiyaan distribute ki gayi EC2 instances spin up karta hai
+      - !Ref SubnetB
+    Tags:
+      - PropagateAtLaunch: true
+        Value: 'imagery-worker'
+        Key: Name # Har instance par aik Name tag add karta hai, jo misal ke taur par Management Console par show hoga
+    DependsOn: VPCGatewayAttachment
+    # [...]
+
+```
+
+#### Worker Deployment Specifics:
+
+* `WorkerLaunchTemplate`: Boot waqt `UserData` ke zariye `node worker.js` chalata hai aur environment variables mein SQS Queue URL aur S3 Bucket name pass karta hai.
+* `WorkerAutoScalingGroup`: `HealthCheckType: EC2` use karta hai (kyunki Worker ke aage Load Balancer nahi hai). High availability ke liye Workers ko 2 AZs (`SubnetA` aur `SubnetB`) par phailata hai.
+
+---
+
+### Deployment Status Verification Command & Output
+
+Stack create hone ke baad aap terminal se status check kar sakte hain:
+
+```bash
+$ aws cloudformation describe-stacks --stack-name imagery
+
+```
+
+```json
+{
+  "Stacks": [{
+    "Description": "AWS in Action: chapter 16",
+    "Outputs": [{
+      "Description": "Load Balancer URL",
+      "OutputKey": "EndpointURL",
+      "OutputValue": "http://....us-east-1.elb.amazonaws.com"
+    }],
+    "StackName": "imagery",
+    "StackStatus": "CREATE_COMPLETE"
+  }]
+}
+
+```
+
+* **Output Breakdown:** Jab `"StackStatus"` badal kar `"CREATE_COMPLETE"` ho jaye, toh `"OutputValue"` mein diye gaye Load Balancer URL ko apne browser mein kholein.
+
+---
+
+### Figure 16.16 Breakdown: The Imagery Application in Action
+
+* **Figure 16.16 Ka Hawala Aur Step-by-Step UI Flow:**
+
+<div align="center">
+  <img src="./images/16.png" width="600"/>
+</div>
+
+`Figure 16.16` mein UI ke 4 steps dikhaye gaye hain:
+1. **1 New image:** User "Create a new image" button par click karke ID hasil karta hai.
+2. **2 Upload:** State `'created'` ho jati hai. User "Browse..." se photo select karke "Upload" button dabata hai.
+3. **3 View (Uploaded):** Image upload hone par State `'uploaded'` ho jati hai. Backend worker abhi background mein filter laga raha hota hai.
+4. **4 View (Processed):** User jab "Refresh" dabata hai, toh State `'processed'` ho chuki hoti hai aur screen par **Sepia Filter vali final image** dikhayi deti hai!
+
+
+
+---
+
+## Cleaning up
+
+Apne AWS account ko billing se bachane ke liye application delete karna zaroori hai. CloudFormation us S3 bucket ko delete nahi kar sakta jismein files majood hon, is liye pehle S3 bucket khaali ki jaye gi:
+
+### Step 1: Bucket Name Nikaalna Command:
+
+```bash
+aws cloudformation describe-stack-resource --stack-name imagery \
+  --logical-resource-id Bucket \
+  --query "StackResourceDetail.PhysicalResourceId" \
+  --output text
+
+```
+
+*Output misaal:* `imagery-000000000000`
+
+### Step 2: S3 Bucket Khaali Karna Command:
+
+*(Note: `$bucketname` ko upar aaye hue bucket name se replace karein)*
+
+```bash
+aws s3 rm --recursive s3://$bucketname
+
+```
+
+### Step 3: CloudFormation Stack Delete Karna Command:
+
+```bash
+aws cloudformation delete-stack --stack-name imagery
+
+```
+
+* Note: Stack delete hone mein kuch minute lagte hain. Is ke sath hi tamaam banaye gaye AWS resources saaf ho jayenge.
+
+---
+
+## Summary
+
+* **Fault tolerance means expecting that failures happen and designing your systems in such a way that they can deal with failure:** Fault tolerance ka matlab pehle se kharabi ki tawaqqo rakhna aur system ko aisa banana hai ke wo kharabi ko khud sambhaal le.
+* **To create a fault-tolerant application, you can use idempotent actions to transfer from one state to the next:** Fault-tolerant app banane ke liye ek state se doosri state mein jane waale actions ko **Idempotent** hona chahiye taake retries se duplicate data na bane.
+* **State shouldn’t reside on the EC2 instance (a stateless server) as a prerequisite for fault tolerance:** Fault tolerance ke liye EC2 instance par koi session ya data save nahi hona chahiye (Stateless Server). Data hamesha external services (S3/DynamoDB) par hona chahiye.
+* **AWS offers fault-tolerant services and gives you all the tools you need to create fault-tolerant systems. EC2 is one of the few services that isn’t fault tolerant right out of the box:** AWS bohot saari default fault-tolerant services deta hai. EC2 by default fault-tolerant nahi hoti, is liye humein usay khud banana parhta hai.
+* **You can use multiple EC2 instances to eliminate the single point of failure. Redundant EC2 instances in different availability zones, started with an Auto Scaling group, are how to make EC2 fault tolerant:** Multiple Availability Zones mein Auto Scaling Group ke sath chalne wale redundant EC2 instances hi EC2 ko Single Point of Failure (SPOF) se bachate hain aur 100% Fault Tolerant banate hain.
 
 
 ----
