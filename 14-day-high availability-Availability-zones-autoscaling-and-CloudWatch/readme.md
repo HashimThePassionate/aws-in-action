@@ -761,4 +761,310 @@ aws cloudformation wait stack-delete-complete --stack-name jenkins-multiaz
 
 ----
 
+## Pitfall: Recovering network-attached storage
 
+EBS (Elastic Block Store) service virtual machines ke liye network-attached storage (yaani cloud wali hard disk) faraham karti hai. Hum ne pehle seekha tha ke:
+
+* EC2 instance ek **Subnet** se jura hota hai.
+* Subnet ek specific **Availability Zone (AZ)** se jura hota hai.
+* **EBS Volumes (hard disks) bhi sirf ek hi single Availability Zone mein maujood hote hain.**
+
+Agar aap ka EC2 instance kisi data center outage (kharaabi) ki wajah se kisi doosre Availability Zone mein start hota hai, toh woh purane Availability Zone mein rakhi hui EBS volume ko access (istemal) **nahi kar sakta**.
+
+### Real-World Example: Jenkins Data Aur EBS Ka Masla
+
+Writer ek bohat aasan misaal se samjhata hai:
+Farz karein aap ka Jenkins server `us-east-1a` naam ke Availability Zone mein chal raha hai aur uska sara data isi AZ-A ki EBS volume mein save ho raha hai.
+
+* **Jab tak machine AZ-A mein hai:** Aap ka EC2 instance is EBS volume ko aasaani se attach aur read/write kar sakta hai.
+* **Jab AZ-A doob jaye / kharab ho jaye:** Auto Scaling aap ki virtual machine ko doosre Availability Zone `us-east-1b` mein start kar dega. Lekin masla yeh hai ke `us-east-1b` se aap `us-east-1a` wali EBS volume ko attach **nahi kar sakte**! Iska matlab hai ke Jenkins recover toh ho jayega lekin uske paas apna puraana data nahi hoga.
+
+---
+
+### Figure 13.5 Analysis
+
+Referencing **Figure 13.5** (`image_c1f156.png`):
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+**Figure 13.5** batata hai ke EBS volume single AZ tak kyun mehdood (limit) hota hai:
+
+1. **AZ-A (Bayein Taraf):** EC2 instance fail ho jata hai. Iska EBS volume `us-east-1a` mein hi phansa reh jata hai kyunki yeh volume sirf AZ-A se access ho sakta hai.
+2. **AZ-B (Daayein Taraf):** Auto Scaling naye AZ-B mein naya EC2 instance launch karta hai. Lekin kyunki purana volume yahan nahi aa sakta, is liye ek **naya aur bilkul khali (empty) EBS volume** attach hota hai, jis se purana data zaya lagne lagta hai.
+
+---
+
+### Don’t mix availability and durability guarantees
+
+Writer yahan 2 confusing lafzon (**Availability** aur **Durability**) ka farq samjhata hai taake hum inhein aapas mein mix na karein:
+
+* **Availability (99.999% Guarantee):** Iska matlab hai ke disk har waqt chalne ke liye dastiyab hai. Agar koi Availability Zone outage hota hai, toh volume temporary taur par "Unavailable" ho jata hai. **Lekin iska matlab yeh hargiz nahi ke aap ka data zaya ho gaya hai.** Jaise hi woh AZ wapas online aayega, aap ka EBS volume apne poore data ke sath wapas mil jayega.
+* **Durability (99.9% Guarantee):** Iska matlab hai data ke mehfuz hone aur kabhi na khone ki guarantee. 99.9% durability ka matlab hai ke agar aap 1,000 EBS volumes chalate hain, toh saal mein ausatan (on average) sirf 1 volume ka data hamesha ke liye khone (lose hone) ka imkaan hota hai.
+
+---
+
+### EBS Limitation Ke 3 Solutions
+
+EBS volume ke sirf ek AZ mein hone ke maslay ko hal karne ke 3 tareeqay hain:
+
+1. **Managed Multi-AZ Services Ka Istemal:** Apne system ka data/state kisi aise managed service ko de dein jo default taur par multi-AZ hoti hain:
+* **RDS** (Relational Database)
+* **DynamoDB** (NoSQL Database)
+* **EFS** (Network File Storage)
+* **S3** (Object Storage)
+
+
+2. **Regular EBS Snapshots Banayein:** EBS volume ke snapshots regularly lein. Snapshots AWS **S3** par save hote hain aur S3 poore region ke tamam Availability Zones mein available hota hai. Agar root volume ho toh Snapshot ki jagah **AMI** banayein.
+3. **Distributed Third-Party Storage:** Apni virtual machines ke andar distributed software use karein jo data ko khud multiple AZs mein sync rakhe (jaise GlusterFS, DRBD, ya MongoDB).
+
+---
+
+### Jenkins Ke Liye EFS Ka Chunaaw
+
+Jenkins server data ko direct disk / file system par save karta hai. Is liye hum RDS, DynamoDB, ya S3 istemal nahi kar sakte; humein **file-level storage** chahiye.
+
+AWS **EFS (Elastic File System)** NFSv4.1 protocol par kaam karta hai aur aap ke data ko ek region ke tamam Availability Zones ke darmeyan **automatically replicate (sync)** karta hai.
+
+EFS ko Jenkins setup mein shamil karne ke liye hum CloudFormation template mein 3 tabdeeliya (modifications) karenge:
+
+1. Ek **EFS FileSystem** banayein ge.
+2. Har Availability Zone mein **EFS Mount Targets** banayein ge.
+3. User Data script ko update karenge taake woh boot hote hi EFS volume ko `/var/lib/jenkins` directory par mount kar de.
+
+---
+
+## Listing 13.4 Storing Jenkins state on EFS
+
+Neeche EFS ke sath Multi-AZ Jenkins setup ka CloudFormation YAML code diya gaya hai:
+
+```yaml
+# [...]
+FileSystem:
+  Type: 'AWS::EFS::FileSystem' # Elastic File System (EFS) create karta hai, jo NFS (network filesystem) faraham karta hai
+  Properties: {}
+MountTargetSecurityGroup:
+  Type: 'AWS::EC2::SecurityGroup' # EC2 instance se EFS tak network traffic ki ijazat dene ke liye security group create karta hai
+  Properties:
+    GroupDescription: 'EFS Mount target'
+    SecurityGroupIngress:
+      - FromPort: 2049
+        IpProtocol: tcp
+        SourceSecurityGroupId: !Ref SecurityGroup
+        ToPort: 2049 # NFS ke zariye istemal hone wale port 2049 par aane wale traffic ki ijazat deta hai
+        VpcId: !Ref VPC
+MountTargetA:
+  Type: 'AWS::EFS::MountTarget' # Mount target filesystem ke liye network interface faraham karta hai
+  Properties:
+    FileSystemId: !Ref FileSystem
+    SecurityGroups:
+      - !Ref MountTargetSecurityGroup
+    SubnetId: !Ref SubnetA # Mount target aik subnet ke sath attached hota hai
+MountTargetB:
+  Type: 'AWS::EFS::MountTarget' # Is liye, aap ko har subnet ke liye aik mount target ki zaroorat hoti hai
+  Properties:
+    FileSystemId: !Ref FileSystem
+    SecurityGroups:
+      - !Ref MountTargetSecurityGroup
+    SubnetId: !Ref SubnetB
+# [...]
+LaunchTemplate:
+  Type: 'AWS::EC2::LaunchTemplate' # Auto Scaling group ke zariye virtual machines launch karne ke liye istemal hone wala blueprint
+  Properties:
+    LaunchTemplateData:
+      # [...]
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -ex
+          trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} \
+          --resource AutoScalingGroup --region ${AWS::Region}' ERR
+          
+          # Installing Jenkins
+          # [...]
+          
+          # Mounting EFS volume
+          mkdir -p /var/lib/jenkins # Agar folder pehle se mojood na ho toh Jenkins ke data ko store karne ke liye aik folder create karta hai
+          echo "${FileSystem}: /var/lib/jenkins efs tls,_netdev 0 0" \
+          >> /etc/fstab # Volumes ke configuration file mein aik entry add karta hai
+          while ! (echo > /dev/tcp/${FileSystem}.efs.${AWS::Region}.amazonaws.com/2049) >/dev/null 2>&1; do sleep 5; done # EFS filesystem ke dastiyab (available) hone tak intezar karta hai
+          mount -a -t efs # EFS filesystem ko mount karta hai
+          chown -R jenkins:jenkins /var/lib/jenkins # Yeh yakeeni banane ke liye ke Jenkins files ko read aur write kar sake, mounted directory ki ownership tabdeel karta hai
+          
+          # Configuring Jenkins
+          # [...]
+          
+          # Starting Jenkins
+          systemctl enable jenkins.service
+          systemctl start jenkins.service
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+          --resource AutoScalingGroup --region ${AWS::Region}
+AutoScalingGroup:
+  Type: 'AWS::AutoScaling::AutoScalingGroup' # Auto Scaling group create karta hai
+  Properties:
+    LaunchTemplate:
+      LaunchTemplateId: !Ref LaunchTemplate # Upar define kiye gaye launch template ko refer karta hai
+      Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'
+    Tags:
+      - Key: Name
+        Value: 'jenkins-multiaz-efs'
+        PropagateAtLaunch: true
+    MinSize: 1
+    MaxSize: 1
+    VPCZoneIdentifier:
+      - !Ref SubnetA
+      - !Ref SubnetB
+    HealthCheckGracePeriod: 600
+    HealthCheckType: EC2
+    # [...]
+
+```
+
+### Listing 13.4 Ka Deep Detail Breakdown:
+
+#### 1. `FileSystem` Resource:
+
+* **`Type: 'AWS::EFS::FileSystem'`:** Main EFS storage drive banata hai jo multi-AZ replication support karta hai.
+
+#### 2. Security Group (`MountTargetSecurityGroup`):
+
+* **`FromPort: 2049` & `ToPort: 2049`:** NFS (Network File System) protocol hamesha **Port 2049** par kaam karta hai. Is liye ingress rule lagaya gaya hai ke EC2 instance se Port 2049 par aane wali traffic EFS tak pahunch sake.
+
+#### 3. Mount Targets (`MountTargetA` aur `MountTargetB`):
+
+* **`Type: 'AWS::EFS::MountTarget'`:** EFS storage ko kisi subnet ke sath jorne ke liye Mount Target (network endpoint) chahiye hota hai.
+* Kyunki hum 2 Subnets (`SubnetA` aur `SubnetB`) use kar rahe hain, is liye har AZ/Subnet ke liye alag Mount Target banaya gaya hai.
+
+#### 4. `UserData` Script Breakdown (EFS Mounting Steps):
+
+* **`mkdir -p /var/lib/jenkins`:** System mein `/var/lib/jenkins` directory banata hai jahan Jenkins apna data rakhta hai.
+* **`echo "${FileSystem}: /var/lib/jenkins efs tls,_netdev 0 0" >> /etc/fstab`:** Linux ki `/etc/fstab` file mein EFS mounting configuration add karta hai. `tls` encryption aur `_netdev` option batata hai ke network chalu hone ke baad hi is drive ko mount karna hai.
+* **`while ! (echo > /dev/tcp/.../2049) ... sleep 5; done`:** Script ruk kar check karti hai ke EFS ka Port 2049 active hua ya nahi. Jab tak EFS ready nahi hota, har 5 second baad check karti rehti hai.
+* **`mount -a -t efs`:** `/etc/fstab` mein likhi gayi entry ke mutabaq EFS drive ko `/var/lib/jenkins` par mount (connect) kar deta hai.
+* **`chown -R jenkins:jenkins /var/lib/jenkins`:** Mounted folder ki ownership `jenkins` user ko de deta hai taake Jenkins service files read/write kar sake.
+
+#### 5. `AutoScalingGroup`:
+
+* `Name: 'jenkins-multiaz-efs'`: Instance tag ka naam set karta hai.
+* `VPCZoneIdentifier`: `SubnetA` aur `SubnetB` dono mein se kisi bhi AZ mein machine launch kar sakta hai.
+
+---
+
+### CloudFormation Stack Run Karne Ki Command
+
+EFS wala Jenkins setup create karne ke liye command chalayein ($Password ki jagah apna password likhein):
+
+```bash
+aws cloudformation create-stack --stack-name jenkins-multiaz-efs \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/chapter13/multiaz-efs.yaml \
+  --parameters "ParameterKey=JenkinsAdminPassword,ParameterValue=$Password" \
+  --capabilities CAPABILITY_IAM
+
+```
+
+---
+
+### Instance Details Retrieve Karne Ki Command
+
+EC2 instance ki public aur private details dekhne ke liye:
+
+```bash
+aws ec2 describe-instances --filters "Name=tag:Name,Values=jenkins-multiaz-efs" "Name=instance-state-code,Values=16" \
+  --query "Reservations[0].Instances[0].[InstanceId, PublicIpAddress, PrivateIpAddress, SubnetId]"
+
+```
+
+#### Output (Pehli Virtual Machine):
+
+```json
+[
+    "i-0efcd2f01a3e3af1d", 
+    "34.236.255.218",     
+    "172.31.37.225",     
+    "subnet-0997e66d"    
+]
+
+```
+
+* **Instance ID:** `i-0efcd2f01a3e3af1d`
+* **Public IP:** `34.236.255.218`
+
+---
+
+### Jenkins Project Banane Ke Steps (Data Test Karne Ke Liye)
+
+1. Browser mein `http://$PublicIP:8080/newJob` kholein (`$PublicIP` ki jagah `34.236.255.218` likhein).
+2. Admin credentials se log in karein.
+3. **Install Suggested Plugins** chunein.
+4. Default URL rakh kar **Save and Finish** dabaayein.
+5. **Start Using Jenkins** par click karein.
+6. **New Item** par click karein.
+7. Project ka naam **AWS in Action** rakhein.
+8. **Freestyle Project** chun kar **OK** daba dein.
+
+Aap ne EFS par Jenkins state change kar ke ek naya job bana diya hai.
+
+---
+
+### Data Recovery Test Karne Ki Command
+
+Puraane EC2 instance ko kill / terminate kar ke dekhein ke data bachhta hai ya nahi ($InstanceId ki jagah `i-0efcd2f01a3e3af1d` likhein):
+
+```bash
+aws ec2 terminate-instances --instance-ids $InstanceId
+
+```
+
+Kuch minto baad Auto Scaling nayi machine start kar dega. Dobara describe command chalaayein:
+
+```bash
+aws ec2 describe-instances --filters "Name=tag:Name,Values=jenkins-multiaz-efs" "Name=instance-state-code,Values=16" \
+  --query "Reservations[0].Instances[0].[InstanceId, PublicIpAddress, PrivateIpAddress, SubnetId]"
+
+```
+
+#### Output (Nayi Virtual Machine):
+
+```json
+[
+  "i-07ce0865adf50cccf",
+  "34.200.225.247",
+  "172.31.37.199",
+  "subnet-0997e66d"
+]
+
+```
+
+#### Verification Result:
+
+* **Instance ID, Public IP, Private IP sab badal chuke hain.**
+* Naye Public IP `[http://34.200.225.247:8080](http://34.200.225.247:8080)` ko browser mein kholein.
+* Aap dekhenge ke aap ka banaya hua **AWS in Action** job abhi bhi wahan maujood hai! Iska matlab hai ke EFS ki wajah se data zaya nahi hua!
+
+---
+
+### Aakhri Bacha Hua Masla (Remaining Pitfall)
+
+Hum ne **Multi-AZ Availability** haasil kar li aur **Data Loss** ka masla EFS se hal kar diya. Lekin abhi bhi ek **aakhri masla** bacha hai:
+
+> **Recover hone ke baad Jenkins server ka Public aur Private IP address badal jata hai.** Is ka matlab hai ke aap ka Jenkins server hamesha same URL / endpoint par dastiyab nahi rehta.
+
+Is IP address change hone ke maslay ka hal hum agle section mein seekhenge.
+
+---
+
+## Cleaning up
+
+Apne AWS account ko extra billing se bachane ke liye saaf-safai (cleanup) karein:
+
+```bash
+aws cloudformation delete-stack --stack-name jenkins-multiaz-efs
+aws cloudformation wait stack-delete-complete --stack-name jenkins-multiaz-efs
+
+```
+
+* `delete-stack`: EFS, Auto Scaling Group, Launch Template, aur EC2 instances samet tamam resources ko delete karna shuru karta hai.
+* `wait stack-delete-complete`: Stack ki deletion poori hone tak terminal ko roke rakhta hai.
+
+
+---
