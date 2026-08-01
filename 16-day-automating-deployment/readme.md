@@ -787,3 +787,378 @@ Is risk ko khatam karne ke liye hum aglay section mein **Custom AMIs (using Pack
 
 
 ---
+
+## Deploying customized AMIs created by Packer
+
+Is section mein hum **customized Amazon Machine Images (AMIs)** ka istemal seekhein ge, jinhein hum **immutable servers** bhi kehte hain.
+
+> **Bacho ki tarah samajhne wali baat:**
+> **Immutable Server** ka matlab hai ek aisi virtual machine jise chalne ke baad kabhi badla nahi jata. Sochiyay jaise aap ek naya khoyona market se late hain, agar woh kharab ho jaye ya aap ko uska naya version chahiye, toh aap purane khilone ko repairing ke liye bhejne ke bajaye seedha naya aur updated khilona khareed lete hain!
+> Immutable deployment mein jab bhi code badalta hai, hum ek **nayi AMI (image)** banate hain, aur purane server ko terminate (delete) karke naye image se naya server chala dete hain.
+
+Kyunke har choti se choti change ke liye ek nayi image ki zaroorat hoti hai, is liye is image banane ke process ko **automate** karna bohot zaroori hai.
+
+### Tool Choice: HashiCorp Packer vs. AWS EC2 Image Builder
+
+Writer batata hai ke hum aam taur par AWS ki apni services prefer karte hain, lekin AWS ka **EC2 Image Builder** tool bohot ziada complicated (uljha hua) hai aur woh tab sahi kaam nahi karta jab aap khud apne source code ke malik hon.
+
+Is ke muqable mein, HashiCorp ka tool **Packer** bohot hi easy, flexible aur istemal mein asaan hai, is liye hum Packer ka istemal karein ge.
+
+---
+
+### Figure 15.4 Breakdown: Packer Kaise AMI Banata Hai?
+
+Figure 15.4 mein Packer ke zariye automated AMI banane ka poora 6-step lifecycle samjhaya gaya hai:
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+1. **Launch an EC2 instance:** Packer sab se pehle ek temporary (aarzi) EC2 instance launch karta hai.
+2. **Connect via Systems Manager:** Packer us temporary EC2 instance se AWS Systems Manager (SSM) ke zariye connect hota hai.
+3. **Run the provisioner script:** Packer us machine par script chalata hai (Node.js, Git, Etherpad download aur install karta hai).
+4. **Stop the EC2 instance:** Setup poora hone ke baad, Packer us temporary EC2 instance ko stop (band) kar deta hai.
+5. **Create an AMI:** Stopped instance se ek nayi AMI (image snapshot) create karta hai.
+6. **Terminate the EC2 instance:** AMI tayyar hone ke baad, Packer us temporary EC2 instance ko permanently delete (terminate) kar deta hai taake extra charges na aayein.
+
+---
+
+### Packer Template Setup
+
+Packer ko istemal karne ke liye humein ek template define karni hoti hai. GitHub repository `/chapter15/etherpad.pkr.hcl` mein yeh template maujood hai.
+
+#### Listing 15.6 The Packer template to build an Etherpad AMI, part 1
+
+```hcl
+packer { # Packer configuration block ko start karta hai
+  required_plugins { # Packer ke liye zaroori plugins ko define karta hai
+    amazon = { # Amazon plugin ki configuration ko specify karta hai
+      version = ">= 0.0.2" # Amazon plugin ke liye kam az kam required version specify karta hai
+      source = "github.com/hashicorp/amazon" # Amazon plugin ka source repository path define karta hai
+    }
+  }
+}
+
+```
+
+##### Code Breakdown:
+
+* `packer { ... }`: Yeh Packer ka main configuration block hai jahan se setup shuru hota hai.
+* `required_plugins`: Packer ko chalne ke liye kaun se plugins chahiye unka list yahan banta hai.
+* `amazon`: AWS ke sath kaam karne ke liye HashiCorp ka official Amazon plugin assign kar raha hai.
+* `version = ">= 0.0.2"`: Plugin ka version kam se kam 0.0.2 ya us se naya hona chahiye.
+* `source = "[github.com/hashicorp/amazon](https://github.com/hashicorp/amazon)"`: Plugin download karne ka official source path batata hai.
+
+---
+
+### IAM role ec2-ssm-core
+
+Packer ko temporary EC2 instance se secure connection banane ke liye ek IAM Role ki zaroorat hoti hai jiska naam **`ec2-ssm-core`** hai. (Yeh role Chapter 3 mein banaya gaya tha). Plain SSH key ke bajaye Systems Manager use karne se security aur usability bohot barh jati hai.
+
+---
+
+#### Listing 15.7 The Packer template to build an Etherpad AMI, part 2
+
+Is part mein hum base AMI aur temporary build instance ki specs define karte hain:
+
+```hcl
+source "amazon-ebs" "etherpad" {
+  ami_name = "awsinaction-etherpad-{{timestamp}}" # Naye AMI ke liye naam specify karta hai aur uniqueness yakeeni banane ke liye timestamp shamil karta hai
+  tags = {
+    Name = "awsinaction-etherpad"
+  }
+  instance_type = "t2.micro" # Temporary build instance ke liye instance type
+  region = "us-east-1" # AMI build karne ke liye istemal hone wala region
+  source_ami_filter { # Source filter base AMI define karta hai jahan se shuru karna hai
+    filters = {
+      name = "amzn2-ami-hvm-2.0.*-x86_64-gp2" # Amazon Linux 2 images ke liye search karta hai; * tamam versions ki numaindagi karta hai
+      root-device-type = "ebs"
+      virtualization-type = "hvm"
+    }
+    most_recent = true # Amazon Linux 2 images ka latest version pick karta hai
+    owners = ["137112412989"] # Sirf Amazon ki malkiyat wale AMIs ko filter karta hai; AWS account 137112412989 Amazon ka hai
+  }
+  ssh_username = "ec2-user"
+  ssh_interface = "session_manager" # Packer ko temporary build instance ke sath connect karne ke liye plain SSH ke bajaye Session Manager istemal karne ka kehta hai
+  communicator = "ssh"
+  iam_instance_profile = "ec2-ssm-core" # IAM instance profile ec2-ssm-core attach karta hai, jo Session Manager ke liye zaroori hai
+  ami_groups = ["all"]
+  ami_regions = ["us-east-1"] # AMI ko distribute karne ke liye regions add karta hai
+}
+
+```
+
+##### Code Breakdown:
+
+* `source "amazon-ebs" "etherpad"`: EBS-backed EC2 instance se AMI banane ke liye source block.
+* `ami_name`: Banane wali nayi AMI ka naam. Unix `{{timestamp}}` use kiya gaya hai taake har baar unique name bane.
+* `instance_type = "t2.micro"`: Build process ke liye Free Tier instance use karta hai.
+* `source_ami_filter`: Base image dhoondne ka filter:
+* `name`: Amazon Linux 2 image search karta hai (`*` wildcard latest build dhoondta hai).
+* `most_recent = true`: Sab se latest AMI select karega.
+* `owners = ["137112412989"]`: Yeh AWS account ID Amazon ka official account hai, taake koi fake ya malicious image select na ho.
+
+
+* `ssh_interface = "session_manager"`: Security decision! Port 22 kholne ki zaroorat nahi, Session Manager se encrypted traffic guze gi.
+* `iam_instance_profile = "ec2-ssm-core"`: SSM agent ko access permissions deta hai.
+
+---
+
+#### Listing 15.8 The Packer template to build an Etherpad AMI, part 3
+
+Is part mein **build** block define hota hai jo temporary instance ke andar software install karne ke liye shell scripts chalata hai:
+
+```hcl
+build {
+  name    = "awsinaction-etherpad"
+  sources = [
+    "source.amazon-ebs.etherpad" # Source ko refer karta hai; listing 15.7 dekhein
+  ]
+}
+
+provisioner "shell" { # Shell provisioner temporary build instance par script execute karta hai
+  inline = [
+    "curl -fsSL https://rpm.nodesource.com/setup_14.x | sudo bash -", # Node.js ke liye YUM repository add karta hai
+    "sudo yum install -y nodejs git", # Node.js aur Git install karta hai
+    "sudo mkdir /opt/etherpad-lite",
+    "sudo chown -R ec2-user:ec2-user /opt/etherpad-lite",
+    "cd /opt",
+    "git clone --depth 1 --branch 1.8.17 https://github.com/AWSInAction/etherpad-lite.git", # GitHub se Etherpad ko fetch karta hai
+    "cd etherpad-lite",
+    "./src/bin/installDeps.sh" # Etherpad dependencies install karta hai
+  ]
+}
+
+```
+
+##### Code Breakdown:
+
+* `build { ... }`: Execution pipeline define karta hai.
+* `provisioner "shell"`: Temporary machine ke boot hone ke baad bash commands run karta hai:
+1. Node.js setup repository add karta hai.
+2. `nodejs` aur `git` install karta hai.
+3. Directory `/opt/etherpad-lite` banata hai aur uski ownership `ec2-user` ko deta hai.
+4. GitHub se Etherpad v1.8.17 ka source code clone karta hai.
+5. `./src/bin/installDeps.sh` chala kar saari dependencies pehle se download karke rakh leta hai.
+
+
+
+---
+
+### Step-by-Step: Packer Installing & Building AMI
+
+#### 1. Packer Install Karein (MacOS example):
+
+```bash
+brew tap hashicorp/tap
+brew install hashicorp/tap/packer
+
+```
+
+*(Baki operating systems ke liye binaries `packer.io/downloads.html` se li ja sakti hain).*
+
+#### 2. Packer Initialize Karein:
+
+```bash
+packer init chapter15/
+
+```
+
+*Yeh command required plugins (Amazon plugin) ko download aur setup karti hai.*
+
+#### 3. AMI Build Command Run Karein:
+
+```bash
+packer build chapter15/etherpad.pkr.hcl
+
+```
+
+Packer temporary instance chalaye ga, script run karega, instance ko stop karke AMI banaye ga, aur aakhir mein instance delete kar ke **AMI ID** print kar dega:
+
+```text
+==> Builds finished. The artifacts of successful builds are:
+--> awsinaction-etherpad.amazon-ebs.etherpad: AMIs were created:
+us-east-1: ami-06beed8fa64e7cb68
+
+```
+
+*(Yahan humari nayi tayyar AMI ID: `ami-06beed8fa64e7cb68` hai).*
+
+---
+
+### Figure 15.5 Breakdown: CloudFormation se Nayi AMI Deploy karna
+
+Figure 15.5 rolling update ke flow ko samjhata hai:
+
+1. **Creates AMI with Packer:** Engineer pehle Packer chala kar pre-installed software wali AMI banata hai.
+2. **Updates stack:** Engineer CloudFormation stack update karta hai aur nayi AMI ID paas karta hai.
+3. **Orchestrates rolling update:** Auto Scaling group rolling update start karta hai.
+4. **Launches new EC2:** Auto Scaling group nayi AMI se nayi EC2 instance chalata hai.
+5. **Terminates old EC2:** Nayi instance healthy hone par Auto Scaling group purani machine ko delete kar deta hai.
+
+---
+
+### Deploying the AMI via CloudFormation
+
+Nayi AMI ID paas kar ke CloudFormation stack chalane ki command (`$AMI` ko apni AMI ID se replace karein):
+
+```bash
+aws cloudformation deploy --stack-name etherpad-packer \
+  --template-file packer.yaml \
+  --parameter-overrides AMI=$AMI \
+  --capabilities CAPABILITY_IAM
+
+```
+
+Deployment complete hone ke baad application URL haasil karne ki command:
+
+```bash
+aws cloudformation describe-stacks --stack-name etherpad-packer \
+  --query "Stacks[0].Outputs[0].OutputValue" --output text
+
+```
+
+Browser mein URL kholein, version check karne par commit ID **`c85ab49`** (v1.8.17) dikhai de ga.
+
+---
+
+#### Listing 15.9 Handing over the AMI ID to the CloudFormation template
+
+CloudFormation template (`chapter15/packer.yaml`) mein AMI ID kaise pass hoti hai aur UserData ka kya kaam bacha hai:
+
+```yaml
+# [...]
+Parameters:
+  AMI:
+    Type: 'AWS::EC2::Image::Id'
+    Description: 'The AMI ID' # AMI set karne ke liye parameter
+Resources:
+  # [...]
+  LaunchTemplate:
+    Type: 'AWS::EC2::LaunchTemplate'
+    Properties:
+      # [...]
+      LaunchTemplateData:
+        ImageId: !Ref AMI # Launch template AMI parameter ko refer karta hai
+        UserData:
+          'Fn::Base64': !Sub |
+            #!/bin/bash -ex
+            trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} \
+            --resource AutoScalingGroup --region ${AWS::Region}' ERR # Yeh kya? Hum abhi bhi EC2 instance ke boot process mein script inject karne ke liye user data istemal kar rahe hain?
+            cd /opt/etherpad-lite/
+            echo "
+            {
+              \"title\": \"Etherpad\",
+              \"dbType\": \"mysql\",
+              \"dbSettings\": {
+                \"host\": \"${Database.Endpoint.Address}\",
+                \"port\": \"3306\",
+                \"database\": \"etherpad\",
+                \"user\": \"etherpad\",
+                \"password\": \"etherpad\"
+              },
+              \"exposeVersion\": true
+            }
+            " > settings.json # Haan, lekin sirf settings file create karne ke liye, jiske liye database host name ki zaroorat hoti hai; AMI banate waqt yeh pata nahi hota...
+            /opt/etherpad-lite/src/bin/fastRun.sh & # ...aur Etherpad application ko start karne ke liye.
+            /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} \
+              --resource AutoScalingGroup --region ${AWS::Region}
+# [...]
+
+```
+
+##### Architectural Design Question & Line Breakdown:
+
+* **Question:** Jab Etherpad aur Node.js pehle se AMI ke andar pre-installed hain, toh abhi bhi UserData ka istemal kyun ho raha hai?
+* **Answer (Trade-off & Design Decision):** Dynamic environment settings! Database host address (`${Database.Endpoint.Address}`) AMI banate waqt pata nahi hota, kyun ke database CloudFormation stack chaltay waqt banta hai. Is liye UserData ab koi software install nahi kar raha, balkay sirf dynamic `settings.json` file create karta hai aur `/opt/etherpad-lite/src/bin/fastRun.sh &` ke zariye application ko **instant start** kar deta hai!
+
+---
+
+#### Listing 15.10 Orchestrating rolling updates with the Auto Scaling group
+
+Auto Scaling Group ki configuration jo Zero-Downtime rolling update ko ensure karti hai:
+
+```yaml
+# [...]
+AutoScalingGroup: # Auto Scaling group yeh yakeeni banata hai ke aik EC2 instance chal rahi ho aur kharabi ki soorat mein usay tabdeel kar diya jaye
+  Type: 'AWS::AutoScaling::AutoScalingGroup'
+  Properties:
+    TargetGroupARNs:
+      - !Ref LoadBalancerTargetGroup
+    LaunchTemplate:
+      LaunchTemplateId: !Ref LaunchTemplate
+      Version: !GetAtt 'LaunchTemplate.LatestVersionNumber' # Jo launch template explain kiya gaya tha usay refer karta hai
+    MinSize: 1 # Aik single machine start karta hai, kyunki Etherpad mukhtalif machines par parallel taur par nahi chal sakta
+    MaxSize: 2 # Rolling update ke doran, Auto Scaling group purani machine ko khatam karne se pehle aik nayi machine launch karta hai; is liye hamein maximum size ko 2 set karne ki zaroorat hoti hai
+    HealthCheckGracePeriod: 300
+    HealthCheckType: ELB
+    VPCZoneIdentifier:
+      - !Ref SubnetA
+      - !Ref SubnetB
+    Tags:
+      - PropagateAtLaunch: true
+        Value: etherpad
+        Key: Name
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: 'PT10M'
+    UpdatePolicy: # Update policy rolling update ko configure karti hai
+      AutoScalingRollingUpdate:
+        PauseTime: PT10M # Auto Scaling group cfn-signal ke zariye naye EC2 instance ke success signal ka 10 minutes tak intezar karega
+        WaitOnResourceSignals: true # Rolling update ke doran EC2 instance se signal ka intezar karna enable karta hai
+        MinInstancesInService: 1 # Deployment ke doran kam az kam aik instance ke chalne ko yakeeni bana kar zero-downtime deployments ko indicate karta hai
+
+```
+
+##### Line Breakdown:
+
+* `MinSize: 1`: Etherpad clustering support nahi karta, is liye normal conditions mein 1 instance chalegi.
+* `MaxSize: 2`: Rolling update ke dauran purani machine delete hone se pehle nayi machine launch hogi, is liye limit temporary 2 par set ki gayi hai.
+* `UpdatePolicy -> AutoScalingRollingUpdate`:
+* `PauseTime: PT10M`: 10 minute tak cfn-signal ka wait karega.
+* `WaitOnResourceSignals: true`: Signal milne ke baad hi purani machine terminate karega.
+* `MinInstancesInService: 1`: User traffic drop hone se bachane ke liye update dauran 1 instance continuous up rakhta hai.
+
+
+
+---
+
+### Step-by-Step: Updating to Version 1.8.18
+
+Etherpad ke naye version (v1.8.18) ko roll out karne ke liye steps:
+
+1. Packer file `chapter15/etherpad.pkr.hcl` mein version string `1.8.17` ko replace karke `1.8.18` karein.
+2. Nayi AMI build karein:
+```bash
+packer build chapter15/etherpad.pkr.hcl
+
+```
+
+
+3. CloudFormation stack update karein (Nayi AMI ID ke sath):
+```bash
+aws cloudformation deploy --stack-name etherpad-packer \
+  --template-file chapter15/packer.yaml \
+  --parameter-overrides AMI=$AMI \
+  --capabilities CAPABILITY_IAM
+
+```
+
+
+
+Update hone ke baad browser mein application refresh karein. Version check karne par updated commit ID **`4b96ff6`** dikhayi dega.
+
+> **Faida:** Yeh immutable server approach 100% reliable hai, external repository outages se safe hai, aur boot time bohot fast kar deti hai!
+
+---
+
+### Cleaning up
+
+Practical mukammal karne ke baad account charges se bachne ke liye resources ko delete kar dein:
+
+```bash
+aws cloudformation delete-stack --stack-name etherpad-packer
+
+```
+
+---
