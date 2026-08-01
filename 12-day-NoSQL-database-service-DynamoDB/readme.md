@@ -451,3 +451,312 @@ aws dynamodb create-table --table-name todo-task \
 Aap `aws dynamodb describe-table --table-name todo-task` chala kar tab tak wait karein jab tak is ka status **ACTIVE** na ho jaye. Ab humari dono tables (`todo-user` aur `todo-task`) tayar hain!
 
 ---
+
+## Adding data
+
+Aap ne users aur un ke tasks ko store karne ke liye do tables (`todo-user` aur `todo-task`) banaye hain. Ab in tables ko istemal karne ke liye in mein data add (write) karna lazmi hai.
+
+DynamoDB ke sath baat karne aur data bhejne ke liye hum **Node.js SDK** ka istemal karenge. User aur task add karne ka code likhne se pehle, aaiye Node.js ko set up karte hain aur boilerplate (bunyaadi) code ko samajhte hain.
+
+---
+
+### Installing and getting started with Node.js
+
+**Node.js kya hai?**
+Ek aasan misal se samajhte hain: Normally, JavaScript sirf web browser (jaise Chrome) ke andar chalti hai. Lekin Node.js ek aisa platform hai jo JavaScript ko aap ke computer/server ke main system par chalne ki ijazat deta hai. Yeh event-driven model par kaam karta hai, jis ka matlab hai ke jab koi event (jaise request) aata hai, yeh us par turant action leta hai.
+
+* **Installation:** Node.js ko install karne ke liye official website [https://nodejs.org](https://nodejs.org) par jaakar apne Operating System (Windows, Mac, ya Linux) ke mutabiq installer download karein.
+* **Verification:** Install hone ke baad terminal (Command Prompt) khol kar yeh command likhein:
+
+```bash
+node --version
+
+```
+
+Aap ke terminal par output kuch is tarah dikhai dega: `v14.*` (ya 2026 mein modern Node.js versions jaise `v20.*` / `v22.*`). Is ka matlab hai ke Node.js sahi tarike se install ho chuka hai aur aap `nodetodo` app chalane ke liye tayar hain.
+
+> **Ziyada Seekhne Ke Liye Resources:** Agar aap Node.js ko tafseel se seekhna chahte hain, toh Manning ki book *Node.js in Action (Second Edition)* by Alex Young ya unka video course *Node.js in Motion* by PJ Evans zaroor dekhein.
+
+---
+
+### Where is the code located?
+
+Book ka tamam source code GitHub repository par mojood hai:
+`[https://github.com/AWSinAction/code3](https://github.com/AWSinAction/code3)`
+
+Aap apne terminal mein `/chapter12/` directory mein jayein aur yeh command chalayein:
+
+```bash
+npm install
+
+```
+
+**`npm install` kya karta hai?**
+Yeh command `package.json` file ko parhti hai aur `nodetodo` app ke liye zaroori tamam external libraries/tools (jaise AWS SDK, docopt, moment) ko internet se download karke `node_modules` folder mein save kar deti hai.
+
+---
+
+### Listing 12.3 nodetodo: Using docopt in Node.js (index.js)
+
+Docopt ka kaam user ke terminal par diye gaye input arguments ko parhna hai aur unhein ek JavaScript object mein convert karna hai.
+
+```javascript
+const fs = require('fs'); // Filesystem tak rasai ke liye fs module load karta hai
+const docopt = require('docopt'); // Input arguments ko parhne ke liye docopt module load karta hai
+const moment = require('moment'); // JavaScript mein temporal types ko asan banane ke liye moment module load karta hai
+const AWS = require('aws-sdk'); // AWS SDK module load karta hai
+const db = new AWS.DynamoDB({
+  region: 'us-east-1'
+});
+
+const cli = fs.readFileSync('./cli.txt',
+  {encoding: 'utf8'}); // File cli.txt se CLI description parhta hai
+const input = docopt.docopt(cli, {
+  version: '1.0',
+  argv: process.argv.splice(2)
+}); // Arguments ko parse karta hai, aur unhein aik input variable mein save karta hai
+
+```
+
+#### Code Breakdown:
+
+* **`const fs = require('fs');`**
+* `fs` (File System) Node.js ka built-in tool hai jo local drive se files ko read ya write karne ke kaam aata hai.
+
+
+* **`const docopt = require('docopt');`**
+* Terminal command parameters ko parsing (breakdown) karne waali library ko import kar raha hai.
+
+
+* **`const moment = require('moment');`**
+* Date aur Time ki formatting aur calculations ko aasan banane ke liye `moment` library ko load karta hai.
+
+
+* **`const AWS = require('aws-sdk');`**
+* AWS ki tamam services (jaise DynamoDB) ke sath connect hone ke liye official AWS SDK library ko load karta hai. *(Note: Yeh AWS SDK v2 Syntax hai; 2026 mein modern projects mein hum AWS SDK v3 `@aws-sdk/client-dynamodb` istemal karte hain, lekin kaam karne ka bunyaadi logic bilkul same rehta hai).*
+
+
+* **`const db = new AWS.DynamoDB({ region: 'us-east-1' });`**
+* DynamoDB ka client instance create kar raha hai aur batara ha hai ke hamari tables AWS ke `us-east-1` (N. Virginia) region mein hain.
+
+
+* **`const cli = fs.readFileSync('./cli.txt', {encoding: 'utf8'});`**
+* Pehle se bani hui `cli.txt` file (jismein tamam CLI rules aur options likhe hain) ko utf8 text format mein read karke `cli` variable mein store karta hai.
+
+
+* **`const input = docopt.docopt(cli, { version: '1.0', argv: process.argv.splice(2) });`**
+* Terminal par user ne jo bhi likha (maslan `user-add john john@widdix.de +11111111`), usay read karke breakdown karta hai aur `input` variable ke andar ek organized JavaScript object mein save kar deta hai.
+
+
+
+---
+
+### Listing 12.4 DynamoDB: Creating an item
+
+Aaiye dekhte hain ke DynamoDB mein low-level API istemal karte hue item kaise add kiya jata hai (`putItem` method).
+
+```javascript
+const params = {
+  Item: { // Tamam item attribute name-value pairs hain
+    attr1: {S: 'val1'}, // Strings ko S se zahir kiya jata hai
+    attr2: {N: '2'} // Numbers (floats aur integers) ko N se zahir kiya jata hai
+  },
+  TableName: 'app-entity' // app-entity table mein item add karta hai
+};
+db.putItem(params, (err) => { // DynamoDB par putItem operation invoke karta hai
+  if (err) { // Errors ko handle karta hai
+    console.error('error', err);
+  } else {
+    console.log('success');
+  }
+});
+
+```
+
+#### Code Breakdown:
+
+* **`const params = { ... };`**
+* AWS API ko bhejne waale settings aur data ka ek main JSON object.
+
+
+* **`Item: { attr1: {S: 'val1'}, attr2: {N: '2'} }`**
+* DynamoDB Low-Level API mein aap ko har value ke sath uski Data Type explicit tarike se batani parti hai:
+* `{S: 'val1'}` ka matlab hai ke `attr1` ek **String (`S`)** hai aur uski value `'val1'` hai.
+* `{N: '2'}` ka matlab hai ke `attr2` ek **Number (`N`)** hai aur uski value `2` hai (dhyan rahe ke number ko bhi quotes `'2'` mein pass kiya jata hai).
+
+
+
+
+* **`TableName: 'app-entity'`**
+* Yeh batata hai ke data kis table mein ja kar save hona chahiye.
+
+
+* **`db.putItem(params, (err) => { ... });`**
+* AWS ko network par request bhejta hai ke item store karo. Jab DynamoDB jawab deta hai, toh yeh callback function chalta hai:
+* **`if (err)`**: Agar internet ka masla ho ya key ka issue aaye toh terminal par error print karega.
+* **`else`**: Agar data kamyabi se save ho jaye toh terminal par `"success"` print hoga.
+
+
+
+
+
+---
+
+## Adding a user
+
+Pehla qadam `todo-user` table mein user data add karna hai. Jab user terminal par `user-add` command chalata hai, toh neechay diya gaya code execute hota hai.
+
+### Listing 12.5 nodetodo: Adding a user (index.js)
+
+```javascript
+if (input['user-add'] === true) {
+  const params = {
+    Item: { // Item mein tamam attributes shamil hote hain. Keys bhi attributes hoti hain, aur is wajah se jab aap data add karte hain toh aap ko DynamoDB ko yeh batane ki zaroorat nahi hoti ke konsa attribute key hai
+      uid: {S: input['<uid>']}, // uid attribute string type ka hai aur is mein uid parameter value hoti hai
+      email: {S: input['<email>']}, // email attribute string type ka hai aur is mein email parameter value hoti hai
+      phone: {S: input['<phone>']} // phone attribute string type ka hai aur is mein phone parameter value hoti hai
+    },
+    TableName: 'todo-user', // User table ko specify karta hai
+    ConditionExpression: 'attribute_not_exists(uid)' // Agar aik hi key par putItem do dafa call kiya jaye, toh data replace ho jata hai. ConditionExpression putItem ki tabhi ijazat deti hai jab key pehle se mojood na ho
+  };
+  db.putItem(params, (err) => { // DynamoDB par putItem operation ko invoke karta hai
+    if (err) { // Errors ko handle karta hai
+      console.error('error', err);
+    } else {
+      console.log('user added');
+    }
+  });
+}
+
+```
+
+#### Code Breakdown:
+
+* **`if (input['user-add'] === true)`**
+* Yeh check karta hai ke kya user ne terminal par `user-add` command run ki hai? Agar haan, toh andar ka code chalega.
+
+
+* **`Item: { uid: {S: ...}, email: {S: ...}, phone: {S: ...} }`**
+* DynamoDB ko teeno attributes pass kar raha hai. Teeno ki data type String (`S`) hai.
+* *Important Concept:* Key (`uid`) bhi baki attributes ki tarah hi likhi jati hai. DynamoDB khud pehchan leta hai ke yeh key hai kyun ke hum ne table banate waqt `uid` ko key set kiya tha.
+
+
+* **`TableName: 'todo-user'`**
+* Target table `todo-user` hai.
+
+
+* **`ConditionExpression: 'attribute_not_exists(uid)'` (Mahaam Concept & Design Decision)**
+* **Bacho Ki Tarah Samjhein:** Normally, DynamoDB mein agar aap ek hi User ID (`uid`) se dobara data bhejein, toh purana data bager kisi warning ke **delete (overwrite)** ho jata hai!
+* Is khatre se bachne ke liye hum ne `ConditionExpression` lagaya hai. Yeh DynamoDB ko bolta hai: *"Pehle check karo! Agar yeh `uid` pehle se table mein exist karti hai, toh error de do aur naya data overwrite mat hone do!"*
+
+
+* **`db.putItem(params, ...)`**
+* Success par terminal par `"user added"` display hota hai.
+
+
+
+#### Execution Commands (Users Add Karein):
+
+Ab apne terminal par yeh do commands chala kar do users create karein:
+
+```bash
+node index.js user-add john john@widdix.de +11111111
+node index.js user-add emma emma@widdix.de +22222222
+
+```
+
+---
+
+## Adding a task
+
+Users add karne ke baad, John aur Emma apne daily kaam organize karne ke liye tasks add karenge. Task add karne ka logic user add karne se milta julta hai, lekin is mein optional parameters aur composite keys handling shamil hain.
+
+### Listing 12.6 nodetodo: Adding a task (index.js)
+
+```javascript
+if (input['task-add'] === true) {
+  const tid = Date.now(); // Current timestamp ki buniyad par task ID (tid) create karta hai
+  const params = {
+    Item: {
+      uid: {S: input['<uid>']},
+      tid: {N: tid.toString()}, // tid attribute number type ka hai aur is mein tid ki value hoti hai
+      description: {S: input['<description>']},
+      created: {N: moment(tid).format('YYYYMMDD')} // Create kiya gaya attribute number type ka hota hai (format 20150525)
+    },
+    TableName: 'todo-task', // Task table ko specify karta hai
+    ConditionExpression: 'attribute_not_exists(uid) ' +
+      'and attribute_not_exists(tid)' // Yeh yakeeni banata hai ke koi mojooda item override na ho
+  };
+  if (input['--dueat'] !== null) { // Agar optional named parameter dueat set ho, toh yeh value item mein add kar deta hai
+    params.Item.due = {N: input['--dueat']};
+  }
+  if (input['<category>'] !== null) { // Agar optional named parameter category set ho, toh yeh value item mein add kar deta hai
+    params.Item.category = {S: input['<category>']};
+  }
+  db.putItem(params, (err) => { // DynamoDB par putItem operation ko invoke karta hai
+    if (err) {
+      console.error('error', err);
+    } else {
+      console.log('task added with tid ' + tid);
+    }
+  });
+}
+
+```
+
+#### Code Breakdown:
+
+* **`if (input['task-add'] === true)`**
+* Check karta hai ke kya command `task-add` chali hai.
+
+
+* **`const tid = Date.now();`**
+* `Date.now()` Unix Timestamp generate karta hai (yani 1 Jan 1970 se lekar abhi tak ke total milliseconds). Is milli-second counter ko hum unique **Task ID (`tid`)** ke tor par istemal karte hain.
+
+
+* **`Item: { ... }` Structure:**
+* **`uid`**: User ID (`S` String).
+* **`tid`**: Task ID (`N` Number format mein convert karke `tid.toString()`).
+* **`description`**: Task ki tafseel (`S` String).
+* **`created`**: Task banne ki tarikh (`N` Number format YYYYMMDD, e.g., 20260801).
+
+
+* **`TableName: 'todo-task'`**
+* Target table `todo-task` set karta hai.
+
+
+* **`ConditionExpression: 'attribute_not_exists(uid) and attribute_not_exists(tid)'`**
+* Kyun ke `todo-task` table ki Primary Key **Partition Key (`uid`) + Sort Key (`tid`)** donon se mil kar bani hai, is liye hum ne dono keys par condition lagai hai ke yeh jod (pair) pehle se table mein mojood nahi hona chahiye.
+
+
+* **Optional Parameters Handling (Dynamic Attributes):**
+* **`if (input['--dueat'] !== null)`**: Agar user ne CLI par task ki due date batayi hai (jaise `--dueat "20260224"`), toh code dynamically item ke andar `due` attribute add kar deta hai.
+* **`if (input['<category>'] !== null)`**: Agar user ne category di hai (jaise `"shopping"`), toh `category` attribute bhi JSON Object mein add ho jata hai.
+* *DynamoDB Schema-less Power:* Agar yeh attributes input mein nahi diye gaye, toh DynamoDB item mein yeh fields create hi nahi hotay!
+
+
+
+#### Execution Commands (Tasks Add Karein):
+
+Ab terminal par yeh commands chala kar Emma aur John ke tasks add karein:
+
+1. **Emma ka Task (Bina Due Date Ke):**
+
+```bash
+node index.js task-add emma "buy milk" "shopping"
+
+```
+
+*Is command se Emma ke liye "shopping" category mein "buy milk" ka task add hoga.*
+
+2. **Emma ka Task (Due Date Ke Sath):**
+
+```bash
+node index.js task-add emma "put out the garbage" "housekeeping" --dueat "20220224"
+
+```
+
+*Is command se "housekeeping" category wala task `--dueat` parameter ke sath add ho jayega.*
+
+
+---
