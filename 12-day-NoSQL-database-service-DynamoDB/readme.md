@@ -186,3 +186,268 @@ task completed with tid 1526650262330
 > 
 > 
 > Is chapter mein di gayi tamam practical exercise AWS ke **Free Tier** mein 100% free hain. Bas is baat ka dhyan rakhein ke aap ke AWS account mein koi aur heavy resources na chal rahe hoon. Chapter ke aakhir mein hum saare resources delete/clean up bhi karenge taake koi bill na aaye.
+
+---
+
+## Programming a to-do application
+
+Aaiye ab dekhte hain ke DynamoDB ke sath kaam karne ke liye ek to-do application kaise program ki jati hai.
+
+DynamoDB ek **Key-Value Store** hai jo aap ke data ko **Tables** (dabon ya registers) mein organize karta hai.
+
+* **Example:** Aap ke paas ek table apne **Users** ka data store karne ke liye ho sakti hai aur doosri table un ke **Tasks** (kaam) ko store karne ke liye.
+* **Item (Record):** Table ke andar mojood har record ko hum **Item** kehte hain. Isay aap aam relational database (jaise MySQL) ki ek **Row** (line) ki tarah samajh sakte hain. Har Item ki ek unique key hoti hai jisse uski pehchan hoti hai.
+
+Kisi programming language ki ziyaada mushkilat se bachne ke liye, hum **Node.js/JavaScript** ka istemal karke ek choti si terminal app banayenge jiska naam **`nodetodo`** hai. Yeh app aap ke local machine ke terminal par chalti hai aur piche DynamoDB ko database ke tor par istemal karti hai.
+
+Is `nodetodo` application ke andar yeh tamam features hain:
+
+* Naye users banana aur purane users delete karna.
+* Naye tasks banana aur unhein delete karna.
+* Tasks ko "Done" (kam mukammal) mark karna.
+* Alag alag filters ke sath sabhi tasks ki list nikalna.
+
+Is app ka Command-Line Interface (CLI) bohot aasan aur samajhne mein easy banane ke liye **docopt** namak tool/language ka istemal kiya gaya hai. Below di gayi listing mein `nodetodo` ke supported commands aur unke parameters bataye gaye hain:
+
+---
+
+### Listing 12.1 CLI description language docopt: Using nodetodo (cli.txt)
+
+```text
+nodetodo
+
+Usage:
+  nodetodo user-add <uid> <email> <phone>
+  nodetodo user-rm <uid>
+  nodetodo user-ls [--limit=<limit>] [--next=<id>]
+  nodetodo user <uid>
+  nodetodo task-add <uid> <description> [<category>] [--dueat=<yyyymmdd>]
+  nodetodo task-rm <uid> <tid>
+  nodetodo task-ls <uid> [<category>] [--overdue|--due|--withoutdue|--futuredue]
+  nodetodo task-la <category> [--overdue|--due|--withoutdue|--futuredue]
+  nodetodo task-done <uid> <tid>
+  nodetodo -h | --help
+  nodetodo --version
+
+Options:
+  -h --help        Show this screen.
+  --version        Show version.
+
+```
+
+#### Code aur Commands Ka Breakdown:
+
+* **`nodetodo user-add <uid> <email> <phone>`:** Is command se naya user add hota hai. Is mein User ID (`uid`), Email, aur Phone number teeno dena compulsory hai.
+* **`nodetodo user-rm <uid>`:** Kisi user ki `uid` de kar usay system se remove (delete) kiya jata hai.
+* **`nodetodo user-ls [--limit=<limit>] [--next=<id>]`:** Sabhi users ki list dikhata hai. Square brackets `[...]` ka matlab hai ke `--limit` (kitne users dikhane hain) aur `--next` (aglay page par jane ke liye ID) optional parameters hain.
+* **`nodetodo user <uid>`:** Specific user ki mukammal details dikhata hai.
+* **`nodetodo task-add <uid> <description> [<category>] [--dueat=<yyyymmdd>]`:** User ke liye naya task add karta hai. User ID aur Task Description zaroori hain, jabke Category aur Due Date (`dueat`) optional hain.
+* **`nodetodo task-rm <uid> <tid>`:** Specific User ID (`uid`) aur Task ID (`tid`) ke zariye task delete karta hai.
+* **`nodetodo task-ls <uid> [<category>] [--overdue|--due|--withoutdue|--futuredue]`:** User ke tasks list karta hai. Pipe `|` ka matlab "Ya yeh, Ya woh" (either/or) hota hai, yani aap aik waqt par ek hi condition/filter laga sakte hain (jaise overdue tasks ya future due tasks).
+* **`nodetodo task-la <category> [--overdue|--due|--withoutdue|--futuredue]`:** Kisi khaas category ke tamam tasks ko filters ke sath list karta hai.
+* **`nodetodo task-done <uid> <tid>`:** Task ko complete mark kar deta hai.
+* **`nodetodo -h | --help` aur `--version`:** Help menu aur app ka version dikhane ke liye options hain.
+
+> **Mahaam Fark (DynamoDB vs SQL):** DynamoDB kisi traditional SQL database jaisa nahi hai jismein aap SQL queries (`SELECT * FROM...`) likhte hain. DynamoDB ke sath baat karne ke liye hum **AWS SDK** istemal karte hain jo AWS ke REST API par requests bhejta hai. Aap purani SQL app ko direct DynamoDB par nahi chala sakte; aap ko hamesha code likhna padta hai!
+
+---
+
+## Creating tables
+
+DynamoDB mein har table ka ek unique naam hota hai aur us mein **Items** ka collection hota hai.
+
+* **Attribute:** Item ke andar mojood alag alag data fields ko hum **Attribute** kehte hain. Yeh hamesha **Name-Value Pair** ki shakal mein hote hain (e.g., `Name: Emma`).
+* **Attribute Values Ki Types:**
+1. **Scalar (Single value):** Number, String, Binary, Boolean.
+2. **Multivalued (Ek se zyada values):** Number Set, String Set, Binary Set.
+3. **JSON Document:** Complex objects ya arrays.
+
+
+
+Table ke alag alag items ke paas bilkul alag attributes ho sakte hain, kyun ke DynamoDB mein koi sakht (enforced) schema nahi hota.
+
+---
+
+### Figure 12.3 Detailed Breakdown
+
+Figure 12.3 mein DynamoDB ke basic components ko visualize kiya gaya hai:
+
+<div align="center">
+  <img src="./images/03.png" width="600"/>
+</div>
+
+* **Table Box:** Poori Table ko represent karta hai.
+* **Horizontal Rows (Items):** Table mein mojood har horizontal line ek **Item** hai.
+* **Columns (Primary Key & Attributes):**
+* Sab se pehle column ko **Primary Key** mark kiya gaya hai, jo har item mein lazmi mojood hota hai.
+* Baqi boxes **Attributes** ko zahir karte hain.
+
+
+* **Items can have different attributes (Sab se zaroori point):** Figure mein wazeh dikhaya gaya hai ke pehle Item ke paas 3 extra attributes hain, doosre ke paas sirf 2 attributes hain, aur teesre ke paas alag attributes hain. Is ka matlab yeh hai ke DynamoDB mein fixed schema nahi hota—har item apne alag attributes rakh sakta hai.
+
+> Bhalay DynamoDB mein fixed schema nahi hota, lekin table banate waqt aap ko yeh batana laazmi hota hai ke kaun sa attribute **Primary Key** ke taur par kaam karega.
+
+---
+
+## Users are identified by a partition key
+
+User ka data save karne ke liye hum ne yeh simple JSON data structure choose kiya hai:
+
+```json
+{
+  "uid": "emma",        // Unique user ID
+  "email": "emma@widdix.de", // User ka email address
+  "phone": "0123456789"    // User ka phone number
+}
+
+```
+
+Is information ki bunyaad par DynamoDB table kaise banayein?
+
+1. **Table Ka Naam:** Hamesha apni application ka naam prefix ke taur par lagana chahiye. Hum is table ka naam **`todo-user`** rakhte hain taake future mein kisi aur app ke table se name collision (naamon ka takraao) na ho.
+2. **Primary Key Choosna:** Hum `uid` ko primary key chunte hain kyun ke har user ki `uid` unique hai.
+3. **Partition Key Kya Hai?** Jab hum sirf ek hi attribute ko primary key ke taur par istemal karte hain, toh DynamoDB usay **Partition Key** kehta hai.
+
+AWS CLI command `aws dynamodb create-table` chalate waqt **4 zaroori options** hote hain:
+
+* **`table-name`:** Table ka naam (jo baad mein badla nahi ja sakta).
+* **`attribute-definitions`:** Primary key mein istemal hone wale attributes ke naam aur unki types. Types yeh ho sakti hain: `S` (String), `N` (Number), ya `B` (Binary).
+* **`key-schema`:** Primary key ke structure ki wazahat. `HASH` Partition Key ke liye hota hai aur `RANGE` Sort Key ke liye.
+* **`provisioned-throughput`:** Table ki speed settings (`ReadCapacityUnits=5,WriteCapacityUnits=5`).
+
+Execute karein yeh CLI command `todo-user` table banane ke liye:
+
+```bash
+aws dynamodb create-table --table-name todo-user \
+  --attribute-definitions AttributeName=uid,AttributeType=S \
+  --key-schema AttributeName=uid,KeyType=HASH \
+  --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+```
+
+Table banne mein kuch seconds ka time lagta hai. Jab tak status **ACTIVE** na ho jaye, hum table par kaam nahi kar sakte. Status check karne ki command neechay di gayi hai:
+
+---
+
+### Listing 12.2 Checking the status of the DynamoDB table
+
+```bash
+$ aws dynamodb describe-table --table-name todo-user
+
+```
+
+**Output JSON Breakdown:**
+
+```json
+{
+  "Table": {
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "uid",
+        "AttributeType": "S"
+      }
+    ],
+    "TableName": "todo-user",
+    "KeySchema": [
+      {
+        "AttributeName": "uid",
+        "KeyType": "HASH"
+      }
+    ],
+    "TableStatus": "ACTIVE",
+    "CreationDateTime": "2022-01-24T16:00:29.105000+01:00",
+    "ProvisionedThroughput": {
+      "NumberOfDecreasesToday": 0,
+      "ReadCapacityUnits": 5,
+      "WriteCapacityUnits": 5
+    },
+    "TableSizeBytes": 0,
+    "ItemCount": 0,
+    "TableArn": "arn:aws:dynamodb:us-east-1:111111111111:table/todo-user",
+    "TableId": "0697ea25-5901-421c-af29-8288a024392a"
+  }
+}
+
+```
+
+* **`AttributeDefinitions`:** Yeh batata hai ke table ki key ke taur par `uid` ek String (`S`) set hai.
+* **`TableName`:** Table ka naam `todo-user` hai.
+* **`KeySchema`:** Key type `HASH` hai, matlab `uid` humari Partition Key hai.
+* **`TableStatus`:** Status `"ACTIVE"` dikha raha hai, matlab table ab istemal ke liye 100% tayar hai.
+* **`CreationDateTime`:** Table kis date aur time par bani thi.
+* **`ProvisionedThroughput`:** Read aur Write capacity units dono 5, 5 set hain.
+* **`TableSizeBytes` & `ItemCount`:** Abhi table khali hai is liye bytes aur items ki tadaad 0 hai.
+* **`TableArn` & `TableId`:** AWS ka Unique Resource Name aur Internal Identifier ID.
+
+---
+
+## Tasks are identified by a partition key and sort key
+
+Users ki table banane ke baad, ab humein **Tasks** ko store karne ke liye ek table chahiye. Aise Task ka data structure yeh hai:
+
+```json
+{
+  "uid": "emma",               // Kis user ka task hai
+  "tid": 1645609847712,        // Task ID (Time in milliseconds)
+  "description": "prepare lunch" // Task kya hai
+}
+
+```
+
+### Partition Key + Sort Key (Composite Primary Key) Kyun Chuni?
+
+Agar hum sirf `tid` (Task ID) ko primary key banate toh masla yeh hota ke hum `task-ls` (user ke saare tasks list karne waali command) tezi se nahi chala sakte the.
+
+Is liye hum ne **`uid` aur `tid` ke combination** ko primary key banaya:
+
+* **Partition Key (`HASH`):** `uid` (User ID).
+* **Sort Key (`RANGE`):** `tid` (Task ID).
+
+> **Niyam (Rule):** Partition key akele unique hona zaroori nahi, aur Sort key bhi akele unique hona zaroori nahi. Lekin **Partition Key + Sort Key ka jod (combination) 100% unique hona chahiye!**
+
+> **Ahem Limitation (Pabandi):** Is design ki waja se ek user ek hi millisecond ke andar 2 tasks create nahi kar sakta, kyun ke `uid` + `tid` duplicate ho jayenge. Lekin chunke time milliseconds mein hai, toh aam use mein aisa masla nahi aata.
+
+### Unordered Hash Index Aur Sorted Index Kaise Kaam Karte Hain?
+
+DynamoDB internals ko bilkul aasan misal se samjhein:
+
+1. **Partition Key (`uid`)** ka koi khas order nahi hota (Unordered Hash Index). Data alag alag partitions par bikhra hota hai.
+2. **Sort Key (`tid`)** har Partition Key ke andar tartiib se (Sorted Order mein) arranged hoti hai.
+
+Is ko is data set example se samjhein:
+
+```text
+["john", 1] => { "uid": "john", "tid": 1, "description": "prepare customer presentation" }
+["john", 2] => { "uid": "john", "tid": 2, "description": "plan holidays" }
+["emma", 1] => { "uid": "emma", "tid": 1, "description": "prepare lunch" }
+["emma", 2] => { "uid": "emma", "tid": 2, "description": "buy nice flowers for mum" }
+["emma", 3] => { "uid": "emma", "tid": 3, "description": "prepare talk for conference" }
+
+```
+
+* `"john"` ke bucket/partition mein Task 1 aur 2 ek line se sorted hain.
+* `"emma"` ke bucket/partition mein Task 1, 2, aur 3 sorted hain.
+* `"john"` aur `"emma"` ke partitions ka aapas mein koi tartiib (order) nahi hai.
+
+### Table Create Karne Ki CLI Command:
+
+Execute karein yeh command `todo-task` table banane ke liye:
+
+```bash
+aws dynamodb create-table --table-name todo-task \
+  --attribute-definitions AttributeName=uid,AttributeType=S AttributeName=tid,AttributeType=N \
+  --key-schema AttributeName=uid,KeyType=HASH AttributeName=tid,KeyType=RANGE \
+  --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+```
+
+#### Command Ka Breakdown:
+
+* **`--table-name todo-task`:** Table ka naam `todo-task` set kiya.
+* **`--attribute-definitions`:** Do attributes define kiye: `uid` (Type `S` = String) aur `tid` (Type `N` = Number).
+* **`--key-schema`:** `uid` ko `HASH` (Partition Key) banaya aur `tid` ko `RANGE` (Sort Key) banaya.
+* **`--provisioned-throughput`:** Performance limits 5 Read / 5 Write capacity units set ki.
+
+Aap `aws dynamodb describe-table --table-name todo-task` chala kar tab tak wait karein jab tak is ka status **ACTIVE** na ho jaye. Ab humari dono tables (`todo-user` aur `todo-task`) tayar hain!
+
+---
