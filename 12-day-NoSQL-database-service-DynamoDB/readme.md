@@ -1724,3 +1724,160 @@ Farz karein aap ek Chat Application ki Messages Table bana rahe hain:
 Is design ka fayda yeh hoga ke aap user ke tamam messages nikal sakte hain, ya specific tarikh ke baad ke purane/naye messages range query (`>` ya `<`) karke mangwa sakte hain, aur saare messages time ke mutabiq automatic sorted milenge!
 
 ---
+
+## SQL-like queries with PartiQL
+
+`nodetodo` application ke developer ke tor par, hum yeh samajhna chahte hain ke users is app ko kis tarah istemal kar rahe hain. Is ke liye humein DynamoDB par majood data ko on-the-fly (fauran/kisi bhi waqt) query karne ka ek flexible tarika chahiye.
+
+Chunke **SQL (Structured Query Language)** duniya mein sab se zyada istemal hone waali database language hai, is liye taqriban har database system SQL interface dene ki koshish karta hai—bhalay NoSQL databases mein SQL ke tamam features ki bajaye sirf ek chota hissa (subset) hi support hota ho.
+
+AWS ne **PartiQL** banaya hai, jo ek aisi query language hai jiska maqsad tamam kism ke data stores ko ek hi tarike ki SQL-like queries se access karna hai.
+
+DynamoDB mein PartiQL ko aap in tarikon se chala sakte hain:
+
+* AWS Management Console
+* NoSQL Workbench
+* AWS CLI
+* DynamoDB APIs / SDKs
+
+> **Mahaam Note & Trade-off:** DynamoDB PartiQL language ka sirf ek bohot **chota subset (limit) support** karta hai. SQL ke saare complex features yahan nahi chalte.
+
+Aaiye pehle ek simple statement dekhte hain jo `todo-task` table ke saare items ko fetch karti hai:
+
+```bash
+aws dynamodb execute-statement \
+  --statement "SELECT * FROM \"todo-task\""
+
+```
+
+#### Code Breakdown:
+
+* **`aws dynamodb execute-statement`**: Yeh AWS CLI ki command hai jo PartiQL statements ko execute karne ke liye istemal hoti hai.
+* **`--statement`**: Is parameter mein hum apni PartiQL query pass karte hain.
+* **`"SELECT * FROM \"todo-task\""`**: Yeh ek simple SQL SELECT statement hai jo `todo-task` table se saare attributes fetch kar ke laati hai.
+* *Note:* Table ke naam ke gird backslash escaped quotes `\"todo-task\"` lagana zaroori hota hai kyun ke table ke naam mein hyphen (`-`) shamil hai.
+
+
+
+---
+
+### Index Ko Query Karna (PartiQL Ke Sath)
+
+PartiQL ke zariye aap kisi Global Secondary Index (GSI) ko bhi direct query kar sakte hain. Neechay di gayi statement `category-index` se un tamam tasks ko fetch karti hai jin ki category `'shopping'` hai:
+
+```bash
+aws dynamodb execute-statement --statement \
+  "SELECT * FROM \"todo-task\".\"category-index\" WHERE category = 'shopping'"
+
+```
+
+#### Code Breakdown:
+
+* **`\"todo-task\".\"category-index\"`**: Is syntax ka matlab hai ke `todo-task` table ke andar majood `category-index` naam ke GSI par query chalao.
+* **`WHERE category = 'shopping'`**: Yeh condition set kar raha hai ke sirf wahi records laaye jayein jahan category attribute ki value exact `'shopping'` se match hoti ho.
+
+> **Sab Se Badi Restriction (Trade-off):** DynamoDB mein PartiQL ke zariye do alag tables ko aapas mein jodhna (**`JOIN` operation**) bilkul **support nahi hota**!
+
+---
+
+### Data Modify Karna (UPDATE / DELETE)
+
+PartiQL sirf data parhne ke liye nahi, balki data badalney ya delete karne ke liye bhi istemal hota hai. Neechay di gayi command Emma ka phone number update karti hai:
+
+```bash
+aws dynamodb execute-statement --statement \
+  "UPDATE \"todo-user\" SET phone='+33333333' WHERE uid='emma'"
+
+```
+
+#### Code Breakdown:
+
+* **`UPDATE \"todo-user\"`**: Batata hai ke `todo-user` table mein badlao karna hai.
+* **`SET phone='+33333333'`**: `phone` attribute ki nayi value `+33333333` set kar raha hai.
+* **`WHERE uid='emma'`**: Target record ki pehchan User ID (`uid`) se kar raha hai.
+
+---
+
+> ### Mahaam Chetawni (Important Warning & Limitation):
+> 
+> 
+> PartiQL mein jab bhi aap **`UPDATE`** ya **`DELETE`** statement chalayein, us mein **`WHERE` clause hona SAKHT LAZMI hai** jo kisi ek single item ko us ki Partition Key (ya Partition Key + Sort Key) se identify kartay ho.
+> Is ka matlab hai ke aap PartiQL se **ek waqt mein ek se zyada (bulk/batch) items ko update ya delete NAHI kar sakte!**
+
+---
+
+### Writer Ki Rai (Opinion & Comparison):
+
+Writer ke mutabiq, DynamoDB mein PartiQL istemal karna thoda **confusing** hai. Yeh dikhne mein toh SQL jaisi lagti hai, lekin asliyat mein bohot zyada limited hai (bina JOINs aur bulk operations ke). Is liye PartiQL ke bajaye **DynamoDB ke Native APIs aur SDK** istemal karna zyada behtar, wazeh (descriptive), aur reliable hai.
+
+---
+
+## DynamoDB Local
+
+**Bacho Ki Tarah Samjhein:**
+Farz karein aap aur aap ke 5 dost mil kar ek project par kaam kar rahe hain. Agar sab ek hi notebook par ek sath likhna shuru kar dein, toh ek doosre ka kaam kharab ho jayega aur galti se kisi aur ka likha hua mit jayega. Is se bachne ke liye har dosti ko alag rough copy chahiye hoti hai.
+
+Jab developers ki team DynamoDB par app banati hai, toh unhein testing aur development ke liye ek alag/isolated database chahiye hota hai taake doosron ka data kharab na ho.
+
+Is masley ke **2 Hal** hain:
+
+1. Har developer ke liye CloudFormation stack ke zariye AWS Cloud par alag tables ka set banaya jaye.
+2. **DynamoDB Local** istemal kiya jaye jo bina internet ke offline aap ke apne laptop par chalta hai.
+
+AWS ne ek downloadable tool banaya hai jise aap apne local system par chala sakte hain. Yeh local computer par chalte hue bilkul asli DynamoDB jaisi APIs provide karta hai.
+
+> **GOLDEN RULE (Pabandi):** **DynamoDB Local ko Production environment mein KABHI mat chalayein!** Yeh sirf testing aur development ke liye hai. Background mein is ka internal system alag hota hai, bas is ki APIs DynamoDB jaisi hoti hain.
+
+---
+
+## NoSQL Workbench for DynamoDB
+
+Agar aap ko Command Line Interface (CLI) ke bajaye ek visual **Graphical User Interface (GUI)** tool pasand hai, toh AWS ne **NoSQL Workbench for DynamoDB** banaya hai.
+
+Yeh desktop tool aap ko neechay diye gaye kaam karne mein madad deta hai:
+
+* **Data Modeling:** Visual tarike se tables aur indexes ka structure design karna.
+* **Data Visualization & Analysis:** Tables ke andar majood data ko dekhna aur query karna.
+* **Import & Export:** Data ko baahir se laana ya save karke export karna.
+
+Is ke sath hum ne `nodetodo` application ke tamam features kamyabi se samajh liye hain!
+
+---
+
+## Operating DynamoDB
+
+Purane traditional relational databases (jaise MySQL ya Oracle) ko chalane ke liye ek Dedicated Database Administrator (DBA) ki zaroorat hoti thi jo servers install kare, updates lagaye, aur hardware sambhale.
+
+DynamoDB ek **Fully Managed Service (NoSQL Database as a Service)** hai, jiska matlab hai ke AWS piche ki tamam mushkilaat khud sambhalta hai.
+
+---
+
+### Jo Kam AWS Aap Ke Liye Khud Karta Hai (Zero Maintenance):
+
+1. **No Installation & Updates:** DynamoDB koi aisa software nahi jise aap download karke install karein (jaise MySQL ya MongoDB). Chunke yeh Cloud Service hai, is liye is ki tamam software updates aur maintenance AWS khud karta hai.
+2. **No Hardware or OS Management:** Hardware badalna, Operating System ki security patches lagana sab AWS ki zimmedari hai. Security ke lehaz se aap ka kaam sirf **AWS IAM (Identity and Access Management)** ke zariye apne data ke access ko restrict/control karna hai.
+3. **High Durability & Replication:** DynamoDB aap ke data ko automatic multiple physical machines aur multiple Data Centers (Availability Zones) par copy (replicate) kar deta hai. Hardware kharab hone par data loss ka koi khatra nahi hota.
+
+---
+
+### Production Mein Aap Ko Kitni Cheezon Ka Dhyan Rakhna Pata Hai?
+
+Bhalay AWS baqi sab sambhalta hai, lekin Production mein aap ko in 3 cheezon par nazar rakhni parti hai:
+
+1. **Capacity Usage Monitoring:** Yeh dekhna ke aap ki app kitna read/write load daal rahi hai.
+2. **Capacity Provisioning:** Sahi capacity modes (On-Demand ya Provisioned) ko set karna.
+3. **Backups:** Accidental data deletion se bachne ke liye backups create karna.
+
+---
+
+## Backups
+
+DynamoDB ki durability bohot zyada high hai (yaani hardware crash hone se data zaya nahi hota). Lekin is sawal par ghor karein:
+
+> *"Agar kisi Database Administrator se galti se saari tables delete ho jayein, ya application ke kisi naye buggy code ki waja se sara data corrupt ho jaye, toh kya hoga?"*
+
+Hardware ki durability aap ko insani galtiyon (Human Errors) ya code ke bugs se nahi bacha sakti! Is ke liye aap ko **Backups** ki zaroorat parti hai taake aap purani sahi condition par data wapas laa (restore kar) sakein.
+
+AWS DynamoDB mein **On-Demand Backup and Restore** (aur Point-in-Time Recovery - PITR) ki sahoolat deta hai. Is feature ke zariye aap jab chahay apni table ka ek **Snapshot (Instant Photo Copy)** le sakte hain aur zaroorat padne par us snapshot se poori nayi table restore kar sakte hain. Production environments mein On-Demand Backups istemal karna **sakht recommended** hai.
+
+---
