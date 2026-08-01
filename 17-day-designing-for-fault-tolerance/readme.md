@@ -138,3 +138,146 @@ Is chapter mein aap EC2 instances (jo ke by default fault tolerant nahi hotay) p
 * **DynamoDB:** Data ko highly available aur fault-tolerant tareeqay se store karne ke liye.
 
 ---
+
+## Using redundant EC2 instances to increase availability
+
+Virtual machine (EC2 instance) ke kharab ya crash hone ki do bari wajaat hoti hain: aik hardware/infrastructure ka masla aur doosra aap ke apne application code ka masla.
+
+### 1. Hardware Aur Infrastructure Level Ki Wajaat:
+
+Aap ki virtual machine in wajaat se fail ho sakti hai:
+
+* **Host Hardware Failure:** Jis physical server (computer) par aap ki virtual machine (EC2) chal rahi hai, agar us ka hardware (processor, RAM, motherboard) kharab ho jaye, toh wo aap ki virtual machine ko mazeed nahi chala sakta.
+* **Network Interruption:** Physical host computer ka network connection toot jaye ya wire cut jaye, toh virtual machine ka bahar ki dunya se rabta khatam ho jata hai.
+* **Power Failure:** Agar physical server ki bijli chali jaye ya power supply phat jaye, toh us par chalne wali virtual machine bhi fauran band ho jati hai.
+
+### 2. Software Aur Application Level Ki Wajaat:
+
+Hardware bilkul theek ho tab bhi aap ka apna software application crash ho sakta hai:
+
+* **Memory Leak (RAM Ka Bhar Jana):** Agar aap ke application code mein aisa bug hai jo RAM use toh karta hai lekin kaam hone ke baad usay khaali (free) nahi karta, toh ahista ahista saari RAM bhar jaye gi. Chahe is mein ek din lage, ek mahina lage ya ek saal, aik din RAM poori tarah khatam ho jaye gi aur EC2 instance crash ho jaye ga.
+* **Disk Space Full (Hard Disk Ka Bhar Jana):** Agar aap ka application hard disk par data ya log files write karta rehta hai aur purana data kabhi delete nahi karta, toh jald ya baqaddar hard disk full ho jaye gi aur aap ki app chalna band ho jaye gi.
+* **Unhandled Edge Cases:** Software mein koi aisa unexpected error ya unique situation aa jaye jise code mein handle na kiya gaya ho, toh app achanak se crash ho jati hai.
+
+> **Sab Se Bada Decision Aur Conclusion:** Chahe masla physical server ka ho ya aap ke code ka, **aik single EC2 instance hamesha Single Point of Failure (SPOF) hota hai**. Agar aap poore system ke liye sirf ek EC2 par bharosa karenge, toh aap ka system har haal mein fail hoga—yeh sirf waqt ki baat hai ke kab hota hai.
+
+---
+
+## Redundancy can remove a single point of failure
+
+SPOF ko khatam karne ke liye hum **Redundancy** (yaani ek se zyada duplicate components) ka istemal karte hain.
+
+### Real-World Example: Fluffy Cloud Pies Ki Factory
+
+Bacho ki tarah samajhne ke liye aik bakery ki misaal lete hain jo "Fluffy Cloud Pies" (halke phulke cloud wale cake) banati hai. Is pie ko banane ke 5 aasan steps hain:
+
+1. Pie ki crust (neeche wali biscuit layer) banana.
+2. Crust ko thanda (cool down) karna.
+3. Crust ke upar fluffy cloud mass (cream/topping) lagana.
+4. Poore pie ko dobara thanda karna.
+5. Pie ko pack (package) karna.
+
+#### Masla (Single Production Line):
+
+Pehle se setup mein bakery ke paas sirf **aik hi production line** hai. Masla yeh hai ke agar is poore process mein koi aik step bhi kharab ho jaye, toh poori bakery ka kaam ruk jata hai.
+
+* **Figure 16.1 Ka Hawala Aur Breakdown:**
+
+<div align="center">
+  <img src="./images/01.png" width="600"/>
+</div>
+
+* `Figure 16.1` mein dekhein, yahan "Production line 1" dikhayi gayi hai.
+* Step 2 (Cool down machine) par laal rang ka cross ($X$) laga hai, jis ka matlab hai ke machine kharab ho gayi hai ("The cool-down machine is broken").
+* Is ke waja se aage laal arrows aur akhir mein ek laal toota hua dil (broken heart) dikhaya gaya hai, jiska matlab hai ke poori chain toot chuki hai ("The complete chain is broken"). Aage wale steps 3, 4, aur 5 ko thandi crust milegi hi nahi, toh wo aage kaam hi nahi kar sakte.
+
+
+
+#### Hal (Multiple Production Lines / Redundancy):
+
+Aik line lagane ke bajaye bakery mein **3 alag alag production lines** laga di jayein, jo shuru se lekar packing tak alag alag kaam karein. Agar aik line ki machine kharab bhi ho jaye, toh baqi 2 lines chalti rahegi aur dunya bhar ke bhooke customers ko pies milti rahegi.
+
+* **Figure 16.2 Ka Hawala Aur Breakdown:**
+
+<div align="center">
+  <img src="./images/02.png" width="600"/>
+</div>
+
+* `Figure 16.2` mein dekhein, yahan 3 lines hain: Production line 1, Production line 2, aur Production line 3.
+* Production line 2 mein Step 2 (cool down) kharab ho gaya hai (laal cross aur broken heart).
+* Lekin Production line 1 aur Production line 3 bilkul sahi chal rahi hain (kaala dil = success). System abhi bhi chal raha hai!
+* **Trade-off (Nuksan/Kharach):** Is ka aik hi chota sa nuksan hai ke aap ko 3 guna zyada machines khareedni parhti hain.
+
+
+
+#### EC2 Par Redundancy Kaise Apply Hoti Hai?
+
+Bilkul bakery ki tarah, aik EC2 instance chalane ke bajaye aap **3 EC2 instances** chalayein. Agar aik instance fail bhi ho jaye, toh baqi 2 instances aane wali requests ko sambhaalte rahenge.
+
+**Kharchay (Cost) Ka Smart Decision:**
+3 instances ka kharcha bachane ke liye aap aik bara (large) EC2 instance chalane ke bajaye **3 chote (small) EC2 instances** chalayein. Is se aap ka kharcha taqreeban utna hi rahega lekin system highly available ho jaye ga!
+
+**Naya Challenge:** Jab 3 virtual machines chal rahi hongi, toh user/client ko kaise pata chalega ke kis EC2 se baat karni hai? Is ka jawab hai **Decoupling** (yaani client aur EC2 ke beech mein Load Balancer ya Message Queue lagana).
+
+---
+
+## Redundancy requires decoupling
+
+Client aur EC2 instances ke darmiyan direct rishta khatam karne (decouple karne) ke do sab se behtareen tareeqay hain: **Elastic Load Balancing (ELB)** aur **Simple Queue Service (SQS)**.
+
+### Model 1: Synchronous Decoupling (Load Balancer Ke Sath)
+
+* **Figure 16.3 Ka Hawala Aur Complete Breakdown:**
+
+<div align="center">
+  <img src="./images/03.png" width="600"/>
+</div>
+
+* Yahan `Figure 16.3` mein aik VPC (`10.0.0.0/16`) ke andar system ka architecture dikhaya gaya hai.
+* Internet se aane waali tamaam traffic sab se pehle **Load Balancer** par aati hai.
+* System do alag alag **Availability Zones (AZ A aur AZ B)** par phaila hua hai.
+* AZ A ke andar Subnet `10.0.1.0/24` hai aur AZ B ke andar Subnet `10.0.2.0/24` hai.
+* Dono subnets ke andar **Web Servers (EC2 instances)** chal rahe hain jo ek **Auto Scaling group** ke under manage ho rahe hain.
+
+
+
+#### Jab Koi EC2 Instance Crash Hota Hai Toh Kya Hota Hai? (Step-by-Step):
+
+1. Jab aik EC2 instance crash hota hai, **Load Balancer** fauran detection (health check) karta hai aur us kharab instance ko traffic bhejna **band (stop)** kar deta hai.
+2. **Auto Scaling group** fauran us kharab EC2 ko terminate karta hai aur kuch hi minto (minutes) mein aik **naya EC2 instance** create kar deta hai.
+3. Jaise hi naya EC2 ready hota hai, **Load Balancer** us naye instance ko requests bhejna shuru kar deta hai.
+
+#### Figure 16.3 Mein Kitni Redundancy Hai?
+
+* **Availability Zones (AZs):** Yahan 2 AZs use ho rahe hain. Agar aik poora Data Center (AZ) bhi kisi wajah se band ho jaye, tab bhi doosre AZ mein hamare EC2 instances chal rahe hote hain.
+* **Subnets:** Subnet hamesha aik specific AZ se judi hoti hai, is liye hum ne har AZ mein alag subnet banayi hai (`10.0.1.0/24` aur `10.0.2.0/24`).
+* **EC2 Instances:** Multiple subnets mein multiple instances chalne se AZ level par redundancy milti hai.
+* **Load Balancer:** Load balancer multiple subnets aur multiple AZs par phaila hota hai.
+
+---
+
+### Model 2: Asynchronous Decoupling (SQS Queue Ke Sath)
+
+* **Figure 16.4 Ka Hawala Aur Breakdown:**
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+* `Figure 16.4` mein EC2 instances ko asynchronous tareeqay se SQS Queue ke sath joda gaya hai.
+* Client ki request seedha EC2 par nahi jati balkey **SQS Queue** mein jama hoti hai.
+* VPC ke andar, Auto Scaling Group dono AZs (Subnet `10.0.1.0/24` aur Subnet B) mein **Worker EC2 instances** ko manage kar raha hai.
+* Yahan Workers queue se akele akele messages utha kar process karte hain. Agar koi Worker EC2 crash bhi ho jaye, toh message SQS queue mein safe rehta hai aur doosra worker usay utha kar process kar leta hai.
+
+
+
+---
+
+### Ek Bohot Zaroori Architectural Point
+
+Agar aap `Figure 16.3` aur `Figure 16.4` ko ghaor se dekhein, toh Load Balancer aur SQS Queue ki aik aik hi icon/box dikhayi gayi hai.
+
+Is ka yeh matlab bilkul nahi hai ke Load Balancer ya SQS khud Single Point of Failure (SPOF) hain. **ELB aur SQS AWS ki taraf se default taur par Fault-Tolerant services hain**. AWS background mein inhein multiple AZs par khud hi highly available rakhta hai, is liye aap ko in ki kharabi ki fikar karne ki zaroorat nahi hoti.
+
+
+---
