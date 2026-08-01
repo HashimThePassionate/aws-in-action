@@ -358,3 +358,382 @@ Jab aap ka practical complete ho jaye, toh extra billing se bachne ke liye Cloud
 
 
 ----
+
+## Asynchronous decoupling with message queues
+
+Synchronous decoupling (load balancers ke sath) karna bohot asaan hota hai kyunki iske liye aapko apne application ka code badalne ki zaroorat nahi hoti. Lekin **Asynchronous decoupling** ke liye aapko apna application code badalna parta hai taake wo **Message Queue** ke sath kaam kar sake.
+
+Message Queue ke do sirey (ends) hote hain:
+
+1. **Tail (Peeche wala hissa):** Naye messages yahan add kiye jate hain.
+2. **Head (Aagay wala hissa):** Messages ko yahan se read / consume kiya jata hai.
+
+Is tarah messages ko **Banana (Production)** aur **Istemal karna (Consumption)** bilkul alag alag (decouple) ho jatay hain.
+
+### Decoupling ke Faide:
+
+* **Queue ek Buffer ka kaam karti hai:** Producers aur Consumers ko ek hi speed par chalne ki zaroorat nahi hoti. Misal ke taur par, agar 1 minute mein 1,000 messages aayein lekin aapka consumer sirf 10 messages per second hi process kar sakta ho, toh baki saare messages queue mein safe rehenge aur consumer ahista ahista unhein process karke queue khali kar dega.
+* **Backend ko Chupana (Hiding the Backend):** Load balancer ki tarah, message bhejne walon (producers) ko ye pata nahi hota ke background mein kaam kaun kar raha hai (consumers). Aap chaho toh maintenance ke liye saare consumers ko rok bhi do, tab bhi producers messages bhejte rahenge aur koi data lost nahi hoga.
+
+---
+
+### Figure 14.4 ka Breakdown
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+**Figure 14.4** ye dikhata hai ke:
+
+* Producers messages ko queue ke **Tail** par daalte hain.
+* Consumers messages ko queue ke **Head** se nikaal kar process karte hain.
+* Dono ek doosre se completely alag (decoupled) hain, unhein sirf Queue ka pata hota hai.
+
+Messages ko hamesha ke liye queue mein jama hone se bachane ke liye unka ek retention period (muqarrar waqt) hota hai. Jab consumer kisi message ko kamyabi se process kar leta hai, toh usko queue se **Acknowledge (Delete)** karna parta hai.
+
+---
+
+### AWS Simple Queue Service (SQS)
+
+AWS par asynchronous decoupling ke liye **SQS (Simple Queue Service)** ka istemal kiya jata hai. Ye ek highly scalable aur reliable message queue service hai jo **At-least-once delivery** guarantee karti hai.
+
+#### SQS ki Khasosiyat:
+
+* **Duplicate Messages (Kamyab Rare Cases):** Kabhi kabhar ek hi message do baar deliver ho sakta hai.
+* **No Guaranteed Order:** SQS messages ki tarrteeb (order) ki guarantee nahi deta, yaani message jis tarteeb se aaye hain us se alag order mein read ho sakte hain.
+
+#### SQS ke Faide aur Pricing:
+
+* Unlimited messages add kiye ja sakte hain.
+* Message volume ke sath khud-ba-khud scale hoti hai.
+* Default taur par Highly Available hai.
+* **Pricing Model:** Aap sirf istemal par pay karte hain ($0.24 se $0.40 per million requests). Free Tier mein **Har mahine pehle 1 Million requests bilkul free** hoti hain! (Yaad rahe: Message daalna 1 request hai aur nikalna doosri request hai. 64 KB se bara payload ho toh har 64 KB ka chunk alag request count hota hai).
+
+---
+
+## Turning a synchronous process into an asynchronous one
+
+Bohot se log default taur par Synchronous system banate hain kyunki hum Request-Response model ke aadi hote hain. Lekin cloud mein system ko Synchronous se Asynchronous banana scale karne ko bohot aasan bana deta hai.
+
+### Synchronous Process (Puraana Tarika)
+
+---
+
+### Figure 14.5 ka Breakdown
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+**Figure 14.5** mein URL se Screenshot (PNG) banane ka Synchronous tarika bataya gaya hai:
+
+1. User web server ko URL bhejta hai.
+2. Web server poori website download karta hai, screenshot leta hai aur PNG banata hai. Is doran User **Intezar (Wait)** karta rehta hai.
+3. Web server PNG wapas User ko bhejta hai.
+
+*Masla:* Agar server par bojh barh jaye ya website slow ho, toh User ki request timeout ho jayegi!
+
+---
+
+### Asynchronous Process (Naya Behtareen Tarika)
+
+---
+
+### Figure 14.6 ka Breakdown
+
+<div align="center">
+  <img src="./images/06.png" width="600"/>
+</div>
+```
+
+**Figure 14.6** mein usi kaam ko Asynchronous tarike se dikhaya gaya hai:
+
+1. User web server ko URL bhejta hai.
+2. Web Server fawran ek **Random ID** generate karta hai aur message (ID + URL) **Queue** mein daal deta hai.
+3. Web Server User ko fawran bolta hai: "Aap ka kaam ho raha hai, aap is link par baad mein image dekh sakte hain" (maslan `[http://Bucket.s3.amazonaws.com/RandomID.png](http://Bucket.s3.amazonaws.com/RandomID.png)`).
+4. Background mein **Worker** (consumer) queue se message uthata hai.
+5. Worker website ka screenshot bana kar PNG file tayar karta hai.
+6. Worker image ko **S3 Bucket** mein upload kar deta hai.
+7. User di gayi link se S3 se image download kar leta hai.
+
+---
+
+## Architecture of the URL2PNG application
+
+Hum Node.js aur SQS ka istemal karke ek **URL2PNG** naam ka application banayenge.
+
+---
+
+### Figure 14.7 ka Breakdown
+
+<div align="center">
+  <img src="./images/07.png" width="600"/>
+</div>
+
+**Figure 14.7** ke mutabiq:
+
+* **Producer side:** Node.js script ID generate karegi, SQS mein message daalegi aur User ko ID wapas kar degi.
+* **Consumer side:** Node.js script SQS se message uthayegi, Puppeteer browser se screenshot legi aur S3 Bucket mein image upload karegi.
+
+---
+
+### Setup Instructions (S3 & SQS)
+
+Sab se pehle, S3 bucket aur SQS queue banayein:
+
+1. **S3 Bucket Banayein:**
+
+```bash
+aws s3 mb s3://url2png-$yourname
+
+```
+
+2. **SQS Queue Banayein:**
+
+```bash
+aws sqs create-queue --queue-name url2png
+
+```
+
+*Output:*
+
+```json
+{
+ "QueueUrl": "https://queue.amazonaws.com/878533158213/url2png"
+}
+
+```
+
+*(Is `QueueUrl` ko note kar lein, ye aagay code mein use hogi).*
+
+---
+
+## Producing messages programmatically
+
+Producer side par hum Node.js aur AWS SDK ka istemal karke SQS ko message bhejenge.
+
+### Node.js Install Karna:
+
+* Node.js download karke install karein. Version verify karne ke liye terminal par `node --version` chalayein (v14 ya updated modern version).
+
+---
+
+### Listing 14.4: index.js - Sending a message to the queue
+
+```javascript
+const AWS = require('aws-sdk');
+var { v4: uuidv4 } = require('uuid');
+const config = require('./config.json');
+const sqs = new AWS.SQS({}); // SQS client create karta hai
+
+if (process.argv.length !== 3) { // Check karta hai ke URL faraham kiya gaya hai ya nahi
+  console.log('URL missing');
+  process.exit(1);
+}
+
+const id = uuidv4(); // Ek random unique ID create karta hai
+const body = {
+  id: id,
+  url: process.argv[2] // Payload mein random ID aur URL shamil hota hai
+};
+
+sqs.sendMessage({ // SQS par sendMessage operation ko invoke karta hai
+  MessageBody: JSON.stringify(body), // Payload ko JSON string mein convert karta hai
+  QueueUrl: config.QueueUrl // Queue ka URL (config.json se)
+}, (err) => {
+  if (err) {
+    console.log('error', err);
+  } else {
+    console.log('PNG will be soon available at http://' + config.Bucket
+      + '.s3.amazonaws.com/' + id + '.png');
+  }
+});
+
+```
+
+#### Code Explanation:
+
+1. `AWS.SQS()`: AWS SQS service se connect karne ke liye client banata hai.
+2. `uuidv4()`: Har request ke liye ek bilkul unique ID banata hai.
+3. `sqs.sendMessage()`: SQS queue mein message bhejta hai. `MessageBody` mein hum `id` aur `url` ko JSON string bana kar bhejte hain.
+
+#### Script Chalane ka Tarika:
+
+1. Dependencies install karein: `npm install`
+2. `config.json` mein apna `QueueUrl` aur `Bucket` name set karein.
+3. Script chalayein:
+
+```bash
+node index.js "http://aws.amazon.com"
+
+```
+
+*Output:* `PNG will be soon available at http://url2png-$[yourname.s3.amazonaws.com/XYZ.png](https://yourname.s3.amazonaws.com/XYZ.png)`
+
+#### Queue mein Message Check Karna:
+
+```bash
+aws sqs get-queue-attributes \
+--queue-url "$QueueUrl" \
+--attribute-names ApproximateNumberOfMessages
+
+```
+
+*Output:* `"ApproximateNumberOfMessages": "1"` (SQS distributed nature ki waja se approximate count batata hai).
+
+---
+
+## Consuming messages programmatically
+
+Message process karne ke 3 steps hote hain:
+
+1. **Receive:** Queue se message hasil karna.
+2. **Process:** Message par kaam karna (Screenshot lena aur S3 par upload karna).
+3. **Acknowledge:** Kamyabi ke baad message ko Queue se Delete karna.
+
+---
+
+### Listing 14.5: worker.js - Receiving a message from the queue
+
+```javascript
+const fs = require('fs');
+const AWS = require('aws-sdk');
+const puppeteer = require('puppeteer');
+const config = require('./config.json');
+const sqs = new AWS.SQS();
+const s3 = new AWS.S3();
+
+async function receive() {
+  const result = await sqs.receiveMessage({
+    QueueUrl: config.QueueUrl,
+    MaxNumberOfMessages: 1, // Ek waqt mein ek message consume karta hai
+    VisibilityTimeout: 120, // Message ko queue se 120 seconds ke liye chhupa deta hai
+    WaitTimeSeconds: 10 // Long polling: Naye messages ka 10 seconds tak intezar karta hai
+  }).promise(); // SQS par receiveMessage operation ko invoke karta hai
+
+  if (result.Messages) { // Check karta hai ke message mila ya nahi
+    return result.Messages[0]; // Message wapas karta hai
+  } else {
+    return null;
+  }
+};
+
+```
+
+#### Key Terms Explanation:
+
+* `MaxNumberOfMessages`: Maximum 10 messages ek sath le sakte hain, humne 1 rakha hai.
+* `VisibilityTimeout`: 120 seconds. Is dauran ye message kisi aur worker ko nazar nahi aayega. Agar 120s mein delete na hua toh SQS isey wapas active kar dega taake koi aur worker kar sake.
+* `WaitTimeSeconds`: 10 seconds (Long Polling). Agar queue khali ho toh 10 sec tak wait karega, fawran khali response bhej kar billing nahi barhayega.
+
+---
+
+### Listing 14.6: worker.js - Processing a message (take screenshot and upload to S3)
+
+```javascript
+async function process(message) {
+  const body = JSON.parse(message.Body); // Message body (JSON string) ko JS Object mein convert karta hai
+  const browser = await puppeteer.launch(); // Headless browser launch karta hai
+  const page = await browser.newPage();
+
+  await page.goto(body.url);
+  page.setViewport({ width: 1024, height: 768});
+  const screenshot = await page.screenshot(); // Screenshot leta hai
+
+  await s3.upload({
+    Bucket: config.Bucket, // Target S3 Bucket
+    Key: `${body.id}.png`, // File ka naam unique ID hoga
+    Body: screenshot,
+    ContentType: 'image/png', // Browser mein sahi display hone ke liye
+    ACL: 'public-read', // Image ko publicly readable banata hai
+  }).promise();
+
+  await browser.close();
+};
+
+```
+
+#### Code Explanation:
+
+1. `JSON.parse()`: SQS se aaye hue JSON text ko wapas JavaScript object banata hai taake `body.url` nikaala ja sake.
+2. `puppeteer`: Background mein Chrome browser open karke URL par jata hai aur screenshot capture karta hai.
+3. `s3.upload()`: Screenshot image ko S3 bucket mein Save (Upload) kar deta hai.
+
+---
+
+### Listing 14.7: worker.js - Acknowledging a message (deletes the message from the queue)
+
+```javascript
+async function acknowledge(message) {
+  await sqs.deleteMessage({
+    QueueUrl: config.QueueUrl,
+    ReceiptHandle: message.ReceiptHandle // Message ki unique receipt handle ID
+  }).promise(); // Queue se message delete kar deta hai
+};
+
+```
+
+#### Code Explanation:
+
+* `ReceiptHandle`: SQS har baar message receive hone par ek unique token (ReceiptHandle) deta hai. Ye token de kar `sqs.deleteMessage` call karne se SQS samajhta hai ke kaam complete ho gaya hai aur message ko permanent delete kar deta hai.
+
+---
+
+### Listing 14.8: worker.js - Connecting the parts
+
+```javascript
+async function run() {
+  while(true) { // Endless loop (Hamesha chaltay rehne wala loop)
+    const message = await receive(); // Step 1: Receive
+    if (message) {
+      console.log('Processing message', message);
+      await process(message); // Step 2: Process
+      await acknowledge(message); // Step 3: Delete / Acknowledge
+    }
+    await new Promise(r => setTimeout(r, 1000)); // 1 second sleep (SQS requests/billing kam rakhne ke liye)
+  }
+};
+
+run(); // Loop start karta hai
+
+```
+
+#### Worker Chalana:
+
+Terminal mein run karein:
+
+```bash
+node worker.js
+
+```
+
+Worker message uthayega, screenshot banaye ga, S3 par daale ga aur queue se delete kar dega. Phir aap browser mein wahi S3 link open karke screenshot dekh sakte hain!
+
+---
+
+### Scalability aur Fault Tolerance ka Jadoo
+
+* **Easy Scaling:** Agar URL2PNG service bohot popular ho jaye aur millions of requests aane lagein, toh aap **1 ki bajaye 10 ya 100 Workers** chala sakte hain. SQS sab mein kaam baant dega.
+* **Fault Tolerance:** Agar screenshot banate waqt worker crash/die ho jaye, toh 2 minutes (`VisibilityTimeout`) baad wo message dobara SQS mein visible ho jayega aur koi doosra zinda worker us par kaam shuru kar dega. Koi request fail nahi hogi!
+
+---
+
+## Cleaning up
+
+Practical complete hone ke baad resources delete kar ke cleanup karein:
+
+1. **SQS Queue Delete Karein:**
+
+```bash
+aws sqs delete-queue --queue-url "$QueueUrl"
+
+```
+
+2. **S3 Bucket Delete Karein:**
+
+```bash
+aws s3 rb --force s3://url2png-$yourname
+
+```
+
+---
