@@ -1442,3 +1442,285 @@ Aam taur par NoSQL databases mein ACID Transactions nahi hoti. Lekin DynamoDB aa
 * **Trade-off:** Transactions bohot mehangi hoti hain aur latency (time) barhati hain, is liye jab tak bohot zaroori na ho unhein avoid karna chahiye.
 
 ---
+
+## Removing data
+
+John ko internet par ek aur nayi aur acchi to-do application mil gayi hai, is liye us ne faisla kiya hai ke wo `nodetodo` app se apna user account remove (delete) kar de.
+
+DynamoDB se kisi data ya item ko delete karne ke liye hum **`deleteItem`** operation ka istemal karte hain.
+
+> **Bacho Ki Tarah Samjhein:** Jaise `getItem` (data dekhne) ke liye aap ko dukan ka address (Primary Key) dena padta hai, bilkul waise hi `deleteItem` ke liye bhi DynamoDB ko us item ki Primary Key batana zaroori hota hai.
+> * Agar table mein sirf **Partition Key** hai, toh ek attribute dena hoga.
+> * Agar table mein **Partition Key aur Sort Key dono** hain, toh item ko mitaane ke liye dono attributes batane honge.
+> 
+> 
+
+---
+
+### Listing 12.15 nodetodo: Removing a user (index.js)
+
+Yeh listing batati hai ke `user-rm` command chalane par background mein Node.js ka code user ko kaise delete karta hai:
+
+```javascript
+if (input['user-rm'] === true) {
+  const params = {
+    Key: {
+      uid: {S: input['<uid>']} // Partition key ke zariye item ki pehchan karta hai
+    },
+    TableName: 'todo-user' // User table ko specify karta hai
+  };
+  db.deleteItem(params, (err) => { // DynamoDB par deleteItem operation ko invoke karta hai
+    if (err) {
+      console.error('error', err);
+    } else {
+      console.log('user removed');
+    }
+  });
+}
+
+```
+
+#### Code Breakdown:
+
+* **`if (input['user-rm'] === true)`**
+* Check karta hai ke kya user ne terminal par `user-rm` command run ki hai.
+
+
+* **`const params = { ... }`**
+* Delete operation ki details set karta hai.
+
+
+* **`Key: { uid: {S: input['<uid>']} }`**
+* Targeted user ki Primary Key (`uid`) pass karta hai. Chunke `todo-user` table mein sirf Partition Key hai, is liye hum ne sirf `uid` di hai.
+
+
+* **`TableName: 'todo-user'`**
+* Target table `todo-user` ko set karta hai.
+
+
+* **`db.deleteItem(params, (err) => { ... })`**
+* AWS DynamoDB API ko request bhejta hai ke is `uid` wale user ko permanently delete kar do.
+* **`if (err)`**: Agar deleting mein koi masla aaya (jaise network error), toh error console par print hota hai.
+* **`else`**: Agar user kamyabi se delete ho jaye, toh terminal par `"user removed"` likha aata hai.
+
+
+
+#### Execution Command Example:
+
+John ko `todo-user` table se delete karne ke liye terminal par yeh command run karein:
+
+```bash
+node index.js user-rm john
+
+```
+
+---
+
+Lekin John na sirf apna account balki apne saare tasks bhi delete karna chahta hai. Task ko remove karne ka tarika bhi user remove karne jaisa hi hai, bas farq sirf itna hai ke `todo-task` table mein **Partition Key (`uid`) aur Sort Key (`tid`) dono** majood hain, is liye dono keys specify karni padengi.
+
+---
+
+### Listing 12.16 nodetodo: Removing a task (index.js)
+
+`task-rm` command ke liye istemal hone wala code neechay diya gaya hai:
+
+```javascript
+if (input['task-rm'] === true) {
+  const params = {
+    Key: {
+      uid: {S: input['<uid>']},
+      tid: {N: input['<tid>']} // Partition key aur sort key ke zariye item ki pehchan karta hai
+    },
+    TableName: 'todo-task' // Task table ko specify karta hai
+  };
+  db.deleteItem(params, (err) => { // DynamoDB par deleteItem operation ko invoke karta hai
+    if (err) {
+      console.error('error', err);
+    } else {
+      console.log('task removed');
+    }
+  });
+}
+
+```
+
+#### Code Breakdown:
+
+* **`if (input['task-rm'] === true)`**
+* Check karta hai ke kya user ne `task-rm` command chalai hai.
+
+
+* **`Key: { uid: {S: input['<uid>']}, tid: {N: input['<tid>']} }`**
+* Yahan Partition Key (`uid` - String) aur Sort Key (`tid` - Number) dono bhej rahe hain kyun ke single key se task identify nahi ho sakta.
+
+
+* **`TableName: 'todo-task'`**
+* Target table ka naam `todo-task` specify karta hai.
+
+
+* **`db.deleteItem(params, ...)`**
+* Execution hone ke baad terminal par `"task removed"` display ho jata hai.
+
+
+
+---
+
+## Modifying data
+
+Ab aap DynamoDB mein items Create, Read, aur Delete karna seekh chuke hain. Ab aakhri buniyaadi operation **Update (Data Modify karna)** baki hai.
+
+Emma `nodetodo` app ki bohot bari fan hai aur usay rozmarra istemal karti hai. Us ne abhi dukan se doodh khariid liya hai aur wo apne "buy milk" wale task ko **"Done" (Complete)** mark karna chahti hai.
+
+DynamoDB mein kisi pehle se mojood item ko update karne ke liye **`updateItem`** operation istemal hota hai.
+
+---
+
+### Update Expressions Aur Update Actions
+
+Item ko identify karne ke liye us ki Primary Key di jati hai, aur yeh batane ke liye ke data mein kya badlao karna hai, hum **`UpdateExpression`** ka istemal karte hain. Is ke andar 2 main actions hotay hain:
+
+1. **`SET`**: Kisi attribute ki value ko badalne (override karne) ya bilkul naya attribute jodne ke liye istemal hota hai.
+* *Examples:*
+* `SET attr1 = :attr1val` (Naye attribute mein value set karna)
+* `SET attr1 = attr2 + :attr2val` (Kisi existing value mein addition karna)
+* `SET attr1 = :attr1val, attr2 = :attr2val` (Ek sath multiple attributes set karna)
+
+
+
+
+2. **`REMOVE`**: Kisi item ke andar se kisi attribute ko mukammal taur par mitaane/khatam karne ke liye istemal hota hai.
+* *Examples:*
+* `REMOVE attr1` (Ek attribute delete karna)
+* `REMOVE attr1, attr2` (Ek se zyada attributes delete karna)
+
+
+
+
+
+---
+
+### Listing 12.17 nodetodo: Updating a task as done (index.js)
+
+Task ko "Done" (complete) mark karne ka code neechay diya gaya hai:
+
+```javascript
+if (input['task-done'] === true) {
+  const yyyymmdd = moment().format('YYYYMMDD');
+  const params = {
+    Key: {
+      uid: {S: input['<uid>']},
+      tid: {N: input['<tid>']} // Partition key aur sort key ke zariye item ki pehchan karta hai
+    },
+    UpdateExpression: 'SET completed = :yyyymmdd', // Yeh define karta hai ke konsa attribute update hona chahiye
+    ExpressionAttributeValues: {
+      ':yyyymmdd': {N: yyyymmdd} // Attribute values ko is tareeqay se pass kiya jana chahiye
+    },
+    TableName: 'todo-task'
+  };
+  db.updateItem(params, (err) => { // DynamoDB par updateItem operation ko invoke karta hai
+    if (err) {
+      console.error('error', err);
+    } else {
+      console.log('task completed');
+    }
+  });
+}
+
+```
+
+#### Code Breakdown:
+
+* **`if (input['task-done'] === true)`**
+* Yeh check karta hai ke terminal par `task-done` command execute hui hai ya nahi.
+
+
+* **`const yyyymmdd = moment().format('YYYYMMDD');`**
+* Aaj ki tarikh (date) ko YYYYMMDD format mein get karta hai (maslan `20260801`).
+
+
+* **`Key: { uid: {S: ...}, tid: {N: ...} }`**
+* Task ko dhoondne ke liye specific User ID (`uid`) aur Task ID (`tid`) pass ki jati hai.
+
+
+* **`UpdateExpression: 'SET completed = :yyyymmdd'`**
+* Dynamically item mein ek naya attribute `completed` add kar raha hai (ya pehle se majood ho toh override kar raha hai) aur us ki value aaj ki date set kar raha hai.
+
+
+* **`ExpressionAttributeValues: { ':yyyymmdd': {N: yyyymmdd} }`**
+* Placeholder `:yyyymmdd` ki jagah actual date Number (`N`) format mein pass kar raha hai.
+
+
+* **`db.updateItem(params, ...)`**
+* Update successful hone par terminal par `"task completed"` show kar deta hai.
+
+
+
+#### Execution Command Example:
+
+Emma ke "buy milk" wale task ko complete mark karne ke liye terminal par yeh command chalayein:
+
+```bash
+node index.js task-done emma 1643037541999
+
+```
+
+> **Note:** Task ID (`tid`) har user ke liye different hogi. Aap apni exact Task ID maloom karne ke liye pehle `node index.js task-ls emma` run karke ID dekh sakte hain.
+
+---
+
+## Recap primary key
+
+Aaiye DynamoDB ke sab se ahem architectural concept **Primary Key** ko dubara acchi tarah revise kar lete hain:
+
+* Primary Key poori table ke andar hamesha **Unique** hoti hai aur kisi bhi single Item ki pehchan banti hai.
+* Update karna ho, Delete karna ho, ya Get karna ho—DynamoDB ko HAMESHA Primary Key ki zaroorat hoti hai.
+* Primary Key ki **2 Badi Types** hoti hain:
+1. Sirf Ek Attribute (**Partition Key**).
+2. Do Attributes ka Jod (**Partition Key + Sort Key**).
+
+
+
+---
+
+### Partition key
+
+**Bacho Ki Tarah Samjhein:**
+Socho aap ke school mein har bache ko ek unique Roll Number diya gaya hai. Agar aap ko Roll Number pata hai, toh aap fauran us bache tak pahunch sakte hain.
+
+* Partition Key item ke kisi ek single attribute par **Hash-based Index** banati hai.
+* Agar aap Partition Key ke zariye data dhoondna chahte hain, toh aap ko **EXACT (poori aur sahi)** Partition Key pata honi chahiye.
+* **Example:** Ek User table mein user ka **Email Address** Partition Key ho sakta hai. Aap user ka data sirf tabhi nikal sakte hain jab aap ke paas bilkul sahi Email address majood ho.
+
+---
+
+### Partition key and sort key
+
+Jab aap Partition Key aur Sort Key dono ko ek sath mila kar istemal karte hain, toh aap ek zyada powerful aur flexible Index banate hain.
+
+* **Exact Partition Key Lazmi Hai:** Item tak pahunche ke liye aap ko exact Partition Key ka pata hona zaroori hai.
+* **Sort Key Ki Flexibility:** Lekin aap ko Sort Key exact pata hona zaroori nahi hai! Aap Sort Key par range/comparison query chala sakte hain.
+* **Same Partition Key Ke Multiple Items:** Ek hi Partition Key ke andar multiple items ho sakte hain, aur wo sab ke sab apne **Sort Key** ke hisab se line mein (sorted order mein) arranged hote hain.
+
+#### Query Operators Comparison Rules:
+
+* **Partition Key Par Allowed Operator:**
+* Sirf **`=` (Equal)** operator chalta hai. Exact match ke bina search nahi ho sakta.
+
+
+* **Sort Key Par Allowed Operators:**
+* Aap **`=`, `>`, `<`, `>=`, `<=`, aur `BETWEEN x AND y**` jaise saare operators istemal kar sakte hain.
+
+
+
+> **Sab Se Bada Niyam (Golden Rule):** Aap **SIRF Sort Key** ke zariye kabhi bhi direct search/query nahi kar sakte! Aap ko HAMESHA pehle Partition Key batani hi padegi, us ke baad hi Sort Key par filtering ya range query lag sakti hai.
+
+#### Real-World Example (Messages Table):
+
+Farz karein aap ek Chat Application ki Messages Table bana rahe hain:
+
+* **Partition Key:** User Ka Email (`user@example.com`).
+* **Sort Key:** Message Ka Timestamp (`1643037541999`).
+
+Is design ka fayda yeh hoga ke aap user ke tamam messages nikal sakte hain, ya specific tarikh ke baad ke purane/naye messages range query (`>` ya `<`) karke mangwa sakte hain, aur saare messages time ke mutabiq automatic sorted milenge!
+
+---
