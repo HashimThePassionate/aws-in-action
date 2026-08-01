@@ -431,4 +431,334 @@ Agar poora ka poora Availability Zone ya Data Center hi doob jaye / fail ho jaye
 
 ----
 
+## Recovering from a data center outage with an Auto Scaling group
+
+Pichle section mein hum ne dekha tha ke agar Virtual Machine ka hardware ya software fail ho jaye, toh system status checks aur CloudWatch Alarm ki madad se hum usay recover kar sakte hain. Lekin sochein agar **poora ka poora Data Center hi band ho jaye** (jaise bijli chali jaye, aag lag jaye, ya koi qudrati aafat aa jaye)?
+
+Puraana recovery method yahan **fail** ho jayega! Kyunki CloudWatch Alarm us Virtual Machine ko usi same data center mein dobara launch karne ki koshish karta hai jo pehle se kharab ho chuka hai.
+
+AWS ko is tarah design kiya gaya hai ke agar poora data center bhi baith jaye, tab bhi aap ka system chalta rahe. Is ke liye AWS Regions ke andar multiple Data Centers hote hain jinhein **Availability Zones (AZs)** kaha jata hai. Agar aap apna kaam (workload) ek se zyada Availability Zones par taqseem (distribute) kar dein, toh aap poore data center ke fail hone par bhi bach sakte hain.
+
+### Multi-AZ Setup Ki 2 Badi Mushkilein (Pitfalls)
+
+Jab hum ek se zyada Availability Zones mein apna system banate hain, toh 2 bari mushkilein samne aati hain:
+
+1. **EBS Data Access Problem:** Network-attached storage (EBS Volume) par save kiya gaya data doosre Availability Zone mein switch hote hi default taur par available nahi hota. Jab tak purana Availability Zone wapas sahi nahi hota, aap ka data EBS volume par mehfooz toh rehta hai lekin aap usay use nahi kar sakte.
+2. **IP Address Change Problem:** Aap naye Availability Zone mein purane same **Private IP address** ke sath machine start nahi kar sakte. Wajah yeh hai ke Network Subnets hamesha kisi ek AZ ke sath munsalik (bound) hote hain aur har subnet ka apna IP range hota hai. Is ke ilawa aap ka **Public IP address** bhi automatic purane wala nahi rehta.
+
+Is section mein hum pichle Jenkins setup ko behtar banayein ge taake woh poore Availability Zone ke fail hone par bhi recover ho sake, aur baad mein in dono pitfalls ka hal bhi dekhenge.
+
+---
+
+## Availability zones: Groups of isolated data centers
+
+AWS ke duniya bhar mein mukhtalif muqamaat par **Regions** bane hue hain. Misaal ke taur par US East (N. Virginia) region, jisay `us-east-1` kaha jata hai. Poori duniya mein AWS ke 23 se zyada public regions maujood hain.
+
+Har Region ke andar **multiple Availability Zones (AZs)** hote hain.
+
+* Aap ek AZ ko **azad data centers ka ek giroh (isolated group of data centers)** samajh sakte hain.
+* Region woh bara ilaqah hota hai jahan yeh AZs ek doosre se munasib fasle par waqay hote hain.
+* Misaal ke taur par, `us-east-1` region mein 6 Availability Zones hain (`us-east-1a` se `us-east-1f` tak).
+* Ek AZ ke andar ek data center bhi ho sakta hai ya ek se zyada bhi. AWS ne apne data centers ki confidential detail kabhi public nahi ki.
+
+### Network Connectivity Aur Speed
+
+* Tamam AZs ek doosre ke sath **bohat tez aur low-latency fiber links** se jure hote hain. Is liye do AZs ke darmeyan request bhejna internet jitna sust nahi hota.
+* Ek hi AZ ke andar (ek EC2 se doosri EC2) ki speed/latency sab se tez hoti hai.
+* AWS har Region mein kam se kam **3 ya us se zyada Availability Zones** deta hai.
+* **Kharach (Cost Note):** AWS do alag AZs ke darmeyan hone wale network traffic par **$0.01 per GB** charge karta hai.
+
+---
+
+### Figure 13.3 Analysis
+
+Referencing **Figure 13.3** (`image_c1fcf6.png`):
+
+<div align="center">
+  <img src="./images/03.png" width="600"/>
+</div>
+
+**Figure 13.3** mein AWS Region aur Availability Zones ka mazaajah (structure) dikhaya gaya hai:
+
+* Bahar wala bara box **Region `us-east-1**` ko zahir karta hai.
+* Is Region ke andar 4 alag alag boxes **Availability Zones** (`us-east-1a`, `us-east-1b`, `us-east-1c`, `us-east-1e`) ko darshate hain.
+* Center mein bane arrows batate hain ke yeh tamam AZs aapas mein high-speed **low-latency links** ke zariye jure hue hain.
+
+---
+
+## Recovering a failed virtual machine to another availability zone with the help of autoscaling
+
+Pehle section mein hum ne dekha ke CloudWatch Alarm se machine usi same AZ mein recover hoti thi kyunki Private IP aur EBS volume ek hi subnet/AZ se jure hote hain. Lekin agar poora AZ hi baith jaye, toh humein ek aisa tool chahiye jo virtual machine ko **doosre Availability Zone mein recover** kar sake.
+
+Yeh kaam **Auto Scaling** ke zariye hota hai.
+
+### Auto Scaling Kya Hai?
+
+Auto Scaling EC2 service ka ek hissa hai. Iska kaam yeh guarantee dena hai ke aap ki batayi hui tadad ke mutabaq EC2 instances hamesha chalte rahein, chahe koi poora Availability Zone hi kyun na kharab ho jaye. Agar original instance fail hota hai, toh Auto Scaling doosre Availability Zone ke subnet mein naya instance launch kar deta hai.
+
+### CloudFormation Stack Create Karne Ki Command
+
+Command chala kar Multi-AZ setup create karein ($Password ki jagah apna password likhein):
+
+```bash
+aws cloudformation create-stack --stack-name jenkins-multiaz \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/chapter13/multiaz.yaml \
+  --parameters "ParameterKey=JenkinsAdminPassword,ParameterValue=$Password" \
+  --capabilities CAPABILITY_IAM
+
+```
+
+#### Command Breakdown:
+
+* `aws cloudformation create-stack`: Naya CloudFormation stack banata hai.
+* `--stack-name jenkins-multiaz`: Stack ka naam `jenkins-multiaz` rakhta hai.
+* `--template-url ...`: S3 par rakhi hui `multiaz.yaml` file ka link.
+* `--parameters ...`: Jenkins admin password set karta hai.
+* `--capabilities CAPABILITY_IAM`: CloudFormation ko IAM roles/permissions banane ki permission deta hai.
+
+---
+
+### Auto Scaling Ke 2 Main Components
+
+Auto Scaling ko chalane ke liye 2 cheezein configure karni padti hain:
+
+1. **Launch Template:** Yeh EC2 instance ka blueprint (naksha) hota hai. Is mein likha hota hai ke konsi AMI image use karni hai, machine ka size (Instance Type) kya hoga, security groups aur UserData script kya hogi.
+2. **Auto Scaling Group (ASG):** Yeh rules set karta hai ke kitni virtual machines chalani hain, inhein monitor kaise karna hai, aur inhein **kins subnets/AZs** mein launch karna hai.
+
+---
+
+### Figure 13.4 Analysis
+
+Referencing **Figure 13.4** (`image_c1fc7a.png`):
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+**Figure 13.4** batata hai ke Auto Scaling kaise kaam karta hai:
+
+1. **Monitoring:** Auto Scaling Group chalte hue EC2 instances ki sehat (health check) ko continuously dekhta rehta hai.
+2. **Auto Replacement:** Agar koi instance fail ho jaye ya kam ho jaye, toh Auto Scaling Group **Launch Template** ke blueprint ko istemal kar ke naya EC2 instance automatically launch kar deta hai.
+
+---
+
+### Table 13.1 Required parameters for the launch template and Auto Scaling group
+
+| Context | Property | Description (Roman Urdu) | Values (Roman Urdu) |
+| --- | --- | --- | --- |
+| **LaunchTemplate** | `ImageId` | Woh AMI ID jis se virtual machine shuru ki jani chahiye. | Aap ke account se accessible koi bhi AMI ID. |
+| **LaunchTemplate** | `InstanceType` | Virtual machine ka size. | Tamam available instance sizes, jaise t2.micro, m3.medium, aur c3.large. |
+| **LaunchTemplate** | `SecurityGroupIds` | EC2 instance ke liye security groups ko reference karta hai. | Isi VPC se talluq rakhne wala koi bhi security group. |
+| **LaunchTemplate** | `UserData` | Jenkins CI server install karne ke liye bootstrap ke dauran chalne wali script. | Koi bhi bash script. |
+| **AutoScalingGroup** | `MinSize` | DesiredCapacity ke liye minimum value. | Koi bhi positive integer—agar aap launch template ki buniyad par aik single virtual machine shuru karna chahte hain toh 1 istemal karein. |
+| **AutoScalingGroup** | `MaxSize` | DesiredCapacity ke liye maximum value. | Koi bhi positive integer (jo MinSize value se bara ya barabar ho); agar aap launch template ki buniyad par aik single virtual machine shuru karna chahte hain toh 1 istemal karein. |
+| **AutoScalingGroup** | `VPCZoneIdentifier` | Woh subnet IDs jin mein aap virtual machines shuru karna chahte hain. | Aap ke account ke kisi VPC ki koi bhi subnet ID. Subnets ka aik hi VPC se talluq hona lazmi hai. |
+| **AutoScalingGroup** | `HealthCheckType` | Nakam virtual machines ki shanakht ke liye istemal hone wala health check. Agar health check fail ho jaye, toh Auto Scaling group virtual machine ko nayi se replace kar deta hai. | Virtual machine ke status checks istemal karne ke liye `EC2`, ya load balancer ka health check istemal karne ke liye `ELB` (chapter 16 dekhein). |
+
+#### Single EC2 Aur Launch Template Mein Bada Farq:
+
+Single EC2 instance mein Subnet ID instance ke andar define hoti thi. Lekin Launch Template mein Subnet **define nahi hota**; Subnets ki list Auto Scaling Group ke `VPCZoneIdentifier` mein di jaati hai taake ASG faisla kar sake ke machine kis AZ/Subnet mein chalani hai.
+
+Kyunki humein sirf **ek hi machine** chalani hai, hum ne `MinSize: 1` aur `MaxSize: 1` set kiya hai.
+
+---
+
+## Listing 13.3 Launching a Jenkins virtual machine with autoscaling in two AZs
+
+Neeche Multi-AZ Auto Scaling ka CloudFormation YAML code diya gaya hai:
+
+```yaml
+# [...]
+LaunchTemplate:
+  Type: 'AWS::EC2::LaunchTemplate' # Auto Scaling group jab EC2 instance launch karta hai toh yeh blueprint istemal karta hai
+  Properties:
+    LaunchTemplateData:
+      IamInstanceProfile:
+        Name: !Ref IamInstanceProfile # Session Manager ke liye access dene ke liye EC2 instance ke sath IAM role attach karta hai
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI] # AMI select karta hai (is mamlay mein, Amazon Linux 2)
+      Monitoring:
+        Enabled: false # By default, EC2 har paanch minute baad CloudWatch ko metrics bhejta hai. Aap additional cost par har minute metrics hasil karne ke liye detailed instance monitoring enable kar sakte hain.
+      InstanceType: 't2.micro' # Virtual machine ke liye instance type
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true # Instance launch karte waqt public IP address associate karta hai
+          DeleteOnTermination: true
+          DeviceIndex: 0
+          Groups:
+            - !Ref SecurityGroup # Instance par port 8080 par ingress ki ijazat dene wala security group attach karta hai
+          SubnetId: !Ref Subnet # EC2 instance ki network interface (ENI) ko configure karta hai
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -ex
+          trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} \
+          --resource AutoScalingGroup --region ${AWS::Region}' ERR
+          
+          # Installing Jenkins
+          amazon-linux-extras enable epel=7.11 && yum -y clean metadata
+          yum install -y epel-release && yum -y clean metadata
+          yum install -y java-11-amazon-corretto-headless daemonize
+          wget -q -T 60 http://ftp-chi.osuosl.org/pub/jenkins/redhat-stable/jenkins-2.319.1-1.1.noarch.rpm
+          rpm --install jenkins-2.319.1-1.1.noarch.rpm
+
+          # Configuring Jenkins
+          # [...]
+
+          # Starting Jenkins
+          systemctl enable jenkins.service
+          systemctl start jenkins.service
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+          --resource AutoScalingGroup --region ${AWS::Region}
+AutoScalingGroup:
+  Type: 'AWS::AutoScaling::AutoScalingGroup' # Auto Scaling group jo virtual machine launch karne ki zimmedar hoti hai
+  Properties:
+    LaunchTemplate:
+      LaunchTemplateId: !Ref LaunchTemplate # Launch template ko refer karta hai
+      Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'
+    Tags:
+      - Key: Name
+        Value: 'jenkins-multiaz'
+        PropagateAtLaunch: true # Yeh tags Auto Scaling group ke sath sath Auto Scaling group ke zariye launch hone wale tamam EC2 instances par bhi add kar deta hai
+    MinSize: 1 # EC2 instances ki kam se kam tadad
+    MaxSize: 1 # EC2 instances ki ziyada se ziyada tadad
+    VPCZoneIdentifier:
+      - !Ref SubnetA # Virtual machines ko subnet A (availability zone A mein create kiya gaya) aur subnet B mein launch karta hai
+      - !Ref SubnetB
+    HealthCheckGracePeriod: 600 # Naye launch hone wale instance ke health check ko consider karne se pehle 10 minute intezar karta hai
+    HealthCheckType: EC2 # Virtual machine ke sath masail daryaft karne ke liye EC2 service ke internal health check ka istemal karta hai
+    # [...]
+
+```
+
+### Listing 13.3 Ka Deep Detail Breakdown:
+
+#### 1. `LaunchTemplate` Resource:
+
+* **`Type: 'AWS::EC2::LaunchTemplate'`:** Machine ka master blueprint banata hai.
+* **`IamInstanceProfile`:** EC2 instance par AWS SSM Session Manager chalane ke liye permissions deta hai.
+* **`Monitoring: Enabled: false`:** Basic monitoring (har 5 minute baad metrics) enable rehti hai. Agar `true` karte toh extra paise de kar 1 minute wali detailed monitoring milti.
+* **`InstanceType: 't2.micro'`:** Free tier support karne wala instance size.
+* **`UserData` (Script Execution):**
+* `trap ... ERR`: Koi error aane par AutoScalingGroup ko failure signal bhejta hai.
+* `amazon-linux-extras` & `yum`: EPEL repository, Java 11 Corretto, aur daemonize tools install karta hai.
+* `wget ...` & `rpm --install`: Jenkins redhat-stable RPM package download karke install karta hai.
+* `systemctl enable & start`: Jenkins service ko background mein hamesha ke liye chala deta hai.
+* `/opt/aws/bin/cfn-signal`: CloudFormation ko batata hai ke machine aur Jenkins successfully tayyar hain.
+
+
+
+#### 2. `AutoScalingGroup` Resource:
+
+* **`Type: 'AWS::AutoScaling::AutoScalingGroup'`:** Auto Scaling controller.
+* **`LaunchTemplateId` & `Version`:** Upar wale Launch Template ka latest version jortay hain.
+* **`PropagateAtLaunch: true`:** Tag `Name: jenkins-multiaz` Auto Scaling Group ke sath sath uske zariye banne wale har EC2 instance par bhi lag jata hai.
+* **`MinSize: 1` & `MaxSize: 1`:** Yakeeni banata hai ke exact **1 machine** chal rahi ho.
+* **`VPCZoneIdentifier` (`SubnetA`, `SubnetB`):** Yeh sab se ahem hissa hai! Yeh ASG ko **do alag alag Availability Zones (Subnet A aur Subnet B)** ke subnets deta hai. Agar Subnet A / AZ A baith jaye, toh ASG foran Subnet B / AZ B mein machine shuru kar dega.
+* **`HealthCheckGracePeriod: 600`:** Nayi machine ko start aur Jenkins install hone ke liye 600 seconds (10 minute) ka waqt deta hai. 10 minute se pehle ASG usay kharab declare karke terminate nahi karega.
+* **`HealthCheckType: EC2`:** EC2 ke internal status check monitoring ka istemal karta hai.
+
+---
+
+## Testing Auto Scaling Recovery & Verification Commands
+
+### 1. Instance Detail Check Karne Ki Command
+
+Command chala kar EC2 instance ki Public IP, Private IP, aur Subnet ID dekhein:
+
+```bash
+aws ec2 describe-instances --filters "Name=tag:Name,Values=jenkins-multiaz" "Name=instance-state-code,Values=16" \
+  --query "Reservations[0].Instances[0].[InstanceId, PublicIpAddress, PrivateIpAddress, SubnetId]"
+
+```
+
+#### Expected Output (Pehli Machine):
+
+```json
+[
+    "i-0cff527cda42afbcc", 
+    "34.235.131.229",     
+    "172.31.38.173",     
+    "subnet-28933375"    
+]
+
+```
+
+* **Instance ID:** `i-0cff527cda42afbcc`
+* **Public IP:** `34.235.131.229`
+* **Private IP:** `172.31.38.173`
+* **Subnet ID:** `subnet-28933375`
+
+Aap browser mein `[http://34.235.131.229:8080](http://34.235.131.229:8080)` khol kar Jenkins chalte hue dekh sakte hain.
+
+---
+
+### 2. Failure Simulation (Machine Discard Karna)
+
+Aap manual machine terminate kar ke Auto Scaling recovery test karein ($InstanceId ki jagah apni instance ID likhein):
+
+```bash
+aws ec2 terminate-instances --instance-ids $InstanceId
+
+```
+
+Kuch minto baad Auto Scaling Group detect karega ke machine khatam ho chuki hai aur naye Subnet/AZ mein nayi machine khari kar dega.
+
+---
+
+### 3. Verification Command (Nayi Machine)
+
+Dobara describe-instances command chalaayein:
+
+```bash
+aws ec2 describe-instances --filters "Name=tag:Name,Values=jenkins-multiaz" "Name=instance-state-code,Values=16" \
+  --query "Reservations[0].Instances[0].[InstanceId, PublicIpAddress, PrivateIpAddress, SubnetId]"
+
+```
+
+#### Expected Output (Nayi Recovered Machine):
+
+```json
+[
+ "i-0293522fad287bdd4",
+ "52.3.222.162",
+ "172.31.37.78",
+ "subnet-45b8c921"
+]
+
+```
+
+#### Result Analysis:
+
+Nayi machine bante hi har cheez badal gayi:
+
+1. **Instance ID:** `i-0293522fad287bdd4` (Badal gayi)
+2. **Public IP:** `52.3.222.162` (Badal gayi)
+3. **Private IP:** `172.31.37.78` (Badal gayi)
+4. **Subnet ID:** `subnet-45b8c921` (Doosre AZ/Subnet mein chali gayi)
+
+---
+
+### Multi-AZ Auto Scaling Ke 2 Bade Maslay (Drawbacks)
+
+Bhalay hum ne High Availability haasil kar li hai, lekin is setup mein 2 bade maslay hain:
+
+1. **Data Loss (Data Ka Zaya Hona):** Jenkins ka data local disk par save hota hai. Jab purani machine delete ho kar nayi machine banti hai, toh ek **naya blank disk** lagta hai aur purana sara data zaya ho jata hai.
+2. **IP Endpoint Change:** Recover hone ke baad Public aur Private IP badal jaata hai. Purana URL kaam karna chor deta hai.
+
+---
+
+## Cleaning up
+
+Extra charges se bachane ke liye stack ko delete karein:
+
+```bash
+aws cloudformation delete-stack --stack-name jenkins-multiaz
+aws cloudformation wait stack-delete-complete --stack-name jenkins-multiaz
+
+```
+
+* `delete-stack`: Multi-AZ Auto Scaling group, launch template, aur EC2 instances ko delete karna shuru karta hai.
+* `wait stack-delete-complete`: Deletion poori hone tak terminal ko hold rakhta hai.
+
+
+----
+
 
