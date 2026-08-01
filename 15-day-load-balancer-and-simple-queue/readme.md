@@ -737,3 +737,84 @@ aws s3 rb --force s3://url2png-$yourname
 ```
 
 ---
+
+## Limitations of messaging with SQS
+
+### SQS DOESN’T GUARANTEE THAT A MESSAGE IS DELIVERED ONLY ONCE
+
+SQS is baat ki **100% guarantee nahi deta** ke ek message sirf ek hi baar deliver hoga. Is model ko cloud architecture mein **"At-least-once delivery"** (kam se kam ek baar delivery) kehte hain. Iska matlab hai ke message ek baar toh zaroor milega, lekin kabhi kabhar do (2) baar bhi mil sakta hai!
+
+Is ke do (2) main wajohat hote hain:
+
+1. **Aam Wajah (Common Reason):** Jab aapka worker queue se message uthata hai, toh SQS us message ko `VisibilityTimeout` ke mutabiq dusre workers se chhupa deta hai. Agar aapka worker slow ho jaye ya crash ho jaye aur us waqt ke andar message ko **delete** na kar paaye, toh SQS samajhta hai ke kaam nahi hua. SQS us message ko dobara active kar deta hai aur koi doosra worker usay fir se receive kar leta hai.
+2. **Nadir / Khas Wajah (Rare Reason):** SQS ka apna system hazaron servers par phaila hua hai. Jab aap message delete karne ke liye `DeleteMessage` ki request bhejte hain, toh ho sakta hai ke us waqt SQS ka koi ek server temporary network issue ki waja se update na ho sakay. Jab wo server wapas zinda hota hai, toh uske paas message ki purani copy bachi hoti hai jo wo dobara deliver kar deta hai.
+
+#### Is Masle Ka Hal: Idempotent Processing
+
+Is masle ko hal karne ke liye hum apne message processing logic ko **Idempotent** banate hain.
+
+> **Idempotent ka matlab (Bacho ki tarah):** Chahe ek hi kaam ko 1 baar karo ya 100 baar karo, aakhri result hamesha bilkul EK HI rahega!
+
+* **URL2PNG ki Example (Idempotent Design):** URL2PNG application mein agar ek hi message 2 baar process ho jaye, toh worker 2 baar screenshot le kar S3 bucket par daale ga. S3 par nayi image purani image ko **replace (overwrite)** kar de gi. User ko aakhri file bilkul same milegi! Is liye ye system idempotent hai.
+* **Non-Idempotent Example:** Email bhej na! Agar kisi order ka message SQS ne 2 baar deliver kar diya aur aapka worker har baar email bhej deta hai, toh customer ko 2 martaba "Order Confirmed" ki email chali jayegi jo ke kharab baat hai.
+
+> **Design Decision:** SQS use karne se pehle hamesha check karein ke kya aap ka kaam duplicate processing handle kar sakta hai ya nahi.
+
+---
+
+### SQS DOESN’T GUARANTEE THE MESSAGE ORDER
+
+SQS Standard Queue mein messages us tarteeb (sequence) mein nahi milte jis tarteeb mein bhejey gaye the.
+
+* **Example:** Agar aapne Message 1, Phir Message 2, Phir Message 3 bheja... Toh SQS se read karte waqt aapko pehle Message 2, phir Message 1, aur phir Message 3 mil sakta hai.
+
+#### Design Decision / Advice:
+
+1. Apne application ka architecture aisa banayein ke usko **order (sequence) ki zaroorat hi na rahe**.
+2. Ya phir **Client Side (Worker Code)** par aisa logic likhein jo aage piche aane wale messages ko unki IDs ke mutabiq khud sahi tarteeb mein jod le.
+
+---
+
+### SQS FIFO (first in, first out) queues
+
+Agar aapko strict order (sahi tarteeb) aur duplicate-detection (kisi message ka repeat na hona) lazmi chahiye, toh SQS aapko **FIFO Queue** ki option deta hai.
+
+FIFO ka matlab hota hai **"First In, First Out"** (jo pehle aayega, wahi pehle niklega).
+
+#### FIFO Queue Ke Trade-offs (Kamzoriyan):
+
+* **Price:** FIFO queues Standard queues se thori mehngi hoti hain.
+* **Throughput Limitation:** Standard SQS queue mein unlimited messages per second ki capacity hoti hai, jabke FIFO queues par limit hoti hai (batching ke sath maximum **3,000 operations per second**).
+
+---
+
+### SQS DOESN’T REPLACE A MESSAGE BROKER
+
+SQS ek simple **Message Queue** hai, ye koi full-fledged **Message Broker** (jaise Apache ActiveMQ ya RabbitMQ) nahi hai.
+
+* SQS mein aapko advance features nahi miltay — jaise ke **Message Routing** (messages ko alag alag rasto par bhejna) ya **Message Priorities** (khas message ko pehle process karna).
+* SQS aur ActiveMQ ka muqabla karna bilkul aisa hi hai jaise **DynamoDB ka muqabla MySQL se karna**. Both ka kaam aur architecture alag hai.
+
+---
+
+### Amazon MQ
+
+AWS ne un logon ke liye **Amazon MQ** service launch ki hai jo traditional message brokers ka istemal karna chahte hain.
+
+* **Amazon MQ:** Ye AWS ki ek managed service hai jo **Apache ActiveMQ** aur **RabbitMQ** ko cloud par chalti hai.
+* **Protocols Support:** Ye enterprise protocols ko support karti hai jaise: `JMS`, `NMS`, `AMQP`, `STOMP`, `MQTT`, aur `WebSocket`.
+* **Kabh use karein?** Agar aapke paas koi purana legacy application hai jo in protocols par chalta hai aur aap usay AWS cloud par shift kar rahe hain, toh SQS ke bajaye Amazon MQ best option hai.
+
+---
+
+## Summary
+
+* **Decoupling se cheezein asaan hoti hain:** System ke hisson ki aapas mein dependency kam ho jati hai.
+* **Synchronous Decoupling:** Dono sides (client aur server) ka **ek hi waqt par online hona** zaroori hai, lekin unka ek doosre ka IP address janna zaroori nahi hota.
+* **Asynchronous Decoupling:** Client aur server ke **online hone ka time alag ho sakta hai**, dono aamne-saamne aaye bagair communicate kar sakte hain.
+* **ELB Load Balancer:** Modern web applications ko bina code badle **ELB (Elastic Load Balancing)** ke zariye synchronously decouple kiya ja sakta hai.
+* **Health Checks:** Load balancer lagataar backend servers par health checks bhejta hai taake pata chal sakay ke server chal raha hai ya kharab ho chuka hai.
+* **Asynchronous Process Adaptation:** Aap aksar synchronous processes ko asynchronous process mein badal sakte hain (jaise humne URL2PNG mein Random ID de kar kiya).
+* **SQS SDK Programming:** SQS ke sath asynchronously decouple karne ke liye AWS SDKs ke zariye code likhna parta hai.
+
+---
