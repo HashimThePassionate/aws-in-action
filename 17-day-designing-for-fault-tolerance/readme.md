@@ -281,3 +281,144 @@ Is ka yeh matlab bilkul nahi hai ke Load Balancer ya SQS khud Single Point of Fa
 
 
 ---
+
+## Considerations for making your code fault tolerant
+
+Agar aap apne poore system ko **fault-tolerant** (kharabi ke bawajood chalne wala) banana chahte hain, toh sirf infrastructure (servers) redundant karna kaafi nahi hai. Aap ko apna **application code** bhi usi hisab se design karna padega.
+
+Code ko fault-tolerant banane ke liye writer ne **2 sab se zaroori usool (rules)** bataye hain:
+
+1. **Failure aane par code ko crash hone do, lekin retries (dobara koshish) bhi karo.**
+2. **Jahan tak ho sake, hamesha Idempotent Code likho.**
+
+---
+
+## Let it crash, but also retry
+
+Programming ki dunya mein **Erlang** naam ki language apne ek mashhoor concept **"Let it crash"** (jaise hi koi masala aaye, program ko crash hone do / Fail Fast) ki wajah se jani jati hai. Is ka matlab hai ke jab program ko samajh na aaye ke aage kya karna hai, toh wo zabardasti chalne ke bajaye fauran crash ho jaye.
+
+Lekin log sab se bari ghalti yeh karte hain ke wo sirf "crash" ko yaad rakhte hain aur **"retry"** (dobara koshish karne) ko bhool jaate hain!
+
+* **Masla:** Agar aap ka system crash hone ke baad dobara koshish (retry) nahi karega, toh aap ka poora system down ho jaye ga—jo ke fault tolerance ke bilkul khilaf hai.
+
+Writer ne is concept ko **Synchronous** aur **Asynchronous** dono tareeqon mein samjhaya hai:
+
+### 1. Synchronous Decoupled Scenario Mein Retry:
+
+Is scenario mein request bhejney walay (Sender/Client) ko khud retry ki logic likhni parhti hai. Agar aik makhsoos waqt (timeout) tak response na aaye ya error milay, toh sender dobara wahi request bhejta hai.
+
+### 2. Asynchronous Decoupled Scenario Mein Retry:
+
+Is scenario mein retries ka kaam bohot aasan hota hai kyunki yeh **default taur par built-in** hota hai!
+
+* *Misaal:* Jab queue (jaise SQS) se koi worker message uthata hai, agar wo worker crash ho jaye aur aik makhsoos waqt tak queue ko kamyabi ka ishara (acknowledgement) na de, toh message automatic wapas queue mein chala jata hai. Is ke baad agla worker us message ko utha kar dobara process (retry) kar leta hai.
+
+### Crash Kab Karwana Chahiye Aur Kab Nahi? (Bacho Ki Tarah Aasaan Samjhein)
+
+* **Jab Crash NAHI Karwana Chahiye:** Agar user ne galat data bhej diya hai (jaise form mein email ki jagah naam likh diya), toh server ko crash karne ka koi faida nahi! Aap chahe 100 baar retry kar lein, user ka galat data sahi nahi ho jaye ga.
+* **Jab Crash Karwana CHAHIYE:** Agar aap ka server Database se connect nahi ho pa raha (network issue ki wajah se), toh server ko crash hone do aur retry karo. Kyunki 2-3 seconds baad jab network theek hoga, toh retry hone par request successfully process ho jaye gi.
+
+### Retry Ka Sab Se Bada Khatra (The Danger of Retries):
+
+Aap ek blog post create kar rahe hain. Pehli baar request gayi, database mein post save ho gayi, lekin response raste mein network issue ki wajah se zaya ho gaya. Client ko laga request fail ho gayi, us ne **Retry** kar diya.
+
+* **Natija:** Database mein ek hi blog post do (2) baar duplicate ho jaye gi!
+Is duplicates ke maslay ko hal karne ke liye hum **Idempotent Retry** ka istemal karte hain.
+
+---
+
+## Idempotent retry makes fault tolerance possible
+
+**Idempotency (Aisa Kaam Jo Bar Bar Karne Se Badal Na Jaye):**
+Idempotent ka matlab hai ke aap kisi action ko **aik baar karein ya 100 baar karein, us ka aakhri outcome/natija hamesha bilkul SEHSAM (SAME) hi rahega**.
+
+* **Nadan/Aasan Tareeqaa (Naive Approach):** Blog post ke **Title** ko database ki Primary Key bana do. Jab retry hoga, toh database dekhega ke is title ki post pehle se majood hai, toh wo doosri post insert karne ke bajaye skip kar dega.
+
+Lekin asal dunya mein blog post create karne ka process thoda complex hota hai aur us mein **3 steps** hotay hain. Aayein in teeno steps ko aik aik kar ke detail se samjhte hain:
+
+---
+
+### 1. CREATE A BLOG POST ENTRY IN THE DATABASE
+
+Title ko primary key banane ke bajaye hum client side par ek **UUID (Universally Unique Identifier)** generate karte hain (jaise: `550e8400-e29b-11d4-a716-446655440000`). UUID ek aisa unique random code hota hai ke dunya mein do sehnay jaisay UUID banne ka chance lagbhag zero hota hai.
+
+Client request bhejte waqt UUID, Title, aur Text bhejta hai. Server DB mein check karta hai ke kya yeh UUID pehle se majood hai?
+
+* Agar nahi hai -> Nayi entry add kar do.
+* Agar pehle se hai -> Insertion skip kar ke aage barh jao.
+
+#### Figure 16.5 Ka Hawala Aur Step-by-Step Breakdown:
+
+`Figure 16.5` mein idempotent database insert ka poora flow dikhaya gaya hai:
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+1. **Initial Event:** Blog post jiske sath UUID majood hai, wo database mein save hone ke liye aati hai.
+2. **Decision Box (Is the UUID already in the database?):**
+* **NO:** Agar UUID pehle se majood nahi hai, toh flowchart **"Create database entry"** wale box par jata hai aur entry save karke process khatam (**End**) ho jata hai.
+* **YES:** Agar UUID pehle se database mein majood hai (kyunki yeh retry request hai), toh flowchart bina koi duplicate entry banaye seedha **End** (double circle) par chala jata hai.
+
+
+
+#### Database Ke Zariye Idempotency Handle Karna (3 Options):
+
+Code mein logic likhne ke bajaye aap seedha Database ko insert command bhej kar bhi yeh handle kar sakte hain. Jab aap Insert ki command bhejenge toh 3 cheezein ho sakti hain:
+
+1. **Database data insert kar deta hai:** Operation kamyab ho gaya!
+2. **Database primary key duplicate hone ka error deta hai:** Is ka matlab hai pehle hi insert ho chuka tha, operation kamyab samjha jaye ga!
+3. **Database koi aur maslay ka error deta hai:** Application crash ho jaye gi aur retry karegi.
+
+---
+
+### 2. INVALIDATE THE CACHE
+
+Jab naya blog post ban jata hai, toh puranay saved data (cache) ko khatam (invalidate) karna parhta hai taake users ko naya post nazar aaye.
+
+Is step mein idempotency ki zyada fikar karne ki zaroorat nahi hoti:
+
+* Agar retry ki wajah se cache **ek se zyada baar bhi clear/invalidate ho jaye**, toh is se koi nuksan nahi hota.
+* Agli baar jab koi user request karega, toh cache khaali milegi, system database se naya data utha kar dobara cache mein rakh dega.
+* **Trade-off / Bura se bura outcome:** Zyada se zyada database par do teen extra queries parh jayengi, jo ke koi bara masla nahi hai.
+
+---
+
+### 3. POST TO THE BLOG'S TWITTER FEED
+
+Sab se mushkil kaam kisi teesri party (Third-Party API jaise Twitter/X) ke sath deal karna hai, kyunki un ke paas built-in idempotency ki guarantees nahi hoti.
+
+Dunya ka koi aisa solution nahi hai jo 100% guarantee de ke Twitter par **exact ek (1) baar** hi tweet post hogi. Aap ko do mein se kisi ek option ko chunna padega:
+
+* **At least once (Kam az kam ek baar):** 1 ya 1 se zyada tweets ho sakti hain.
+* **At most most once (Zyada se zyada ek baar):** 1 tweet hogi ya shayad 0 (bilkul nahi) hogi.
+
+#### Figure 16.6 Ka Hawala Aur Breakdown (Dono Solutions Ka Muqabla):
+
+`Figure 16.6` mein Twitter par status share karne ke 2 mukhtalif solutions ka flow chart dikhaya gaya hai:
+
+<div align="center">
+  <img src="./images/06.png" width="600"/>
+</div>
+```
+
+* **Solution 1 (Twitter API se poochna):**
+* Flowchart mein dekhein: Pehle Twitter API se pucha jata hai ke kya yeh status pehle se majood hai? Agar `No`, toh status create kar do. Agar `Yes`, toh skip kar do.
+* **Khamiyan (The Problem):** Twitter aik **Eventually Consistent** system hai. Is ka matlab hai ke tweet karne ke fauran baad agar aap Twitter se poochhenge, toh shayad Twitter boley ke "nahi hai status" (kyunki data sync hone mein kuch milliseconds lagte hain). Is chakkar mein duplicate tweet post ho sakti hai.
+
+
+* **Solution 2 (Local Database se poochna):**
+* Flowchart mein dekhein: Pehle apne Database se pucha jata hai ke kya yeh post share ho chuki hai? Agar `No`, toh pehle **Database update** karo ke tweet ho gayi hai, aur us ke BAAD Twitter API ko request bhejo.
+* **Khamiyan (The Problem):** Agar aap ne Database mein save kar diya ke "Tweet ho gayi hai", aur abhi Twitter API ko request bhejni hi thi ke **system crash ho gaya!** Ab database bolega ke Tweet ho chuki hai, lekin sach mein Twitter par tweet nahi hui hogi!
+
+
+
+#### Design Decision (Business Ka Faisla):
+
+Aap ko yeh **Business Decision** lena padega ke aap ka business kis cheez ko bardasht kar sakta hai:
+
+1. **Kya aap aik missing tweet bardasht kar sakte hain?** (At-most-once)
+2. **Ya aap multiple (duplicate) tweets bardasht kar sakte hain?** (At-least-once)
+
+
+---
