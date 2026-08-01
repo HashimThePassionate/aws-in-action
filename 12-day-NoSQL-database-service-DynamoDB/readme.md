@@ -1881,3 +1881,309 @@ Hardware ki durability aap ko insani galtiyon (Human Errors) ya code ke bugs se 
 AWS DynamoDB mein **On-Demand Backup and Restore** (aur Point-in-Time Recovery - PITR) ki sahoolat deta hai. Is feature ke zariye aap jab chahay apni table ka ek **Snapshot (Instant Photo Copy)** le sakte hain aur zaroorat padne par us snapshot se poori nayi table restore kar sakte hain. Production environments mein On-Demand Backups istemal karna **sakht recommended** hai.
 
 ---
+
+## Scaling capacity and pricing
+
+Aam relational database (jaise MySQL) aur DynamoDB jaise NoSQL database mein sab se bada farq scaling ka hota hai. Relational database ko scale karna mushkil hota hai, jabke NoSQL database mein aap naye computers (Nodes) add karke us ki Read aur Write capacity ko horizontally jitna chahay barha sakte hain.
+
+DynamoDB aap ko apni tables ke liye **2 alag Read/Write Capacity Modes** deta hai:
+
+1. **On-Demand Mode (Hazri Par Capacity):**
+* Yeh aap ki application ke traffic load ke mutabiq Read aur Write capacity ko **automatically (khud ba khud)** kam ya zyada kar deta hai.
+* Is mein aap ko pehle se koi sizing decide nahi karni parti, yeh 100% maintenance-free hota hai.
+
+
+2. **Provisioned Mode (Pehle Se Tay Shuda Capacity):**
+* Is mode mein aap ko pehle se batana padta hai ke aap ko per second kitni Read aur Write capacity units chahiye.
+* Agar aap chahein toh is ke sath **Application Auto Scaling** enable kar sakte hain taake live load ke hisab se capacity khud adjust hoti rahe.
+
+
+
+Pehli nazar mein On-Demand mode zyaada acha lagta hai kyun ke is mein koi tension nahi hoti. Lekin aaiye dono ke kharcheon (pricing) ka muqabla karte hain.
+
+---
+
+### Table 12.1 Comparing pricing of DynamoDB on-demand and provisioned mode
+
+Neechay di gayi table `us-east-1` region ke prices par mushtamil hai (is assumption ke sath ke item size 1 KB se kam hai):
+
+| Throughput (Raftar) | On-demand mode (Mahana Kharcha) | Provisioned mode (Mahana Kharcha) |
+| --- | --- | --- |
+| **10 writes per second** | $32.85 per month | $4.68 per month |
+| **100 reads per second** | $32.85 per month | $4.68 per month |
+
+#### Table Ki Detail aur Asani Se Samajh:
+
+* **Zahir Ka Farq:** Table dekhte hi lagta hai ke On-Demand mode Provisioned mode se taqriban **7 guna zyaada mehanga** hai ($32.85 vs $4.68).
+* **Asliyat (Trade-off):** Yeh misal tabhi sahi sabit hoti hai jab aap ka database 24 ghante (24/7) continuously 100% full capacity (10 writes aur 100 reads per second) par bina ruke chalta rahe.
+* **Real-World Experience:** Haqeeqat mein koi bhi app 24 ghante ek hi speed par nahi chalti. Din mein traffic zyaada hota hai aur raat ko zero ho jata hai (Traffic Spikes).
+* *Writer ki real-world example:* Unki `marbot` naam ki AWS chatbot app pehle Provisioned capacity par chal rahi thi. December 2018 mein jab unhone usay On-Demand mode par switch kiya, toh un ka **DynamoDB bill 90% kam (sasta)** ho gaya!
+
+> **Bunyaadi Usool (Rule of Thumb):** Aap ke traffic mein jitne zyaada spikes (achanak se utar-charhao) aayenge, On-Demand mode aap ke liye utna hi zyaada sasta aur behtareen sabit hoga.
+
+---
+
+### On-Demand vs Provisioned Cost Calculation Example
+
+Aaiye ek real-world misal se is ka calculation samajhte hain:
+
+* **App Timings:** App sirf office timing (9 AM se 5 PM - 8 ghante) istemal hoti hai.
+* **Normal Speed (7 ghante):** 100 reads/sec aur 10 writes/sec.
+* **Peak Batch Job (4 PM se 5 PM - 1 ghanta):** Load barh kar 1,000 reads/sec aur 100 writes/sec ho jata hai.
+* **Off Hours (Baqi 16 ghante):** Zero traffic.
+
+#### 1. Provisioned Capacity Mode Ka Monthly Bill:
+
+Provisioned mode mein aap ko hamesha **Peak Load (sab se zyaada aane wale traffic)** ke hisab se capacity buy karni parti hai.
+
+* Peak Writes = 100 writes/sec
+* Peak Reads = 1,000 reads/sec
+
+```text
+// Writes Ka Kharcha:
+$0.00065 (cost/write/sec) * 100 writes * 24 hours * 30 days = $46.80
+
+// Reads Ka Kharcha:
+$0.00013 (cost/read/sec) * 500 (unit pairs) * 24 hours * 30 days = $46.80
+
+Total Provisioned Monthly Cost = $46.80 + $46.80 = $93.60
+
+```
+
+#### 2. On-Demand Capacity Mode Ka Monthly Bill:
+
+On-Demand mein aap sirf exact request count ke paise dete hain:
+
+```text
+// Daily Writes Count:
+(7 hours * 3600 sec * 10 writes) + (1 hour * 3600 sec * 100 writes)
+= 252,000 + 360,000 = 612,000 writes/day
+
+// Daily Reads Count:
+(7 hours * 3600 sec * 100 reads) + (1 hour * 3600 sec * 1000 reads)
+= 2,520,000 + 3,600,000 = 6,120,000 reads/day
+
+// Monthly Writes Cost:
+$0.00000125 per write * 612,000 * 30 days = $22.95
+
+// Monthly Reads Cost:
+$0.00000025 per read * 6,120,000 * 30 days = $45.90
+
+Total On-Demand Monthly Cost = $22.95 + $45.90 = $68.85
+
+```
+
+> **Result:** Is realistic scenario mein On-Demand mode Provisioned mode ke muqable **$24.75 per month sasta** parta hai!
+
+---
+
+### Storage Types Aur DynamoDB Pricing
+
+Data Read/Write karne ke ilawa aap ko DynamoDB mein data store karne (Storage) ka bill bhi dena parta hai:
+
+* **Standard Storage (Default):** **$0.25 per GB per month**. Pehle **25 GB 100% Free** hotay hain. Aap ko pehle se storage book nahi karni parti, jitna storage use hoga utna bill aayega.
+* **Standard-Infrequent Access (Standard-IA) Storage Class:**
+* Agar aap ke paas bohot bara data hai jise bohot hi kam parha (access) jata hai, toh aap Standard-IA use kar sakte hain.
+* **Fayda:** Storage price kam ho kar **$0.10 per GB per month** ho jati hai (60% bachat).
+* **Kharabi (Trade-off):** Is storage class mein Read aur Write karne ki cost taqriban **25% barh (expensive)** jati hai.
+
+
+
+---
+
+### Capacity Units Nuqta-e-Nazar (CLI Testing Example)
+
+Provisioned Mode mein sahi capacity samajhne ke liye aaiye Terminal par CLI commands chalakar experiment karte hain:
+
+#### Test 1: Eventually Consistent Read Capacity Unit
+
+```bash
+$ aws dynamodb get-item --table-name todo-user \
+  --key '{"uid": {"S": "emma"}}' \
+  --return-consumed-capacity TOTAL \
+  --query "ConsumedCapacity"
+
+```
+
+**Output:**
+
+```json
+{
+    "CapacityUnits": 0.5,
+    "TableName": "todo-user"
+}
+
+```
+
+* **Explanation:** `--return-consumed-capacity TOTAL` flag DynamoDB ko batata hai ke is request mein kitni capacity zaya hui wo report karo. Normal default read (Eventually Consistent) ke liye sirf **0.5 Read Capacity Unit (RCU)** kharch hui.
+
+#### Test 2: Strongly Consistent Read Capacity Unit
+
+```bash
+$ aws dynamodb get-item --table-name todo-user \
+  --key '{"uid": {"S": "emma"}}' \
+  --consistent-read --return-consumed-capacity TOTAL \
+  --query "ConsumedCapacity"
+
+```
+
+**Output:**
+
+```json
+{
+    "CapacityUnits": 1.0,
+    "TableName": "todo-user"
+}
+
+```
+
+* **Explanation:** Jab hum ne `--consistent-read` ka flag lagaya, toh DynamoDB ne **1.0 Read Capacity Unit (RCU)** kharch ki. Yani Strongly Consistent read double capacity consume karta hai.
+
+---
+
+### Throughput Consumption Ke Abstract Rules (Capacity Calculation Rules)
+
+1. **Eventually Consistent Read:** Strongly Consistent read ke muqable **aadhi (1/2)** capacity leta hai.
+2. **Strongly Consistent `getItem`:**
+* Agar item ka size **4 KB tak** hai, toh **1 Read Capacity Unit (RCU)** kharch hoti hai.
+* Agar item 4 KB se bada hai, toh formula hai:
+
+$$\text{RCU} = \text{roundUP}\left(\frac{\text{Item Size in KB}}{4}\right)$$
+
+
+
+
+3. **Strongly Consistent `query`:**
+* Query operation mein wapas aane wale saare items ke kul size ko milakar har 4 KB par 1 RCU lagti hai.
+* *Comparison Example:* Agar Query 10 items wapas karti hai aur har item 2 KB ka hai (total 20 KB), toh $20 / 4 = 5$ RCUs lagengi. Jabke agar aap wahi 10 items `getItem` se alag alag nikaalte, toh $10 \times 1 = 10$ RCUs lagtein!
+
+
+4. **Write Operation (`putItem`, `updateItem`, `deleteItem`):**
+* Har 1 KB item size ke liye **1 Write Capacity Unit (WCU)** lagti hai.
+* Formula:
+
+$$\text{WCU} = \text{roundUP}(\text{Item Size in KB})$$
+
+
+
+
+
+> Aap AWS Pricing Calculator (`[https://calculator.aws](https://calculator.aws)`) istemal karke bhi apni Read/Write requirements ke mutabiq kharche ka andaza laga sakte hain.
+
+---
+
+### Throttling Aur Capacity Limits
+
+Agar aap ne table ke liye `ReadCapacityUnits=5` set kiya hai, toh aap ek second mein 4 KB size ke maximum 5 strongly consistent reads kar sakte hain.
+
+* **Throttling Kya Hai?** Agar aap ki app provisioned limit se zyada requests bhejegi, toh DynamoDB requests ko rokna (**Throttle**) shuru kar dega (app slow ho jayegi).
+* **Request Rejection:** Agar traffic bohot zyada barh gaya, toh DynamoDB requests ko reject (Error 400 ProvisionedThroughputExceededException) kar dega.
+
+Capacity barhana kisi bhi waqt mumkin hai, lekin capacity kam karne par sakht pabandiyan hain:
+
+---
+
+### Limits for decreasing the throughput capacity
+
+* Table ki Provisioned capacity ko kam (decrease) karne ki ijazat din (UTC Time) mein aam taur par **sirf 4 martaba** hoti hai.
+* **Extra Exemption Rule:** Agar aap ki 4 limits poori ho bhi chuki hoon, lekin aakhri baar capacity kam kiye hue **1 ghante se zyaada time** guzar chuka ho, toh aap dobara capacity kam kar sakte hain.
+
+> Manual capacity set karne ke bajaye **Application Auto Scaling** use karein, jo Amazon CloudWatch metrics ko dekh kar automatic aap ki capacity ko barha ya kam kar deta hai.
+
+---
+
+## Networking
+
+DynamoDB aap ke Virtual Private Cloud (VPC) ke andar nahi chalta! Yeh AWS ki ek public API service hai jise access karne ke liye internet connectivity ki zaroorat hoti hai.
+
+```text
+[ Private Subnet App Server ] ───(No Direct Internet)───► [ NAT Gateway ] ───► [ Internet ] ───► [ DynamoDB API ]
+
+```
+
+* **Default Problem:** VPC ke Private Subnet mein chalne wale servers direct DynamoDB se baat nahi kar sakte kyun ke un ke paas Internet Gateway ka rasta nahi hota. Is ke liye unhein **NAT Gateway** ka rasta istemal karna padta hai.
+* **NAT Gateway Limitations:** NAT Gateway ki bandwidth maximum 10 Gbps hoti hai aur is par heavy data transfer charges lagte hain.
+
+### Behtareen Solution (VPC Endpoint for DynamoDB):
+
+```text
+[ Private Subnet App Server ] ───(Direct AWS Internal Route)───► [ VPC Gateway Endpoint ] ───► [ DynamoDB API ]
+
+```
+
+Aap apne VPC mein DynamoDB ke liye **VPC Gateway Endpoint** set up karein. Is se aap ke private subnets bina internet ya NAT Gateway ke direct aur secure tarike se AWS ke internal network par DynamoDB se communicate kar sakte hain (bina kisi extra data transfer cost ke).
+
+---
+
+## Comparing DynamoDB to RDS
+
+Chapter 10 mein hum ne **RDS (Relational Database Service)** ke baare mein parha tha. Aaiye DynamoDB aur RDS ka aapas mein muqabla karte hain:
+
+> **Note:** DynamoDB aur RDS ka muqabla karna saib (apple) aur malte (orange) ka muqabla karne jaisa hai. Dono mein sirf ek hi baat common hai ke dono ke naam ke aage "Database" lagta hai!
+
+* **RDS (MySQL, PostgreSQL):** Data read/write karne ke liye SQL Queries bohot flexible hain, lekin scale karna bohot mushkil kaam hai. Pricing per instance-hour hoti hai.
+* **DynamoDB:** Horizontally easily scale hota hai, pay-per-request model milta hai, lekin data queries limited hoti hain.
+
+---
+
+### Table 12.2 Differences between DynamoDB and RDS
+
+Neechay di gayi table dono services ke bunyaadi farq ko wazeh karti hai:
+
+| Task (Kaam) | DynamoDB | RDS Aurora |
+| --- | --- | --- |
+| **Creating a table** | Management Console, SDK, ya CLI (`aws dynamodb create-table`) | SQL `CREATE TABLE` statement |
+| **Inserting, updating, or deleting data** | SDK ya PartiQL (SQL ka limited version) | SQL `INSERT`, `UPDATE`, ya `DELETE` statement |
+| **Querying data** | SDK query ya PartiQL | SQL `SELECT` statement |
+| **Adding indexes to extend the possibility of query data** | Har table par 25 se zyada global secondary indexes nahi ho sakte. | Har table par indexes ki tadad ki koi limit nahi hoti. |
+| **Increasing storage** | Kisi action ki zaroorat nahi; storage khud ba khud barhti aur kam hoti hai. | Management Console, CLI, ya API ke zariye storage barhana mumkin hai. |
+| **Increasing performance** | Horizontal tareeqay se, capacity barha kar. DynamoDB background mein mazeed machines add kar deta hai. | Vertical tareeqay se (instance size aur disk throughput barha kar); ya horizontal tareeqay se (paanch tak read replicas add karke). |
+| **Distribute data globally** | Multiactive replication ki wajah se multiple regions mein reads aur writes dono mumkin hain. | Read replication ki wajah se doosre regions mein data synchronize ho jata hai, lekin data likhna (write karna) sirf source region mein hi mumkin hai. |
+| **Installing the database on your machine** | Yeh sirf AWS par dastiyab hai. Halankeh local machine par development ke liye ek local version mojood hai. | Aap apni machine par MySQL ya PostgreSQL install kar sakte hain. |
+| **Hiring an expert** | DynamoDB ki khaas skills ki zaroorat hoti hai. | Zyadatar scenarios ke liye general SQL skills hi kafi hoti hain. |
+
+> **Faisla (Decision):** Agar aap ki app ko complex SQL queries (JOINs) chahiye ya aap nayi technology seekhne mein time zaya nahi karna chahte toh **RDS** chunein. Warna scalable aur serverless workloads ke liye **DynamoDB** chunain.
+
+---
+
+## NoSQL alternatives
+
+AWS par DynamoDB ke ilawa aur bhi NoSQL databases dastiyab hain. Apne workload ke mutabiq sahi database chunain:
+
+---
+
+### Table 12.3 Differences between DynamoDB and some NoSQL databases
+
+| Service | Store type | Description (Roman Urdu) | Use case / Details (Roman Urdu) |
+| --- | --- | --- | --- |
+| **Amazon Keyspaces** | Columnar store | Ek fully managed Apache Cassandra-compatible database service hai. | Bohat baray data sets ke sath deal karne ke liye behtareen fit hai. Cassandra ko ek open-source project ke tor par sochein. Doosre vendors ke zariye bhi managed service ke tor par dastiyab hai. |
+| **Amazon Neptune** | Graph store | AWS ki taraf se faraham ki gayi aik proprietary graph database hai. | Social graph, personalization, product catalog, aur aapas mein bohat zyada connected data sets ke liye mukammal fit hai. |
+| **Amazon DocumentDB with MongoDB compatibility** | Document store | Aik aisi database service jo bare pemane par JSON data management ke liye banai gayi hai, fully managed hai aur AWS ke sath integrated hai. Amazon DocumentDB MongoDB 3.6 ke sath compatible hai. | Agar aap aisi NoSQL database ki talaash mein hain jo flexible query capabilities bhi deti ho toh yeh ek acha choice hai. Aik aam use case common CRUD (create, read, update, aur delete) applications hain. |
+| **Amazon MemoryDB for Redis** | Key-value store | Durability ke sath ek in-memory database, jo Redis-compatible interface faraham karta hai. | Cache implement karne, session store, ya jab bhi I/O latency bohat zyada critical ho, uske liye ek behtareen match hai. |
+
+---
+
+## Cleaning up
+
+Is chapter ke practical exercises khatam karne ke baad bill se bachne ke liye dono created tables ko delete karna lazmi hai:
+
+```bash
+aws dynamodb delete-table --table-name todo-task
+aws dynamodb delete-table --table-name todo-user
+
+```
+
+---
+
+## Summary
+
+* DynamoDB ek NoSQL database service hai jo aap se tamam operational burdens (maintenance/updates) khatam kar deti hai, behad tezi se scale hoti hai, aur applications ke storage backend ke tor par use hoti hai.
+* DynamoDB mein data dhoondna Keys par depend karta hai. Data query karne ke liye Primary Key (Partition Key) ka pata hona lazmi hai.
+* Jab Partition Key aur Sort Key ka combination use kiya jaye, toh bohot se items ek hi Partition Key share kar sakte hain jab tak unki Sort Key alag ho. Is se aap ek Partition Key ke sare items Sort Key ki tartiib mein fetch kar sakte hain.
+* Global Secondary Index (GSI) add karne se aap kisi additional non-key attribute par bhi tezi se query kar sakte hain.
+* `query` operation kisi table ya secondary index par specific matching items lata hai.
+* `scan` operation poori table ke har single item ko parhta hai. Yeh flexible toh hai lekin bilkul efficient nahi hai aur isay kam se kam use karna chahiye.
+* Strongly Consistent Reads enforce karne se purana/stale data milne ka masla nahi hota. Lekin Global Secondary Index (GSI) se reads hamesha Eventually Consistent hi rehte hain.
+* DynamoDB 2 capacity modes ke sath aata hai: On-demand aur Provisioned. Traffic Spikes wale workloads ke liye On-demand mode sab se behtareen aur cost-effective hai.
+
+---
