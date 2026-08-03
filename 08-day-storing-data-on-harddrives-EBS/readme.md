@@ -1,5 +1,26 @@
 # Storing data on hard drives: EBS and instance store
 
+<details>
+<summary><strong>Table of Contents</strong></summary>
+
+- [What is Block-Level Storage and Filesystem?](#what-is-block-level-storage-and-filesystem)
+- [How OS handles Read Requests (Step-by-Step Flow)](#how-os-handles-read-requests-step-by-step-flow)
+- [Elastic Block Store (EBS): Persistent block-level storage attached over the network](#elastic-block-store-ebs-persistent-block-level-storage-attached-over-the-network)
+- [Creating an EBS volume and attaching it to your EC2 instance](#creating-an-ebs-volume-and-attaching-it-to-your-ec2-instance)
+- [Using EBS](#using-ebs)
+- [Formatting the Volume (Filesystem Banana)](#formatting-the-volume-filesystem-banana)
+- [Mounting the Volume (Drive ko Folder se Jodna)](#mounting-the-volume-drive-ko-folder-se-jodna)
+- [Tweaking performance](#tweaking-performance)
+- [Backing up your data with EBS snapshots](#backing-up-your-data-with-ebs-snapshots)
+- [Instance store: Temporary block-level storage](#instance-store-temporary-block-level-storage)
+- [Listing 8.1 Using an instance store with CloudFormation](#listing-81-using-an-instance-store-with-cloudformation)
+- [Using an instance store](#using-an-instance-store)
+- [Testing performance](#testing-performance)
+- [Cleaning up](#cleaning-up)
+- [Summary (Mukammal Nichor)](#summary-mukammal-nichor)
+
+</details>
+
 Aap farz karein ke aap ko ek purana enterprise application (legacy application) AWS cloud par shift (migrate) karna hai jo abhi aap ke apne office ke physical servers (on-premises) par chal raha hai.
 
 Purane zamane ke ziada tar applications files ko read aur write karne ke liye aik **Filesystem** ka istemal karte hain. In purane apps ko direct **Object Storage** (jaise AWS S3) par shift karna hamesha aasan ya mumkin nahi hota, kyunki is ke liye poore application ka code dubara likhna parta hai jo bohot mehenga (expensive) kaam hai.
