@@ -1,9 +1,5 @@
 # Storing data on hard drives: EBS and instance store
 
-Aap ke diye gaye text ki mukammal, step-by-step aur aasan Roman Urdu mein deep explanation niche di gayi hai, taake har theoretical aspect aur detail aap ke liye hamesha ke liye clear ho jaye.
-
----
-
 Aap farz karein ke aap ko ek purana enterprise application (legacy application) AWS cloud par shift (migrate) karna hai jo abhi aap ke apne office ke physical servers (on-premises) par chal raha hai.
 
 Purane zamane ke ziada tar applications files ko read aur write karne ke liye aik **Filesystem** ka istemal karte hain. In purane apps ko direct **Object Storage** (jaise AWS S3) par shift karna hamesha aasan ya mumkin nahi hota, kyunki is ke liye poore application ka code dubara likhna parta hai jo bohot mehenga (expensive) kaam hai.
@@ -136,29 +132,26 @@ Misaal ke tor par, aap ek purani enterprise application ko AWS par laa rahe hain
 Niche diya gaya **CloudFormation (YAML)** code sikhata hai ke yeh kaam automated tareeqay se kaise hota hai. Main modern 2026 standards ke mutabiq har line ka maqsad bilkul bacho ki tarah aasan kar ke samjhata hoon:
 
 ```yaml
-Instance: 
+Instance: # EC2 instance ko define karta hai
   Type: 'AWS::EC2::Instance'
   Properties:
-    # [...] # Yahan EC2 ki baqi settings aati hain (jaise AMI, Instance Type) jo abhi skip ki gayi hain.
-
-Volume: 
+    # [...] # Is misal mein hum EC2 instance ki properties ko skip kar rahe hain
+Volume: # EBS volume ko define karta hai
   Type: 'AWS::EC2::Volume'
   Properties:
-    AvailabilityZone: !Sub ${Instance.AvailabilityZone} 
-    Size: 5 
-    VolumeType: gp2 
+    AvailabilityZone: !Sub ${Instance.AvailabilityZone}
+    Size: 5 # 5 GB capacity wala volume create karta hai
+    VolumeType: gp2 # SSD par mabni default volume type
     Tags:
       - Key: Name
         Value: 'AWS in Action: chapter 8 (EBS)'
-
-VolumeAttachment: 
+VolumeAttachment: # EBS volume ko EC2 instance ke sath attach karta hai
   Type: 'AWS::EC2::VolumeAttachment'
   Condition: Attached
   Properties:
-    Device: '/dev/xvdf' 
-    InstanceId: !Ref Instance 
-    VolumeId: !Ref Volume 
-
+    Device: '/dev/xvdf' # EC2 instance ke zariye istemal hone wale device ka naam
+    InstanceId: !Ref Instance # EC2 instance ko refer karta hai
+    VolumeId: !Ref Volume # EBS volume ko refer karta hai
 ```
 
 **Code ki Detail:**
@@ -191,11 +184,10 @@ Linux mein hard drives dekhne ki command `lsblk` (List Block Devices) hai. Ise a
 
 ```bash
 $ lsblk
-NAME MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
-xvda 202:0 0 8G 0 disk  
-└─xvda1 202:1 0 8G 0 part /
-xvdf 202:80 0 5G 0 disk  
-
+NAME     MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+xvda     202:0    0  8G   0 disk            # Root volume, 8 GiB size wala aik EBS volume
+└─xvda1  202:1    0  8G   0 part /
+xvdf     202:80   0  5G   0 disk            # Aik azafi volume, 5 GiB size wala aik EBS volume
 ```
 
 **Output ki Detail:**
@@ -226,7 +218,6 @@ naming   =version 2              bsize=4096   ascii-ci=0 ftype=1
 log      =internal log           bsize=4096   blocks=2560, version=2
          =                       sectsz=512   sunit=0 blks, lazy-count=1
 realtime =none                   extsz=4096   blocks=0, rtextents=0
-
 ```
 
 **Code aur Output ki Detail:**
@@ -248,7 +239,6 @@ Filesystem banne ke baad OS ko yeh batana parta hai ke "Bhai, agar main is drive
 ```bash
 $ sudo mkdir /data
 $ sudo mount /dev/xvdf /data
-
 ```
 
 * **Line 1:** `mkdir /data` - Linux mein ek khali folder banaya jiska naam `data` rakha.
@@ -258,14 +248,13 @@ Ab confirm karne ke liye `df -h` (Disk Free - Human readable) command chalate ha
 
 ```bash
 $ df -h
-Filesystem      Size Used Avail Use% Mounted on
-devtmpfs        484M    0  484M   0% /dev
-tmpfs           492M    0  492M   0% /dev/shm
-tmpfs           492M 348K  491M   1% /run
-tmpfs           492M    0  492M   0% /sys/fs/cgroup
-/dev/xvda1      8.0G 1.5G  6.6G  19% /      
-/dev/xvdf       5.0G  38M  5.0G   1% /data  
-
+Filesystem      Size  Used Avail Use% Mounted on
+devtmpfs        484M     0  484M   0% /dev
+tmpfs           492M     0  492M   0% /dev/shm
+tmpfs           492M  348K  491M   1% /run
+tmpfs           492M     0  492M   0% /sys/fs/cgroup
+/dev/xvda1      8.0G  1.5G  6.6G  19% /           # Root volume
+/dev/xvdf       5.0G   38M  5.0G   1% /data       # Aik azafi volume (Additional volume)
 ```
 
 * Yahan aap clear dekh sakte hain ke `xvda1` 8 GB ki main drive `/` (root) par mounted hai, jabke hamari nayi `xvdf` 5 GB ki drive `/data` folder par mounted hai aur usme se 1% (38 MB) OS ke system files ne le liya hai, baqi khali hai.
@@ -275,9 +264,8 @@ tmpfs           492M    0  492M   0% /sys/fs/cgroup
 Writer ab practically sabit kar raha hai ke EBS aur EC2 dono alag alag hain. Woh drive mein ek file banayega, drive ko disconnect karega, aur phir dobara connect karega.
 
 ```bash
-$ sudo touch /data/testfile 
-$ sudo umount /data 
-
+$ sudo touch /data/testfile # /data mein testfile create karta hai
+$ sudo umount /data # Volume ko unmount karta hai
 ```
 
 * **Line 1:** `touch` command ne `/data` folder (yani 5GB wali drive) ke andar ek khali file `testfile` banadi.
@@ -286,9 +274,14 @@ $ sudo umount /data
 Is ke baad jab AWS console se us volume ko **detach** kiya gaya aur dubara server mein `lsblk` dekha gaya toh woh 5 GB wali drive ghaib thi! Aur jab file dhoondi gayi:
 
 ```bash
+$ lsblk
+NAME MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+xvda 202:0 0 8G 0 disk
+└─xvda1 202:1 0 8G 0 part /
+
+
 $ ls /data/testfile
 ls: cannot access /data/testfile: No such file or directory
-
 ```
 
 * OS ko `/data` folder mein koi `testfile` nahi mili, kyunki drive toh unplug ho chuki hai!
@@ -296,10 +289,9 @@ ls: cannot access /data/testfile: No such file or directory
 Lekin jab AWS console se drive ko dobara **attach** kiya aur command lagayi:
 
 ```bash
-$ sudo mount /dev/xvdf /data 
-$ ls /data/testfile 
+$ sudo mount /dev/xvdf /data # Attached volume ko dobara mount karta hai
+$ ls /data/testfile # Check karta hai ke testfile /data mein mojood hai
 /data/testfile
-
 ```
 
 * **Jaadu! (Voilà!):** Drive dobara mount hui, aur hamari `testfile` bilkul safe and sound waheen mojood thi. Yeh sabit karta hai ke data server mein nahi, balke EBS volume mein permanently mehfooz rehta hai.
@@ -313,12 +305,11 @@ Ab hum check karenge ke hamari lagayi gayi hard drive ki speed kitni hai. Hard d
 ### Write Performance Test
 
 ```bash
-$ sudo dd if=/dev/zero of=/data/tempfile bs=1M count=1024 \ 
-    conv=fdatasync,notrunc
+$ sudo dd if=/dev/zero of=/data/tempfile bs=1M count=1024 \ # 1 MB ko 1,024 baar write karta hai
+  conv=fdatasync,notrunc
 1024+0 records in
 1024+0 records out
-1073741824 bytes (1.1 GB) copied, 15.8331 s, 67.8 MB/s 
-
+1073741824 bytes (1.1 GB) copied, 15.8331 s, 67.8 MB/s # 67.8 MB/s write performance
 ```
 
 **Code ki Detail:**
@@ -335,9 +326,9 @@ $ sudo dd if=/dev/zero of=/data/tempfile bs=1M count=1024 \
 Read test karne se pehle zaroori hai ke hum OS ki Memory (RAM Cache) ko khali karein, warna OS seedha RAM se data utha dega aur speed dhokay wali ayegi:
 
 ```bash
-$ echo 3 | sudo tee /proc/sys/vm/drop_caches 
+$ echo 3 | sudo tee /proc/sys/vm/drop_caches    # Flushes
+caches
 3
-
 ```
 
 * Yeh command system ke cache ko flush (saaf) kar deti hai.
@@ -345,12 +336,11 @@ $ echo 3 | sudo tee /proc/sys/vm/drop_caches
 Ab Read test:
 
 ```bash
-$ sudo dd if=/data/tempfile of=/dev/null bs=1M \ 
-    count=1024
+$ sudo dd if=/data/tempfile of=/dev/null bs=1M \ # 1 MB ko 1,024 baar read karta hai
+  count=1024
 1024+0 records in
 1024+0 records out
-1073741824 bytes (1.1 GB) copied, 15.7875 s, 68.0 MB/s 
-
+1073741824 bytes (1.1 GB) copied, 15.7875 s, 68.0 MB/s # 68.0 MB/s read performance
 ```
 
 * **Code Detail:** Is dafa `if` (Input) hamari banayi hui `tempfile` hai, aur `of` (Output) `/dev/null` hai (jo Linux ka blackhole hai, jo bhi isme dalo ghaib ho jata hai). Hum file parh kar blackhole mein phaink rahe hain.
@@ -375,16 +365,16 @@ EBS volume ki speed sirf volume par nahi, balke aap ke **EC2 Instance (Server)**
 
 **Table 8.2 How EBS volume types differ**
 
-| Volume type | Volume size | MiB/s | IOPS | Performance burst | Price |
-| --- | --- | --- | --- | --- | --- |
-| **General Purpose SSD (gp3)** | 1 GiB–16 TiB | 1,000 | 3,000 per default, plus as much as you provision (up to 500 IOPS per GiB or 16,000 IOPS) | n/a | $$$$ |
-| **General Purpose SSD (gp2)** | 1 GiB–16 TiB | 250 | 3 per GiB (up to 16,000) | 3,000 IOPS | $$$$$ |
-| **Provisioned IOPS SSD (io2 Block Express)** | 4 GiB–64 TiB | 4000 | As much as you provision (up to 500 IOPS per GiB or 256,000 IOPS) | n/a | $$$$$$ |
-| **Provisioned IOPS SSD (io2)** | 4 GiB–16 TiB | 1000 | As much as you provision (up to 500 IOPS per GiB or 64,000 IOPS) | n/a | $$$$$$ |
-| **Provisioned IOPS SSD (io1)** | 4 GiB–16 TiB | 1000 | As much as you provision (up to 50 IOPS per GiB or 64,000 IOPS) | n/a | $$$$$$$ |
-| **Throughput Optimized HDD (st1)** | 125 GiB–16 TiB | 40 per TiB (up to 500) | 500 | 250 MiB/s per TiB (up to 500 MiB/s) | $$ |
-| **Cold HDD (sc1)** | 125 GiB–16 TiB | 12 per TiB (up to 250) | 250 | 80 MiB/s per TiB (up to 250 MiB/s) | $ |
-| **EBS Magnetic HDD (standard)** | 1 GiB–1 TiB | 40–90 | 40–200 (100 on average) | Hundreds | $$$ |
+| Volume Type | Volume Size | MiB/s | IOPS | Performance Burst | Price |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **General Purpose SSD (gp3)** | 1 GiB se 16 TiB | 1,000 | By default 3,000, plus jitna aap provision karein (500 IOPS per GiB ya 16,000 IOPS tak) | N/A | $$$$ |
+| **General Purpose SSD (gp2)** | 1 GiB se 16 TiB | 250 | 3 per GiB (16,000 tak) | 3,000 IOPS | $$$$$ |
+| **Provisioned IOPS SSD (io2 Block Express)** | 4 GiB se 64 TiB | 4000 | Jitna aap provision karein (500 IOPS per GiB ya 256,000 IOPS tak) | N/A | $$$$$$ |
+| **Provisioned IOPS SSD (io2)** | 4 GiB se 16 TiB | 1000 | Jitna aap provision karein (500 IOPS per GiB ya 64,000 IOPS tak) | N/A | $$$$$$ |
+| **Provisioned IOPS SSD (io1)** | 4 GiB se 16 TiB | 1000 | Jitna aap provision karein (50 IOPS per GiB ya 64,000 IOPS tak) | N/A | $$$$$$$ |
+| **Throughput Optimized HDD (st1)** | 125 GiB se 16 TiB | 40 per TiB (500 tak) | 500 | 250 MiB/s per TiB (500 MiB/s tak) | $$ |
+| **Cold HDD (sc1)** | 125 GiB se 16 TiB | 12 per TiB (250 tak) | 250 | 80 MiB/s per TiB (250 MiB/s tak) | $ |
+| **EBS Magnetic HDD (standard)** | 1 GiB se 1 TiB | 40–90 | 40–200 (ausat 100) | Sainkron (Hundreds) | $$$ |
 
 * **Table ko asaan karna & Scenarios:**
 * **gp3 (General Purpose SSD):** Yeh 2026 aur aaj kal ke daur ka default aur sab se popular option hai. Price mein sasta aur speed mein behtareen. OS chalana ho ya medium kaam, yahi use karein. (Aap dekhein iski speed gp2 se behtar aur price sasti hai).
@@ -418,10 +408,9 @@ Chaliye CLI se snapshot banate hain. Pehle apni drive ki ID dhoondhte hain:
 
 ```bash
 $ aws ec2 describe-volumes \
-    --filters "Name=size,Values=5" --query "Volumes [].VolumeId" \
-    --output text
-vol-043a5516bc104d9c6 
-
+  --filters "Name=size,Values=5" --query "Volumes[].VolumeId" \
+  --output text
+vol-043a5516bc104d9c6 # Output $VolumeId ko show karta hai
 ```
 
 * **Line 1 & 2:** AWS ko command di ke woh drives dhoondo (describe-volumes) jinka filter size 5 ho, aur sirf unka `VolumeId` mujhe text shape mein de do.
@@ -430,20 +419,19 @@ vol-043a5516bc104d9c6
 Ab Snapshot (Photo) banate hain:
 
 ```bash
-$ aws ec2 create-snapshot --volume-id vol-043a5516bc104d9c6 
+$ aws ec2 create-snapshot --volume-id $VolumeId # $VolumeId ko apne volume ki ID se replace karein
 {
   "Description": "",
   "Encrypted": false,
   "OwnerId": "163732473262",
   "Progress": "",
-  "SnapshotId": "snap-0babfe807decdb918", 
+  "SnapshotId": "snap-0babfe807decdb918", # Snapshot ki ID note kar lein: $SnapshotId
   "StartTime": "2022-08-25T07:59:50.717000+00:00",
-  "State": "pending", 
+  "State": "pending", # EBS abhi aapka snapshot bana raha hai
   "VolumeId": "vol-043a5516bc104d9c6",
   "VolumeSize": 5,
   "Tags": []
 }
-
 ```
 
 * **Command:** `create-snapshot` kar ke apni drive ki ID de di.
@@ -452,8 +440,23 @@ $ aws ec2 create-snapshot --volume-id vol-043a5516bc104d9c6
 Status check karne ki command:
 
 ```bash
-$ aws ec2 describe-snapshots --snapshot-ids snap-0babfe807decdb918 
-
+$ aws ec2 describe-snapshots --snapshot-ids $SnapshotId # $SnapshotId ko apne snapshot ki ID se replace karein
+{
+  "Snapshots": [
+    {
+      "Description": "",
+      "Encrypted": false,
+      "OwnerId": "163732473262",
+      "Progress": "100%", # Aapke snapshot ki progress
+      "SnapshotId": "snap-0babfe807decdb918",
+      "StartTime": "2022-08-25T07:59:50.717000+00:00",
+      "State": "completed", # Snapshot "completed" state par pahonch chuka hai
+      "VolumeId": "vol-043a5516bc104d9c6",
+      "VolumeSize": 5,
+      "StorageTier": "standard"
+    }
+  ]
+}
 ```
 
 * Iska jo JSON output aayega usme `"State": "completed"` aur `"Progress": "100%"` likha hoga, jiska matlab backup tasali se mukammal ho gaya hai!
@@ -470,8 +473,8 @@ Agar server chal raha hai aur database file mein kuch likh raha hai, theek usi w
 Agar asal drive jal jaye, toh snapshot se wapas ek nayi taaza drive aise banti hai:
 
 ```bash
-$ aws ec2 create-volume --snapshot-id snap-0babfe807decdb918 \ 
-    --availability-zone us-east-1a 
+$ aws ec2 create-volume --snapshot-id $SnapshotId \ # Volume banane ke liye istemal hone wali aapke snapshot ki ID
+  --availability-zone us-east-1a # Data center muntakhib karein
 {
   "AvailabilityZone": "us-east-1a",
   "CreateTime": "2022-08-25T08:08:49+00:00",
@@ -479,13 +482,12 @@ $ aws ec2 create-volume --snapshot-id snap-0babfe807decdb918 \
   "Size": 5,
   "SnapshotId": "snap-0babfe807decdb918",
   "State": "creating",
-  "VolumeId": "vol-0bf4fdf3816f968c5", 
+  "VolumeId": "vol-0bf4fdf3816f968c5", # Aapke snapshot se restore kiye gaye volume ki $RestoreVolumeId
   "Iops": 100,
   "Tags": [],
   "VolumeType": "gp2",
   "MultiAttachEnabled": false
 }
-
 ```
 
 * **Command:** `create-volume` karo lekin is bar `--snapshot-id` de kar. Zone `us-east-1a` set karo taake drive wahi bane.
@@ -501,7 +503,6 @@ Jab saare tajarbaat mukammal ho jayein, toh sab kachra (resources) saaf karna bo
 $ aws ec2 delete-snapshot --snapshot-id snap-0babfe807decdb918
 $ aws ec2 delete-volume --volume-id vol-0bf4fdf3816f968c5
 $ aws cloudformation delete-stack --stack-name ebs
-
 ```
 
 * **Line 1:** `delete-snapshot` command hamari banayi hui picture (backup) ko delete kar degi.
@@ -544,38 +545,15 @@ Writer ne jo image Figure 8.2 di hai, us mein ek bohot hi clear architectural co
 
 AWS ke har EC2 server ke andar yeh free Instance Store wali hard drive nahi hoti. Yeh sirf kuch khaas instance families mein milti hai (jaise jin ke naam mein `d` ya `i` aata hai, jo disk aur I/O ko zahir karte hain).
 
-| Use case | Instance type | Instance store type | Instance store size in GB |
-| --- | --- | --- | --- |
-| **General purpose** | m6id.large<br>
+| Use case (Istamal) | Instance type | Instance store type | Instance store size in GB |
+| :--- | :--- | :--- | :--- |
+| **General purpose** (Aam istemal ke liye) | `m6id.large`<br>`m6id.32xlarge` | SSD | 118<br>7600 |
+| **Compute optimized** (Processing ke liye behtareen) | `c6id.large`<br>`c6id.32xlarge` | SSD | 118<br>7600 |
+| **Memory optimized** (RAM-intensive kaam ke liye) | `r6id.large`<br>`r6id.32xlarge` | SSD | 118<br>7600 |
+| **Storage optimized** (Zyada storage ke liye) | `i4i.large`<br>`i4i.32xlarge` | SSD | 468<br>30000 |
+| **Storage optimized** (Zyada storage ke liye) | `d3.xlarge`<br>`d3.8xlarge` | HDD | 5940<br>47520 |
+| **Storage optimized** (Zyada storage ke liye) | `d3en.xlarge`<br>`d3en.12xlarge` | HDD | 27960<br>335520 |
 
-<br>m6id.32xlarge | SSD | 118<br>
-
-<br>7600 |
-| **Compute optimized** | c6id.large<br>
-
-<br>c6id.32xlarge | SSD | 118<br>
-
-<br>7600 |
-| **Memory optimized** | r6id.large<br>
-
-<br>r6id.32xlarge | SSD | 118<br>
-
-<br>7600 |
-| **Storage optimized** | i4i.large<br>
-
-<br>i4i.32xlarge | SSD | 468<br>
-
-<br>30000 |
-| **Storage optimized** | d3.xlarge<br>
-
-<br>d3.8xlarge | HDD | 5940<br>
-
-<br>47520 |
-| **Storage optimized** | d3en.xlarge<br>
-
-<br>d3en.12xlarge | HDD | 27960<br>
-
-<br>335520 |
 
 **Table ko Asaan Kar ke Samajhna:**
 
@@ -628,7 +606,6 @@ nvme1n1       259:0    0  109.9G  0 disk  # Ye instance store device hai
 nvme0n1       259:1    0      8G  0 disk  # Ye EBS root volume device hai
 ├─nvme0n1p1   259:2    0      8G  0 part /
 └─nvme0n1p128 259:3    0      1M  0 part
-
 ```
 
 **Output ko asaan karte hain:**
@@ -647,7 +624,6 @@ tmpfs          3.9G    0  3.9G   0% /dev/shm
 tmpfs          3.9G 348K  3.9G   1% /run
 tmpfs          3.9G    0  3.9G   0% /sys/fs/cgroup
 /dev/nvme0n1p1 8.0G 1.5G  6.6G  19% / # Ye EBS root volume OS ko contain karta hai
-
 ```
 
 ### Instance Store ko Qabil-e-Istemal Banana (Format aur Mount)
@@ -658,7 +634,6 @@ Ab hum is kachi aur khali Instance Store drive par **Filesystem** banayenge (roa
 $ sudo mkfs -t xfs /dev/nvme1n1 # XFS filesystem create karke format karta hai
 $ sudo mkdir /data # Ek folder banata hai jis par device ko mount kiya jaye
 $ sudo mount /dev/nvme1n1 /data # Device ko mount karta hai
-
 ```
 
 **Detail:**
@@ -674,7 +649,6 @@ $ df -h
 Filesystem     Size Used Avail Use% Mounted on
 [...]
 /dev/nvme1n1   110G 145M  110G   1% /data # 110 GB dastyab hain
-
 ```
 
 * Dekhein! Ab OS bata raha hai ke `/data` folder par 110 GB ki fast drive access ke liye bilkul tayar hai.
@@ -697,7 +671,6 @@ $ sudo dd if=/dev/zero of=/data/tempfile bs=1M count=1024 \
 1024+0 records in
 1024+0 records out
 1073741824 bytes (1.1 GB) copied, 13.3137 s, 80.6 MB/s # Section 8.1.3 ke EBS ke muqablay mein 18% tez
-
 ```
 
 * **Maqsad:** 1 GB ka data is local drive mein likha gaya.
@@ -708,7 +681,6 @@ $ sudo dd if=/dev/zero of=/data/tempfile bs=1M count=1024 \
 ```bash
 $ echo 3 | sudo tee /proc/sys/vm/drop_caches
 3
-
 ```
 
 * **Maqsad:** Read test se pehle OS ki RAM ko clear karna taake asli hard drive ki speed nap sakein.
@@ -720,7 +692,6 @@ $ sudo dd if=/data/tempfile of=/dev/null bs=1M count=1024
 1024+0 records in
 1024+0 records out
 1073741824 bytes (1.1 GB) copied, 5.83715 s, 184 MB/s # Section 8.1.3 ke EBS ke muqablay mein 170% tez
-
 ```
 
 * **Maqsad:** Wahi 1 GB file drive se parhi gayi aur null (khatam) ki gayi.
@@ -744,7 +715,6 @@ Kyunki Instance Store temporary hota hai, iska EBS jaisa apna koi "Snapshot" ka 
 
 ```bash
 $ aws s3 sync /path/to/data s3://$YourCompany-backup/instancestore-backup
-
 ```
 
 * **Command detail:** `aws s3 sync` command folder ko scan karti hai aur naye data ko utha kar S3 bucket (`$YourCompany-backup`) mein copy kar deti hai. Yeh kaam hum Linux cron jobs ke zariye har ghante ya raat ko automatically bhi karwa sakte hain.
