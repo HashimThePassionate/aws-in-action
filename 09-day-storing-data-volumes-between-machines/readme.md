@@ -1,5 +1,29 @@
 # Sharing data volumes between machines: EFS
 
+<details>
+<summary style="cursor: pointer; font-weight: 700; font-size: 1.05em;">Table of Contents ▾</summary>
+
+- [This chapter covers](#this-chapter-covers)
+- [Network Filesystem (EFS) Kya Hai Aur Yeh Kyun Zaroori Hai?](#network-filesystem-efs-kya-hai-aur-yeh-kyun-zaroori-hai)
+- [EBS vs Instance Store vs EFS Figure 9.1 Breakdown)](#ebs-vs-instance-store-vs-efs-figure-91-breakdown)
+- [All examples are covered by the Free Tier](#all-examples-are-covered-by-the-free-tier)
+- [EFS Ke Do Main Components Figure 9.2 Breakdown)](#efs-ke-do-main-components-figure-92-breakdown)
+- [Real-World Example: Shared `/home` Directories in Linux](#real-world-example-shared-home-directories-in-linux)
+- [Creating a filesystem](#creating-a-filesystem)
+- [Pricing](#pricing)
+- [Creating a mount target](#creating-a-mount-target)
+- [Mounting the EFS filesystem on EC2 instances](#mounting-the-efs-filesystem-on-ec2-instances)
+- [Sharing files between EC2 instances](#sharing-files-between-ec2-instances)
+- [Tweaking performance](#tweaking-performance)
+- [Performance mode](#performance-mode)
+- [Throughput mode](#throughput-mode)
+- [Storage class affects performance](#storage-class-affects-performance)
+- [Backing up your data](#backing-up-your-data)
+- [Cleaning up](#cleaning-up)
+- [Summary](#summary)
+
+</details>
+
 ## This chapter covers
 
 Is chapter mein hum detail ke sath yeh baatein sikhenge:
@@ -370,7 +394,7 @@ MountTargetA:
 * **`MountTargetSecurityGroup:`** Yeh mount target ko protect karne wala doosra security group hai.
 * **`SecurityGroupIngress:`** Inbound rules ki list (yani kaun andar aa sakta hai).
 * **`IpProtocol: tcp`**: Traffic TCP protocol istemal karega.
-* **`FromPort: 2049` & `ToPort: 2049**`: Port number 2049 ko allow kar raha hai (jo NFS protocol ki default port hai).
+* **`FromPort: 2049 & ToPort: 2049`**: Port number 2049 ko allow kar raha hai (jo NFS protocol ki default port hai).
 * **`SourceSecurityGroupId: !Ref EFSClientSecurityGroup`**: **Sab se eham line!** Yeh IP address ke bajaye keh raha hai ke *"Sirf wahi servers allow hain jin par `EFSClientSecurityGroup` laga ho."*
 * **`MountTargetA:`** Subnet A ke andar EFS Mount Target banane ka main block.
 * **`Type: 'AWS::EFS::MountTarget'`**: Batata hai ke hum EFS Mount Target bana rahe hain.
@@ -428,7 +452,6 @@ Amazon Linux 2 par is tool ko install karna bohot aasan hai:
 
 ```bash
 $ sudo yum install amazon-efs-utils
-
 ```
 
 #### Manual Mount Command
@@ -437,14 +460,12 @@ Tool install hone ke baad, aap niche di gayi command se EFS ko kisi bhi local fo
 
 ```bash
 $ sudo mount -t efs -o tls,iam $FileSystemID $EFSMountPoint
-
 ```
 
 Real-world example:
 
 ```bash
 $ sudo mount -t efs -o tls,iam fs-123456 /home
-
 ```
 
 * `mount`: Linux ki drive/filesystem jodney wali command.
@@ -465,7 +486,6 @@ Agar aap chahte hain ke jab bhi EC2 instance restart (reboot) ho, toh EFS filesy
 
 ```text
 $FileSystemID:/ $EFSMountPoint efs _netdev,noresvport,tls,iam 0 0
-
 ```
 
 #### Extra Options ki Detail
@@ -718,14 +738,12 @@ Ab AWS Management Console par ja kar **SSM Session Manager** ke zariye dono serv
 
 ```bash
 $ cd $HOME
-
 ```
 
 * **Maqsad:** `$HOME` environment variable hai jo aap ko aap ke apne user ke home folder (jaise `/home/ssm-user`) mein le jata hai.
 
 ```bash
 $ ls
-
 ```
 
 * **Maqsad:** Check karna ke kya abhi home directory mein koi file ya folder pada hai?
@@ -741,7 +759,6 @@ Ab hum yeh jaadu check karenge ke ek server par banai gayi file foran doosre ser
 
 ```bash
 $ touch i-was-here
-
 ```
 
 * **Detail:** `touch` command Linux mein ek khali (empty) file banane ke liye use hoti hai. Yahan hum ne `i-was-here` naam ki ek khali file `EC2InstanceA` par bana di.
@@ -752,7 +769,6 @@ $ touch i-was-here
 $ cd $HOME
 $ ls
 i-was-here
-
 ```
 
 **Kamal Ho Gaya! (Voilà!):**
@@ -1048,19 +1064,9 @@ AWS Backup ke zariye EFS ka snapshot (backup) banane ke liye 3 bunyadi component
 
 Writer ne `image_114be6.png` (Figure 9.4) mein AWS Backup ka poora architecture bohot asaan tarah se dikhaya hai. Aayein isay ek plain-text structural diagram se samajhte hain:
 
-```text
-  [ Backup Plan ] 
-         │
-         │ (Triggers backup every day at 00:00 UTC)
-         │
-         ▼
-[ EFS Filesystem ] 
-         │
-         │ (Persists recovery point)
-         │
-         ▼
- [ Backup Vault ]
-
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
 ```
 
 **Image ki Wazahat (Diagram Breakdown):**
