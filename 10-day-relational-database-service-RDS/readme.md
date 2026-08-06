@@ -1,4 +1,25 @@
-# sing a relational database service: RDS
+# Using a relational database service: RDS
+
+<details>
+<summary><strong>Table of Contents</strong> - quick chapter map</summary>
+
+- [This chapter covers](#this-chapter-covers)
+- [Relational Databases aur AWS ka Ta'aruf](#relational-databases-aur-aws-ka-taaruf)
+- [AWS Par Relational Database Chalane Ke Do Raaste](#aws-par-relational-database-chalane-ke-do-raaste)
+- [Starting a MySQL database](#starting-a-mysql-database)
+- [Launching a WordPress platform with an RDS database](#launching-a-wordpress-platform-with-an-rds-database)
+- [Exploring an RDS database instance with a MySQL engine](#exploring-an-rds-database-instance-with-a-mysql-engine)
+- [Pricing for Amazon RDS](#pricing-for-amazon-rds)
+- [Importing data into a database](#importing-data-into-a-database)
+- [Backing up and restoring your database](#backing-up-and-restoring-your-database)
+- [Controlling access to a database](#controlling-access-to-a-database)
+- [Building on a highly available database](#building-on-a-highly-available-database)
+- [Tweaking database performance](#tweaking-database-performance)
+- [Using read replication to increase read performance](#using-read-replication-to-increase-read-performance)
+- [Monitoring a database](#monitoring-a-database)
+- [Summary](#summary)
+
+</details>
 
 ## This chapter covers
 
@@ -873,11 +894,19 @@ Jab aap kisi automated ya manual snapshot se database ko restore karte hain, toh
 
 `image_4000e2.png` mein dikhaya gaya hai ke jab aap ke paas pehle se ek database chal raha hai (`Running DB instance`), toh aap us ke **andar direct snapshot restore NAHI kar sakte**.
 
+<div align="center">
+  <img src="./images/02.png" width="600"/>
+</div>
+
 > **Bacho Ki Tarah Aasan Misaal:** Farz karein aap ke paas ek mitti ka khiloona hai jo toot gaya hai. Aap us toote hue khiloone ke upar hi naya khiloona nahi dhaal sakte, balki aap ko bilkul naya khiloona shuru se dhalna padta hai.
 
 #### Figure 10.3: Restore Hamesha Naya Instance Banata Hai
 
 `image_4000a7.png` mein yeh process dikhaya gaya hai:
+
+<div align="center">
+  <img src="./images/03.png" width="600"/>
+</div>
 
 1. `Running DB instance` se pehle ek `Snapshot` (backup) banta hai.
 2. Jab aap restore ki command chalate hain, toh AWS us snapshot se ek **`New DB instance` (bilkul naya database server)** khada kar deta hai.
