@@ -1,5 +1,24 @@
 # Caching data in memory: Amazon ElastiCache and MemoryDB
 
+<details open>
+  <summary><strong>📚 Table of Contents</strong></summary>
+
+  - [This chapter covers](#this-chapter-covers)
+  - [ElastiCache clusters](#elasticache-clusters)
+  - [Creating a cache cluster](#creating-a-cache-cluster)
+  - [Minimal CloudFormation template](#minimal-cloudformation-template)
+  - [Cache deployment options](#cache-deployment-options)
+  - [Controlling cache access](#controlling-cache-access)
+  - [Installing the sample application Discourse with CloudFormation](#installing-the-sample-application-discourse-with-cloudformation)
+  - [Monitoring a cache](#monitoring-a-cache)
+  - [Tweaking cache performance](#tweaking-cache-performance)
+  - [Selecting the right cache node type](#selecting-the-right-cache-node-type)
+  - [Selecting the right deployment option](#selecting-the-right-deployment-option)
+  - [Compressing your data](#compressing-your-data)
+  - [Summary](#summary)
+
+</details>
+
 ## This chapter covers
 
 * **Caching Layer ke Fawaid**: Aap ke application aur main data store (database) ke beech mein caching layer lagane ke kya benefits hote hain.
@@ -126,7 +145,6 @@ Agar aap ko query chalani hai:
 
 ```sql
 SELECT id, nickname FROM player ORDER BY score DESC LIMIT 10
-
 ```
 
 Toh aap is SQL query ke text ko (ya uske **MD5 / SHA256 Hash** code ko) Cache ki **Key** bana dete hain (maslan `666...336`), aur query ke result (table) ko uski **Value** bana kar store karte hain.
@@ -158,7 +176,6 @@ Redis mein data ko aur efficient tarike se store karne ke liye Sorted Sets use h
 
 ```sql
 ZREVRANGE "player-scores" 0 9
-
 ```
 
 * **`ZREVRANGE`**: Redis ki built-in command jo Sorted Set ke elements ko highest score se lowest score ki taraf (descending order) read karti hai.
@@ -313,7 +330,7 @@ Resources:
 * **`VpcId: !Ref VPC`**: Is firewall ko aap ke bataye gaye VPC se connect kar deta hai.
 * **`SecurityGroupIngress`**: Bahar se aane wale traffic ke rules define karta hai:
 * **`IpProtocol: tcp`**: Data transfer ke liye standard TCP protocol specify karta hai.
-* **`FromPort: 6379` & `ToPort: 6379**`: Redis server by default **Port 6379** par kaam karta hai aur requests ka wait karta hai.
+* **`FromPort: 6379` & `ToPort: 6379`**: Redis server by default **Port 6379** par kaam karta hai aur requests ka wait karta hai.
 * **`CidrIp: '0.0.0.0/0'`**: Yeh puri dunya (`all IPs`) se aane walay traffic ko allow karta hai. Lekin kyunki ElastiCache ko AWS hamesha **Private IP** deta hai, is liye internet se koi direct connect nahi kar sakta; sirf VPC ke andar ke log hi is port par connect ho sakein ge.
 
 
@@ -467,7 +484,6 @@ Gamer ka session store karne aur highscore list (leaderboard) banane ke liye in 
 
 ```bash
 $ sudo amazon-linux-extras install -y redis6
-
 ```
 
 * **Wazahat**: Yeh command Amazon Linux machine par **Redis 6 CLI tool** (command-line client) install karti hai taake hum terminal se Redis database ke sath baat kar sakein.
@@ -476,7 +492,6 @@ $ sudo amazon-linux-extras install -y redis6
 
 ```bash
 $ redis-cli -h $CacheAddress
-
 ```
 
 * **Wazahat**: `redis-cli` tool ke zariye hum **Port 6379** par banay gaye Redis cluster endpoint (`$CacheAddress`) se connection establish karte hain.
@@ -486,7 +501,6 @@ $ redis-cli -h $CacheAddress
 ```text
 > SET session:gamer1 online EX 15
 OK
-
 ```
 
 * **Wazahat**:
@@ -494,7 +508,7 @@ OK
 * `session:gamer1`: Key ka naam.
 * `online`: Value jo store ki ja rahi hai (player ka current status).
 * `EX 15`: Time-To-Live (TTL) set karta hai **15 seconds** ke liye. Iska matlab hai 15 seconds baad yeh memory se auto-delete ho jayega.
-* **Output `OK**`: Matleb Redis ne data kamyabi se RAM mein save kar liya hai.
+* **`Output OK`**: Matleb Redis ne data kamyabi se RAM mein save kar liya hai.
 
 
 
@@ -503,12 +517,11 @@ OK
 ```text
 > GET session:gamer1
 "online"
-
 ```
 
 * **Wazahat**:
 * `GET`: Key ki value read karne ke liye command.
-* **Output `"online"**`: Kyunki 15 seconds abhi khatam nahi huay, Redis ne RAM se foran jawab de diya (**Cache Hit**).
+* **`Output "online"`**: Kyunki 15 seconds abhi khatam nahi huay, Redis ne RAM se foran jawab de diya (**Cache Hit**).
 
 
 
@@ -517,7 +530,6 @@ OK
 ```text
 > GET session:gamer1
 (nil)
-
 ```
 
 * **Wazahat**:
@@ -531,7 +543,6 @@ OK
 ```text
 > ZADD highscore 100 "gamer1"
 (integer) 1
-
 ```
 
 * **Wazahat**: `ZADD` command **Sorted Set** data structure mein data add karti hai. Hum `highscore` naam ki list mein player `"gamer1"` ko **`100`** score ke sath add kar rahe hain. Response `(integer) 1` batata hai ke 1 naya member add ho gaya hai.
@@ -541,7 +552,6 @@ OK
 ```text
 > ZADD highscore 50 "gamer2"
 (integer) 1
-
 ```
 
 * **Wazahat**: `highscore` set mein `"gamer2"` ko **`50`** score ke sath add kiya gaya.
@@ -551,7 +561,6 @@ OK
 ```text
 > ZADD highscore 150 "gamer3"
 (integer) 1
-
 ```
 
 * **Wazahat**: `highscore` set mein `"gamer3"` ko **`150`** score ke sath add kiya gaya.
@@ -561,7 +570,6 @@ OK
 ```text
 > ZADD highscore 5 "gamer4"
 (integer) 1
-
 ```
 
 * **Wazahat**: `highscore` set mein `"gamer4"` ko **`5`** score ke sath add kiya gaya.
@@ -576,7 +584,6 @@ OK
 4) "100"
 5) "gamer3"
 6) "150"
-
 ```
 
 * **Wazahat**:
@@ -598,7 +605,6 @@ Redis Sorted Sets data ko automatically score ke mutabiq chote se bade (ascendin
 
 ```text
 > quit
-
 ```
 
 * **Wazahat**: Redis CLI terminal session se bahar aane aur exit karne ke liye command.
@@ -619,7 +625,6 @@ Aap CloudFormation Console se bhi stack delete kar sakte hain ya AWS CLI par yeh
 
 ```bash
 $ aws cloudformation delete-stack --stack-name redis-minimal
-
 ```
 
 * **Wazahat**: Yeh command AWS CloudFormation ko instruction deti hai ke `redis-minimal` naam ke stack ke tehat banay gaye tamam resources (EC2 Instance, ElastiCache Redis Cluster, Security Groups, Subnet Groups) ko ek sath mukammal taur par delete kar de.
