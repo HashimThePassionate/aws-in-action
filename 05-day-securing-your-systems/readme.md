@@ -267,6 +267,22 @@ Run Command ko manually chalane ke bajaye automate karne ke liye do mukhtalif ta
 1. **Maintenance Window aur Patch Manager (Time / Schedule ke mutabiq):**
 * Agar aap chahte hain ke routine ke mutabiq har hafte ya mahine ke kisi khas waqt (misal ke tor par Sunday raat 2 baje jab traffic kam ho) patching ho, toh **Patch Manager** aur **Maintenance Window** aik fix schedule par **Run Command** ko trigger kar dete hain.
 
+**Maintenance Window Kya Hai**?
+
+Socho aapka ek bada restaurant hai. Aap din ke waqt jab bohot saare gathak (customers) khana kha rahe hon, tab kitchen ki safai ya bade machines ki repair nahi kar sakte, kyunke is se dhanda kharab ho jayega. Isliye aap ek **waqt (Time Slot)** mukarrar karte hain—jaise raat ke 2 baje se 4 baje tak jab restaurant band hota hai—ke jo bhi repair karni hai isi waqt mein hogi.
+
+* **AWS mein kya hai:** **Maintenance Window** ek aisi timing ya schedule hai jo aap set karte hain. Yeh batati hai ke *"Mere servers par koi bhi heavy kaam (jaise system reboot karna, bade updates lagana, ya scripts chalana) sirf is muqarrar waqt par hona chahiye, jab traffic kam ho."*
+* **Kaam:** Yeh sirf waqt (schedule) ko control karti hai ke kab action lena hai taake live application par koi asar na pade.
+
+Patch Manager Kya Hai? (Khaas Updates Lagane Wala Specialist)
+
+Socho aapke paas computers hain jin mein waqt ke sath-sath naye security bugs ya kamzoriyan aa jati hain, aur unhein theek karne ke liye dawai (yani security updates ya patches) lagani parti hai.
+
+* **AWS mein kya hai:** **Patch Manager** ek specialized tool hai jo sirf aur sirf **operating system ke updates aur security patches** ko manage karne ke liye banaya gaya hai.
+* **Kaam:** Yeh automatically check karta hai ke aapke servers par kaun kaun se software ya security updates missing hain, aur phir unhein download karke install kar deta hai taake aapka system hack na ho sake.
+
+---
+
 2. **State Manager (Event / Pehli Start par):**
 * Agar aap chahte hain ke jaise hi koi naya **EC2 instance pehli dafa start** ho (`Triggers on first start`), us par foran zaroori updates aur configurations apply ho jayein, toh **State Manager** foran Run Command ko trigger kar deta hai.
 
@@ -607,6 +623,42 @@ IAM ke andar char buniyadi components (pors) hote hain jinhein samajhna laazmi h
 * **IAM Group:** Yeh users ka ek majmua (collection) hota hai jinhein hum ek jaisi permissions dena chahte hain.
 * **IAM Role:** Yeh kisi insan ke liye nahi hota, balkay AWS ke apne resources (jaise ek EC2 instance) ko temporary power dene ke liye banta hai.
 * **IAM Identity Policy:** Yeh ek simple document hota hai jisme saaf-saaf likha hota hai ke kis cheez ki ijazat hai aur kis ki nahi.
+
+Policy (Ijazat Nama / Rules ki List)
+
+Image mein upar jo red rang ki files dikh rahi hain jin par tick ($\checkmark$) aur cross ($\times$) ke nishaan hain, unhein **Policy** kehte hain.
+
+* **Image ka Note:** Diagram ke upar saaf likha hai: *"Contains permissions for specific actions and resources"*.
+* **Asaan Misaal:** Socho ye ek **Pass-port ya Ticket** hai jis par likha hota hai ke aap daftar ke kis kamre mein ja sakte hain aur kis kamre mein nahi. Is policy ke andar rules likhe hote hain ke kaun sa banda AWS ke andar kaun si cheez dekh sakta hai, bana sakta hai, ya delete kar sakta hai.
+
+User (Aam Insaan / Developer)
+
+Image mein niche left side par ek insan ka icon hai jise **User** kaha gaya hai.
+
+* **Matlab:** Yeh wo aam developer ya admin hai jo AWS ka account use karta hai.
+* **Kaam:** Har User ke paas apni marzi ki **Policy** ho sakti hai jo batati hai ke ye user AWS mein kya-kya kar sakta hai.
+
+Group (Doston ka ya Team ka Group)
+
+User ke barabar mein ek arrow jata hai jis par likha hai: *"User is a member of a group"*.
+
+* **Asaan Misaal:** Socho ek office mein 10 developers hain. Ab har ek ke liye alag-alag rules likhna mushkil hota hai. Isliye hum ek **Group** bana dete hain (jaise "Developers-Group") aur us group ko ek policy de dete hain. Jab koi naya developer aata hai, hum usko us group mein dal dete hain, aur usko automatically saari ijazatein mil jati hain.
+
+Role aur EC2 Instance (Server ka Apna Kirdar aur Helmet)
+
+Image ke right side par ek **Helmet** ka icon hai jise **Role** kaha gaya hai, aur uske niche ek **EC2 Instance** (Computer Server) hai.
+
+* **Role kya hai?:** Role bhi ek policy ki tarah hi hota hai, lekin ye kisi insaan ko nahi diya jata balke kisi **Machine ya Service** ko diya jata hai.
+* **Image ka Note:** EC2 Instance se ek arrow upar Role ki taraf ja raha hai jis par likha hai: *"Role attached to EC2 Instance"*.
+* **Asaan Misaal:** Socho ek computer server ek security guard hai. Us guard ko ek khas uniform aur helmet (`Role`) pehna diya jata hai taake wo sirf wahi kaam kare jo uske zimme lagaya gaya ho (jaise database se data uthana). Server khud se login nahi karta, balke wo is Role ki taqat se AWS ke andar kaam karta hai.
+
+AWS API (Asal Darwaza / Security Gate)
+
+Diagram ke bilkul upar badal (cloud) ki shakal mein **AWS API** likha hai.
+
+* **Yeh kya hai?:** AWS ke andar aap jo bhi kaam karte hain (chahe server banayen ya delete karen), wo sab is **AWS API** ke zariye hota hai.
+* **Kaam kaise karta hai?:** Jab bhi koi User ya EC2 Instance AWS API ko koi hukum bhejta hai, toh AWS API foran uski **Policy** ko check karta hai. Agar policy mein ijazat ho, toh wo kaam hone deta hai ($\checkmark$), aur agar ijazat na ho, toh foran rok deta hai ($\times$).
+
 
 Let's look at the exact differences in **Table 5.1**:
 
@@ -1055,6 +1107,44 @@ $ aws iam create-login-profile --user-name "myuser" --password '$Password'
 * `create-login-profile` command us user ko **AWS Management Console (website)** par login karne ki permission deti hai.
 * Iske bina user sirf CLI (Terminal) se login kar sakta tha, browser se nahi.
 
+
+### Cloud Formation Code example:
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "CloudFormation template to create an admin group, user, add user to group, and set password"
+
+Resources:
+  # 1 & 2. 'admin' naam ka group banana aur AdministratorAccess policy attach karna
+  AdminGroup:
+    Type: 'AWS::IAM::Group'
+    Properties:
+      GroupName: 'admin'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+  # 3. 'myuser' naam ka naya user paida karna
+  MyUser:
+    Type: 'AWS::IAM::User'
+    Properties:
+      UserName: 'myuser'
+
+  # 4. User ko admin group ka member banana
+  UserGroupAddition:
+    Type: 'AWS::IAM::UserToGroupAddition'
+    Properties:
+      GroupName: !Ref AdminGroup
+      Users:
+        - !Ref MyUser
+
+  # 5. User ke liye console login password set karna
+  MyUserLoginProfile:
+    Type: 'AWS::IAM::LoginProfile'
+    Properties:
+      UserName: !Ref MyUser
+      Password: 'YourStrongPassword123!' # Yahan aap apna strong password likh sakte hain
+      PasswordResetRequired: false
+```
 ---
 
 
@@ -1339,6 +1429,81 @@ Security group ka har ek rule char cheezon par mushtamil hota hai:
 
 Aap chahein toh sab khol sakte hain lekin secure tareeqa yeh hai ke rules ko jitna ho sakay sakht aur mehdood (restrictive) rakhein.
 
+CloudFormation mein jab hum ek AWS Security Group (`AWS::EC2::SecurityGroup`) banate hain, toh uske andar mukhy taur par **6 main properties** aa sakti hain.
+
+### Security Group ki 6 Main Properties
+
+1. **`GroupDescription` (Laazmi / Required)**
+* **Kaam:** Security group ka maqsad ya tafseel likhna ke yeh kis liye banaya gaya hai. AWS mein yeh property dena **bilkul zaroori** hota hai, iske baghair security group nahi banta.
+
+
+2. **`GroupName` (Optional)**
+* **Kaam:** Security group ka apna naam (jaise `MyWebSecurityGroup`). Agar aap ye nahi likhenge, toh AWS khud aik random naam generate kar dega.
+
+
+3. **`VpcId` (Optional)**
+* **Kaam:** Yeh batana ke yeh security group kis VPC (Virtual Private Cloud) ke andar banega. Agar aap nahi likhenge, toh yeh us region ke default VPC mein ban jayega.
+
+
+4. **`SecurityGroupIngress` (Inbound Rules - Andar aane wale traffic ke liye)**
+* **Kaam:** Is property ke zariye aap yeh tay karte hain ke server ke **andar** kaun-kaunsa traffic aa sakta hai (misal ke taur par port 80 HTTP ya port 22 SSH ki ijazat dena).
+
+
+5. **`SecurityGroupEgress` (Outbound Rules - Bahar jane wale traffic ke liye)**
+* **Kaam:** Is property ke zariye aap yeh tay karte hain ke server se **bahar** internet par traffic ja sakta hai ya nahi (aam tor par AWS sab kuch allow rakhta hai).
+
+
+6. **`Tags` (Optional)**
+* **Kaam:** Security group ko pehchanne ke liye naam ya labels dena (jaise `Environment: Production`).
+
+
+
+---
+
+### CloudFormation Example (Jahan ye saari properties use hoti hain)
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Example showing all main properties of a Security Group"
+
+Resources:
+  MySecGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      # 1. GroupDescription (LAZMI HAI)
+      GroupDescription: "Allow HTTP and SSH access to the server"
+      
+      # 2. GroupName
+      GroupName: "Web-Server-Security-Group"
+      
+      # 3. VpcId (Aap apne VPC ki ID yahan de sakte hain)
+      VpcId: "vpc-1234567890abcdef0"
+      
+      # 4. SecurityGroupIngress (Inbound Rules)
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0 # Duniya ka koi bhi banda HTTP par aa sake
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 192.168.1.5/32 # Sirf ek khaas IP se SSH ki ijazat
+          
+      # 5. SecurityGroupEgress (Outbound Rules - Sab kuch allow karne ke liye)
+      SecurityGroupEgress:
+        - IpProtocol: "-1" # -1 ka matlab sabhi protocols aur ports allow hain
+          CidrIp: 0.0.0.0/0
+          
+      # 6. Tags (Labels)
+      Tags:
+        - Key: Name
+          Value: "My-Web-SG"
+        - Key: Environment
+          Value: "Development"
+
+```
+
 Chaliye **Listing 5.1** ke CloudFormation template ko dekhte hain jahan ek khali security group banya gaya hai:
 
 ### Listing 5.1 CloudFormation template: Security group
@@ -1379,6 +1544,86 @@ Yeh CloudFormation template do main cheezon ko define kar raha hai: ek Security 
 * `Tags` mein `Name` key ke sath "AWS in Action: chapter 5 (firewall)" likha hai. Iska faida yeh hai ke jab aap AWS console mein login karenge, to aapko ye instance is naam se dikhayi degi, jisse pehchanne mein aasani hoti hai.
 * `SecurityGroupIds: !Ref SecurityGroup` line kafi ahem hai. Yeh batati hai ke jo Security Group humne upar banaya tha, use is instance ke sath attach (jod) do. Ab yeh instance usi firewall policy ke andar rahegi.
 * `SubnetId: !Ref Subnet` yeh batata hai ke is instance ko kis specific subnet mein launch karna hai. Networking ke lihaz se, instance ka ek network location mein hona zaroori hai, aur yeh parameter usi ki ijazat deta hai.
+
+
+### EC2 Instance ki Main Properties
+
+1. **`ImageId` (Laazmi / Required)**
+* **Kaam:** Yeh batata hai ke server par kaun sa Operating System (OS) install hoga (jaise Amazon Linux 2023, Ubuntu, ya Windows ki AMI ID). Iske baghair server nahi ban sakta.
+
+
+2. **`InstanceType` (Laazmi / Required)**
+* **Kaam:** Yeh server ki taqat, CPU, aur RAM tay karta hai (misal ke taur par `t2.micro`, `t3.medium`, waghera).
+
+
+3. **`SubnetId` (Optional / Recommended)**
+* **Kaam:** Yeh batata hai ke server VPC ke kis **Subnet (kamre/hisse)** ke andar banega.
+
+
+4. **`SecurityGroupIds` (Optional)**
+* **Kaam:** Is server par kaun-kaun sa firewall rule ya Security Group lagna hai, uski ID yahan di jati hai.
+
+
+5. **`KeyName` (Optional)**
+* **Kaam:** Agar aap SSH key ke zariye login karna chahte hain, toh us key ka naam yahan likha jata hai (halanke Systems Manager use karne par iski zaroorat nahi parti).
+
+
+6. **`IamInstanceProfile` (Optional)**
+* **Kaam:** Server ke gale mein kaun sa IAM Role pehnana hai (jaise wohi SSM role jo humne upar parha tha), uska reference yahan diya jata hai.
+
+
+7. **`UserData` (Optional)**
+* **Kaam:** Ek aisi script jo server pehli dafa start hote hi khud-ba-khud run ho jati hai (misal ke taur par software install karne ke liye).
+
+
+8. **`Tags` (Optional)**
+* **Kaam:** Server ko pehchanne ke liye naam ya label dena (jaise `Name: MyProductionServer`).
+
+
+
+---
+
+### CloudFormation Example (Jahan ye properties use hoti hain)
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Example showing main properties of an EC2 Instance"
+
+Resources:
+  MyEC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      # 1. ImageId (AMI ID - OS ka pata)
+      ImageId: 'ami-0c55b159cbfafe1f0'
+      
+      # 2. InstanceType (Server ki size/taqat)
+      InstanceType: 't2.micro'
+      
+      # 3. SubnetId (Kis subnet mein rakhna hai)
+      SubnetId: 'subnet-12345678'
+      
+      # 4. SecurityGroupIds (Firewall rules)
+      SecurityGroupIds:
+        - sg-87654321
+        
+      # 5. KeyName (SSH Key)
+      KeyName: 'my-ssh-key-pair'
+      
+      # 6. IamInstanceProfile (Server ka Role)
+      IamInstanceProfile: 'MyServerRole'
+      
+      # 7. UserData (Pehli dafa chalne wali script)
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          echo "Hello World from CloudFormation!" > /home/ec2-user/greeting.txt
+          
+      # 8. Tags (Labels)
+      Tags:
+        - Key: Name
+          Value: 'App-Server-1'
+
+```
 
 ---
 
