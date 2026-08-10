@@ -2,6 +2,23 @@
 
 Is chapter mein hum Amazon Web Services (AWS) ki sab se mashhoor NoSQL database service **DynamoDB** ke baare mein seekhenge. Pehle hum samajhte hain ke is chapter mein hum kya kya cover karne waale hain:
 
+<details open>
+  <summary><strong>📚 Table of Contents</strong></summary>
+
+  <div style="margin-top: 10px; padding: 12px 14px; border: 1px solid #d0d7de; border-radius: 8px; background: #f6f8fa;">
+    <ul>
+      <li><a href="#this-chapter-covers">This chapter covers</a></li>
+      <li><a href="#database-ko-scale-karne-ki-zarurat-kyun-parti-hai">Database Ko Scale Karne Ki Zarurat Kyun Parti Hai?</a></li>
+      <li><a href="#traditional-relational-database-ko-horizontally-scale-karna-kyun-mushkil-hai">Traditional Relational Database Ko Horizontally Scale Karna Kyun Mushkil Hai?</a></li>
+      <li><a href="#nosql-aur-dynamodb-ka-wajood">NoSQL Aur DynamoDB Ka wajood</a></li>
+      <li><a href="#aws-dynamodb-kya-hai">AWS DynamoDB Kya Hai?</a></li>
+      <li><a href="#dynamodb-ke-real-world-use-cases-kahan-istemal-hota-hai">DynamoDB Ke Real-World Use Cases (Kahan Istemal Hota Hai?)</a></li>
+      <li><a href="#hands-on-project-nodetodo-application">Hands-On Project: nodetodo Application</a></li>
+      <li><a href="#programming-a-to-do-application">Programming a to-do application</a></li>
+    </ul>
+  </div>
+</details>
+
 ## This chapter covers
 
 * **Advantages and disadvantages of the NoSQL service, DynamoDB:** DynamoDB istemal karne ke kya fayde hain aur kya nuksanat hain.
@@ -128,7 +145,6 @@ Aap diye gaye **Figure 12.2** ki terminal screenshot ko dekhein. Is mein step-by
 # Step 1: Naya User add karna
 mwittig:chapter13 michael$ node index.js user-add michael michael@widdix.de +4971537507824
 user added with uid michael
-
 ```
 
 * **Explanation:** Command line se `user-add` run karke user `michael`, uska email `michael@widdix.de`, aur phone number add kiya gaya hai. System ne isay unique ID (`uid michael`) assign kar di.
@@ -322,7 +338,6 @@ aws dynamodb create-table --table-name todo-user \
   --attribute-definitions AttributeName=uid,AttributeType=S \
   --key-schema AttributeName=uid,KeyType=HASH \
   --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
-
 ```
 
 Table banne mein kuch seconds ka time lagta hai. Jab tak status **ACTIVE** na ho jaye, hum table par kaam nahi kar sakte. Status check karne ki command neechay di gayi hai:
@@ -333,7 +348,6 @@ Table banne mein kuch seconds ka time lagta hai. Jab tak status **ACTIVE** na ho
 
 ```bash
 $ aws dynamodb describe-table --table-name todo-user
-
 ```
 
 **Output JSON Breakdown:**
@@ -367,7 +381,6 @@ $ aws dynamodb describe-table --table-name todo-user
     "TableId": "0697ea25-5901-421c-af29-8288a024392a"
   }
 }
-
 ```
 
 * **`AttributeDefinitions`:** Yeh batata hai ke table ki key ke taur par `uid` ek String (`S`) set hai.
@@ -391,7 +404,6 @@ Users ki table banane ke baad, ab humein **Tasks** ko store karne ke liye ek tab
   "tid": 1645609847712,        // Task ID (Time in milliseconds)
   "description": "prepare lunch" // Task kya hai
 }
-
 ```
 
 ### Partition Key + Sort Key (Composite Primary Key) Kyun Chuni?
@@ -422,7 +434,6 @@ Is ko is data set example se samjhein:
 ["emma", 1] => { "uid": "emma", "tid": 1, "description": "prepare lunch" }
 ["emma", 2] => { "uid": "emma", "tid": 2, "description": "buy nice flowers for mum" }
 ["emma", 3] => { "uid": "emma", "tid": 3, "description": "prepare talk for conference" }
-
 ```
 
 * `"john"` ke bucket/partition mein Task 1 aur 2 ek line se sorted hain.
@@ -438,7 +449,6 @@ aws dynamodb create-table --table-name todo-task \
   --attribute-definitions AttributeName=uid,AttributeType=S AttributeName=tid,AttributeType=N \
   --key-schema AttributeName=uid,KeyType=HASH AttributeName=tid,KeyType=RANGE \
   --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
-
 ```
 
 #### Command Ka Breakdown:
@@ -470,7 +480,6 @@ Ek aasan misal se samajhte hain: Normally, JavaScript sirf web browser (jaise Ch
 
 ```bash
 node --version
-
 ```
 
 Aap ke terminal par output kuch is tarah dikhai dega: `v14.*` (ya 2026 mein modern Node.js versions jaise `v20.*` / `v22.*`). Is ka matlab hai ke Node.js sahi tarike se install ho chuka hai aur aap `nodetodo` app chalane ke liye tayar hain.
@@ -488,7 +497,6 @@ Aap apne terminal mein `/chapter12/` directory mein jayein aur yeh command chala
 
 ```bash
 npm install
-
 ```
 
 **`npm install` kya karta hai?**
@@ -515,7 +523,6 @@ const input = docopt.docopt(cli, {
   version: '1.0',
   argv: process.argv.splice(2)
 }); // Arguments ko parse karta hai, aur unhein aik input variable mein save karta hai
-
 ```
 
 #### Code Breakdown:
@@ -570,7 +577,6 @@ db.putItem(params, (err) => { // DynamoDB par putItem operation invoke karta hai
     console.log('success');
   }
 });
-
 ```
 
 #### Code Breakdown:
@@ -627,7 +633,6 @@ if (input['user-add'] === true) {
     }
   });
 }
-
 ```
 
 #### Code Breakdown:
@@ -662,7 +667,6 @@ Ab apne terminal par yeh do commands chala kar do users create karein:
 ```bash
 node index.js user-add john john@widdix.de +11111111
 node index.js user-add emma emma@widdix.de +22222222
-
 ```
 
 ---
@@ -701,7 +705,6 @@ if (input['task-add'] === true) {
     }
   });
 }
-
 ```
 
 #### Code Breakdown:
@@ -744,7 +747,6 @@ Ab terminal par yeh commands chala kar Emma aur John ke tasks add karein:
 
 ```bash
 node index.js task-add emma "buy milk" "shopping"
-
 ```
 
 *Is command se Emma ke liye "shopping" category mein "buy milk" ka task add hoga.*
@@ -753,7 +755,6 @@ node index.js task-add emma "buy milk" "shopping"
 
 ```bash
 node index.js task-add emma "put out the garbage" "housekeeping" --dueat "20220224"
-
 ```
 
 *Is command se "housekeeping" category wala task `--dueat` parameter ke sath add ho jayega.*
@@ -821,7 +822,6 @@ db.getItem(params, (err, data) => { // DynamoDB par getItem operation ko invoke 
     }
   }
 });
-
 ```
 
 #### Code Breakdown:
@@ -889,7 +889,6 @@ if (input['user'] === true) {
     }
   });
 }
-
 ```
 
 #### Code Breakdown:
@@ -954,7 +953,6 @@ db.query(params, (err, data) => { // DynamoDB par query operation ko invoke kart
     console.log('items', data.Items);
   }
 });
-
 ```
 
 #### Code Breakdown:
@@ -998,7 +996,6 @@ const mapTaskItem = (item) => { // DynamoDB result ko transform karne ke liye he
     completed: getValue(item.completed, 'N')
   };
 };
-
 ```
 
 #### Code Breakdown:
@@ -1070,7 +1067,6 @@ if (input['task-ls'] === true) {
     }
   });
 }
-
 ```
 
 #### Code Breakdown:
@@ -1107,7 +1103,6 @@ Emma ke shopping wale tasks list karne ke liye:
 
 ```bash
 node index.js task-ls emma shopping
-
 ```
 
 ---
@@ -1165,7 +1160,6 @@ Diye gaye **Figure 12.4** ko dekhein:
 │   home   │  2  │ ..., andreas         │
 │   work   │  4  │ ..., michael         │
 └──────────┴─────┴──────────────────────┘
-
 ```
 
 <div align="center">
@@ -1219,7 +1213,6 @@ aws dynamodb update-table --table-name todo-task \
   "Projection": {"ProjectionType": "ALL"},
   "ProvisionedThroughput": {"ReadCapacityUnits": 5, "WriteCapacityUnits": 5}
   }}]'
-
 ```
 
 #### Command Breakdown:
@@ -1235,7 +1228,6 @@ Index banne mein taqriban **5 minutes** lagte hain. Status check karne ke liye y
 
 ```bash
 aws dynamodb describe-table --table-name=todo-task --query "Table.GlobalSecondaryIndexes"
-
 ```
 
 ---
@@ -1277,7 +1269,6 @@ if (input['task-la'] === true) {
     }
   });
 }
-
 ```
 
 #### Code Breakdown:
@@ -1327,7 +1318,6 @@ db.scan(params, (err, data) => { // DynamoDB par scan operation ko invoke karta 
     }
   }
 });
-
 ```
 
 #### Code Breakdown:
@@ -1363,7 +1353,6 @@ if (input['user-ls'] === true) {
     }
   });
 }
-
 ```
 
 #### Code Breakdown:
@@ -1406,7 +1395,6 @@ Machine 1  │ [Item v1] ───► [Item v2] ───────┤
            └─────────────────────────────────┴──────────────────────────────────────►
  Time ────►  Write item     Update item     Read item                   Read item
              (Version 1)    (Version 2)    (Returns Version 1!)        (Returns Version 2)
-
 ```
 
 <div align="center">
@@ -1477,7 +1465,6 @@ if (input['user-rm'] === true) {
     }
   });
 }
-
 ```
 
 #### Code Breakdown:
@@ -1511,7 +1498,6 @@ John ko `todo-user` table se delete karne ke liye terminal par yeh command run k
 
 ```bash
 node index.js user-rm john
-
 ```
 
 ---
@@ -1541,7 +1527,6 @@ if (input['task-rm'] === true) {
     }
   });
 }
-
 ```
 
 #### Code Breakdown:
@@ -1625,7 +1610,6 @@ if (input['task-done'] === true) {
     }
   });
 }
-
 ```
 
 #### Code Breakdown:
@@ -1661,7 +1645,6 @@ Emma ke "buy milk" wale task ko complete mark karne ke liye terminal par yeh com
 
 ```bash
 node index.js task-done emma 1643037541999
-
 ```
 
 > **Note:** Task ID (`tid`) har user ke liye different hogi. Aap apni exact Task ID maloom karne ke liye pehle `node index.js task-ls emma` run karke ID dekh sakte hain.
@@ -1768,7 +1751,6 @@ PartiQL ke zariye aap kisi Global Secondary Index (GSI) ko bhi direct query kar 
 ```bash
 aws dynamodb execute-statement --statement \
   "SELECT * FROM \"todo-task\".\"category-index\" WHERE category = 'shopping'"
-
 ```
 
 #### Code Breakdown:
@@ -1787,7 +1769,6 @@ PartiQL sirf data parhne ke liye nahi, balki data badalney ya delete karne ke li
 ```bash
 aws dynamodb execute-statement --statement \
   "UPDATE \"todo-user\" SET phone='+33333333' WHERE uid='emma'"
-
 ```
 
 #### Code Breakdown:
@@ -1947,7 +1928,6 @@ $0.00065 (cost/write/sec) * 100 writes * 24 hours * 30 days = $46.80
 $0.00013 (cost/read/sec) * 500 (unit pairs) * 24 hours * 30 days = $46.80
 
 Total Provisioned Monthly Cost = $46.80 + $46.80 = $93.60
-
 ```
 
 #### 2. On-Demand Capacity Mode Ka Monthly Bill:
@@ -1970,7 +1950,6 @@ $0.00000125 per write * 612,000 * 30 days = $22.95
 $0.00000025 per read * 6,120,000 * 30 days = $45.90
 
 Total On-Demand Monthly Cost = $22.95 + $45.90 = $68.85
-
 ```
 
 > **Result:** Is realistic scenario mein On-Demand mode Provisioned mode ke muqable **$24.75 per month sasta** parta hai!
@@ -2002,7 +1981,6 @@ $ aws dynamodb get-item --table-name todo-user \
   --key '{"uid": {"S": "emma"}}' \
   --return-consumed-capacity TOTAL \
   --query "ConsumedCapacity"
-
 ```
 
 **Output:**
@@ -2012,7 +1990,6 @@ $ aws dynamodb get-item --table-name todo-user \
     "CapacityUnits": 0.5,
     "TableName": "todo-user"
 }
-
 ```
 
 * **Explanation:** `--return-consumed-capacity TOTAL` flag DynamoDB ko batata hai ke is request mein kitni capacity zaya hui wo report karo. Normal default read (Eventually Consistent) ke liye sirf **0.5 Read Capacity Unit (RCU)** kharch hui.
@@ -2024,7 +2001,6 @@ $ aws dynamodb get-item --table-name todo-user \
   --key '{"uid": {"S": "emma"}}' \
   --consistent-read --return-consumed-capacity TOTAL \
   --query "ConsumedCapacity"
-
 ```
 
 **Output:**
@@ -2034,7 +2010,6 @@ $ aws dynamodb get-item --table-name todo-user \
     "CapacityUnits": 1.0,
     "TableName": "todo-user"
 }
-
 ```
 
 * **Explanation:** Jab hum ne `--consistent-read` ka flag lagaya, toh DynamoDB ne **1.0 Read Capacity Unit (RCU)** kharch ki. Yani Strongly Consistent read double capacity consume karta hai.
@@ -2108,7 +2083,6 @@ DynamoDB aap ke Virtual Private Cloud (VPC) ke andar nahi chalta! Yeh AWS ki ek 
 
 ```text
 [ Private Subnet App Server ] ───(Direct AWS Internal Route)───► [ VPC Gateway Endpoint ] ───► [ DynamoDB API ]
-
 ```
 
 Aap apne VPC mein DynamoDB ke liye **VPC Gateway Endpoint** set up karein. Is se aap ke private subnets bina internet ya NAT Gateway ke direct aur secure tarike se AWS ke internal network par DynamoDB se communicate kar sakte hain (bina kisi extra data transfer cost ke).
@@ -2170,7 +2144,6 @@ Is chapter ke practical exercises khatam karne ke baad bill se bachne ke liye do
 ```bash
 aws dynamodb delete-table --table-name todo-task
 aws dynamodb delete-table --table-name todo-user
-
 ```
 
 ---
