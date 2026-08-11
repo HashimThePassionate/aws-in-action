@@ -647,7 +647,15 @@ Is section mein hum pichle Jenkins setup ko behtar banayein ge taake woh poore A
 
 ## Availability zones: Groups of isolated data centers
 
-AWS ke duniya bhar mein mukhtalif muqamaat par **Regions** bane hue hain. Misaal ke taur par US East (N. Virginia) region, jisay `us-east-1` kaha jata hai. Poori duniya mein AWS ke 23 se zyada public regions maujood hain.
+AWS ke duniya bhar mein mukhtalif muqamaat par **Regions** bane hue hain. Misaal ke taur par US East (N. Virginia) region, jisay `us-east-1` kaha jata hai. Poori duniya mein AWS ke 33 se zyada public regions maujood hain.
+
+2026 tak ki current information ke mutabiq, poori dunya mein AWS ke total **33 active geographic Regions** maujood hain, jin ke andar **105 se zayada Availability Zones (AZs)** kaam kar rahe hain.
+
+AWS apni global footprint ko musalsal barha raha hai, aur iske ilawa mazeed naye regions (jaise Saudi Arabia, New Zealand, Taiwan, aur Mexico waghera) pipeline mein hain ya jald launch hone wale hain.
+
+* **Total Active Regions:** 33
+* **Total Availability Zones:** 105+
+* **Buniyadi Maqsad:** Dunya bhar ke users ko unke qareeb tareen ilaqay mein low latency, high security, aur data compliance ki sahulat dena.
 
 Har Region ke andar **multiple Availability Zones (AZs)** hote hain.
 
@@ -667,7 +675,7 @@ Har Region ke andar **multiple Availability Zones (AZs)** hote hain.
 
 ### Figure 13.3 Analysis
 
-Referencing **Figure 13.3** (`image_c1fcf6.png`):
+Referencing **Figure 13.3**:
 
 <div align="center">
   <img src="./images/03.png" width="600"/>
@@ -675,9 +683,19 @@ Referencing **Figure 13.3** (`image_c1fcf6.png`):
 
 **Figure 13.3** mein AWS Region aur Availability Zones ka mazaajah (structure) dikhaya gaya hai:
 
-* Bahar wala bara box **Region `us-east-1**` ko zahir karta hai.
-* Is Region ke andar 4 alag alag boxes **Availability Zones** (`us-east-1a`, `us-east-1b`, `us-east-1c`, `us-east-1e`) ko darshate hain.
-* Center mein bane arrows batate hain ke yeh tamam AZs aapas mein high-speed **low-latency links** ke zariye jure hue hain.
+#### 1. Region (Bada Dabba / Geographic Area)
+* **`Region us-east-1`**: Tasveer ka sabse baahir wala bada laal dabba ek **Region** ko zahir karta hai (misal ke taur par `us-east-1` jo North Virginia mein hai).
+* **Buniyadi Usool:** Tasveer ke upar likha hai: *"A region consists of at least three availability zones"*—yani aik region ke andar kam az kam teen ya is se zyada Availability Zones (AZs) lazmi maujood hote hain.
+#### 2. Availability Zones (AZs - Alag-Alag Data Centers)
+Is region ke andar alag-alag chaar chote dabbe (Availability Zones) banaye gaye hain:
+* **`Availability zone A (us-east-1a)`**
+* **`Availability zone B (us-east-1b)`**
+* **`Availability zone C (us-east-1c)`**
+* **`Availability zone E (us-east-1e)`**
+* **Isolation ka Usool:** Top-left dabbe mein saaf likha hai: *"An availability zone is an isolated location within a region"*—iska matlab yeh hai ke har Availability Zone asal mein ek mukammal physical data center hota hai. Inki bijli, cooling, aur hardware ek doosre se bilkul alag (isolated) hote hain, taake agar ek data center mein koi kharabi aaye (jaise bijli ka masla ya aag lagna), toh baqi data centers par koi asar na pade aur aapki app chalti rahe.
+#### 3. Darmiyani Teer (Interconnections & Low-Latency Links)
+* **Aapas ka rapta:** Darmiyan mein jo cross arrows (teer) bane hue hain, woh yeh dikhate hain ke yeh sabhi Availability Zones aapas mein aik doosre ke sath jure hue hain.
+* **Low-Latency Links:** Tasveer ke bottom-right mein likha hai: *"Availability zones are connected through low-latency links"*—yani yeh sabhi data centers bohat hi high-speed aur low-latency network cables ke zariye aapas mein connected hote hain, jis ki wajah se ek AZ se doosre AZ mein data milliseconds ke andar transfer ho jata hai.
 
 ---
 
@@ -724,7 +742,7 @@ Auto Scaling ko chalane ke liye 2 cheezein configure karni padti hain:
 
 ### Figure 13.4 Analysis
 
-Referencing **Figure 13.4** (`image_c1fc7a.png`):
+Referencing **Figure 13.4**:
 
 <div align="center">
   <img src="./images/04.png" width="600"/>
@@ -732,8 +750,18 @@ Referencing **Figure 13.4** (`image_c1fc7a.png`):
 
 **Figure 13.4** batata hai ke Auto Scaling kaise kaam karta hai:
 
-1. **Monitoring:** Auto Scaling Group chalte hue EC2 instances ki sehat (health check) ko continuously dekhta rehta hai.
-2. **Auto Replacement:** Agar koi instance fail ho jaye ya kam ho jaye, toh Auto Scaling Group **Launch Template** ke blueprint ko istemal kar ke naya EC2 instance automatically launch kar deta hai.
+#### 1. Auto Scaling Group (ASG) - Manager Box
+Tasveer ke left side par **Autoscaling group** hai, jo servers ki poori team ka manager hai aur yeh 3 main kaam karta hai:
+* **Minimum, Maximum, aur Desired VMs:** Yeh fix karta hai ke system mein kam az kam (minimum), zyada se zyada (maximum), aur normal halat mein kitne virtual machines (EC2 instances) chalne chahiye.
+* **Health Check:** Yeh lagataar servers ki sehat check karta rehta hai (**Step 1**).
+* **Subnets Distribution:** EC2 instances ko alag-alag subnets mein barabar taqseem karta hai taake agar ek jagah masla aaye toh doosra data center chalta rahe.
+#### 2. Launch Template - Blueprint / Naqsha
+Tasveer ke right side par **Launch template** hai, jo ek blueprint (naqshe) ka kaam karta hai. Jab bhi naya server banana ho, yeh template batata hai ke
+* **Image (AMI):** Naya virtual machine kis operating system ya software image se shuru hoga.
+* **Size:** Virtual machine ka size kya hoga (jaise CPU aur RAM ki taqat kitni hogi).
+#### 3. Kaam Karne Ka Tareeqa (Workflow)
+* **Step 1 (Monitoring):** Auto scaling group background mein chal rahe **EC2 instances** ki health check ko lagataar monitor karta rehta hai.
+* **Step 2 (Auto Recovery/Scaling):** Jaisa ke tasveer mein likha hai: *"If there are not enough healthy virtual machines, new ones are launched based on the launch template"*. Iska matlab hai ke agar koi server kharab ho jaye ya demand barh jaye aur healthy machines kam ho jayein, toh ASG foran **Launch template** ki madad se naye instances automatically launch kar deta hai.
 
 ---
 
@@ -749,6 +777,174 @@ Referencing **Figure 13.4** (`image_c1fc7a.png`):
 | **AutoScalingGroup** | `MaxSize` | DesiredCapacity ke liye maximum value. | Koi bhi positive integer (jo MinSize value se bara ya barabar ho); agar aap launch template ki buniyad par aik single virtual machine shuru karna chahte hain toh 1 istemal karein. |
 | **AutoScalingGroup** | `VPCZoneIdentifier` | Woh subnet IDs jin mein aap virtual machines shuru karna chahte hain. | Aap ke account ke kisi VPC ki koi bhi subnet ID. Subnets ka aik hi VPC se talluq hona lazmi hai. |
 | **AutoScalingGroup** | `HealthCheckType` | Nakam virtual machines ki shanakht ke liye istemal hone wala health check. Agar health check fail ho jaye, toh Auto Scaling group virtual machine ko nayi se replace kar deta hai. | Virtual machine ke status checks istemal karne ke liye `EC2`, ya load balancer ka health check istemal karne ke liye `ELB` (chapter 16 dekhein). |
+
+---
+
+### AutoScalling Group Properties
+
+1. **`AutoScalingGroupName`** *(Optional)*
+* Auto Scaling Group ka apna makhsoos naam. Agar aap yeh nahi dete, toh AWS khud ek unique naam generate kar deta hai.
+
+
+2. **`MinSize`** *(Required)*
+* Group ke andar **kam se kam** kitne instances har waqt chalne chahiye (misal ke tor par `1` ya `2`).
+
+
+3. **`MaxSize`** *(Required)*
+* Group ke andar **ziyada se ziyada** kitne instances ja sakte hain (misal ke tor par `5` ya `10`).
+
+
+4. **`DesiredCapacity`** *(Optional)*
+* Normal halat mein group ke andar kitne instances active hone chahiye (yeh Min aur Max ke darmiyan ki value hoti hai).
+
+
+5. **`VPCZoneIdentifier`** *(Optional)*
+* Subnet IDs ki list jahan Auto Scaling group ne apne EC2 instances launch karne hain (misal ke tor par public ya private subnets).
+
+
+6. **`LaunchTemplate`** *(Optional)*
+* Instance ka blueprint (jaise AMI, Instance Type, Security Groups) define karne ke liye Launch Template ka reference dena.
+
+
+7. **`LaunchConfigurationName`** *(Optional)*
+* Purana tareeqa tha launch configuration ka (aaj kal `LaunchTemplate` zyadatar use hota hai).
+
+
+8. **`HealthCheckType`** *(Optional)*
+* Server ki health check kaise hogi—`EC2` (aam server status) ya `ELB` (Load Balancer ke zariye). Default `EC2` hota hai.
+
+
+9. **`HealthCheckGracePeriod`** *(Optional)*
+* Jab naya instance launch hota hai, toh uske start hone aur health check shuru hone ke darmiyan kitne seconds ka delay dena hai (misal ke tor par `300` seconds).
+
+
+10. **`Cooldown`** *(Optional)*
+* Ek scaling action (instance barhane ya ghatane) ke baad doosri action se pehle kitne seconds ka cooldown (intezar) period hoga.
+
+
+11. **`AvailabilityZones`** *(Optional)*
+* Agar aap VPC use nahi kar rahe toh classic EC2 ke liye zones ki list. (VPC ke case mein `VPCZoneIdentifier` use hota hai).
+
+
+12. **`TerminationPolicies`** *(Optional)*
+* Jab scale-in karna ho (instances kam karne hon), toh group mein se kaun sa instance pehle delete hoga (jaise `OldestInstance`, `NewestInstance`, ya `Default`).
+
+
+13. **`Tags`** *(Optional)*
+* ASG aur uske zariye banne wale instances par labels lagane ke liye.
+
+
+14. **`MetricsCollection`** *(Optional)*
+* CloudWatch par ASG ki detailed metrics collect karne ki setting.
+
+
+15. **`NotificationConfigurations`** *(Optional)*
+* Auto Scaling ke events (jaise instance launch ya terminate hona) par SNS topic ke zariye alerts bhejne ke liye.
+
+
+16. **`ServiceLinkedRoleARN`** *(Optional)*
+* AWS ki background services ke liye IAM role ka ARN jo ASG operate karne ke liye use hota hai.
+
+
+17. **`MaxInstanceLifetime`** *(Optional)*
+* Ek instance ziyada se ziyada kitne seconds tak zinda reh sakta hai isse pehle ke woh automatically replace ho jaye (seconds mein).
+
+
+18. **`CapacityRebalance`** *(Optional)*
+* Spot instances ke case mein rebalancing enable karne ke liye (`true` / `false`).
+
+#### Sub-Properties (Nested Properties)
+
+Main properties ke andar jo mazeed sub-properties hoti hain, unki tafseel yeh hai:
+
+##### 1. `LaunchTemplate` ke andar ki properties:
+
+Agar aap group ke andar launch template specify kar rahe hain, toh uske andar yeh hota hai:
+
+* **`LaunchTemplateId`** ya **`LaunchTemplateName`**: Template ki unique ID ya naam.
+* **`Version`**: Template ka kaun sa version use karna hai (misal ke tor par `$Latest` ya `$Default`).
+
+##### 2. `Tags` ke andar ki properties (Propagated Tags):
+
+ASG ke andar jo tags diye jate hain, unki yeh nested structure hoti hai:
+
+* **`Key`** *(Required)*: Tag ka naam (jaise `Name`).
+* **`Value`** *(Required)*: Tag ki value (jaise `Web-Server`).
+* **`PropagateAtLaunch`** *(Required)*: Kya yeh tag ASG ke zariye banne wale **naye EC2 instances par bhi apply hoga** ya nahi (`true` ya `false`).
+
+##### 3. `MetricsCollection` ke andar ki properties:
+
+* **`Granularity`** *(Required)*: Metrics collect karne ki speed (standard value `1Minute` hoti hai).
+* **`Metrics`** *(Optional)*: Specific metrics ki list jo aap collect karna chahte hain (jaise `GroupMinSize`, `GroupMaxSize`, `GroupInServiceInstances`).
+
+#### 4. `NotificationConfigurations` ke andar ki properties:
+
+* **`TopicARN`** *(Required)*: SNS topic ka address jahan notification jayegi.
+* **`NotificationTypes`** *(Required)*: Events ki list ke kis waqt alert bhejna hai (misal ke tor par: `autoscaling:EC2_INSTANCE_LAUNCH`, `autoscaling:EC2_INSTANCE_TERMINATE`, `autoscaling:EC2_INSTANCE_LAUNCH_ERROR`).
+
+---
+
+### LaunchTemplate Properties
+
+1. **`LaunchTemplateName`** *(Optional)*
+* Launch Template ka makhsoos naam. Agar aap yeh nahi dete, toh AWS khud-b-khud ek unique naam generate kar deta hai.
+2. **`LaunchTemplateData`** *(Required)*
+* Yeh sab se main property hai jiske andar EC2 instance ki asli configuration (jaise image, size, storage, network) define ki jati hai.
+3. **`TagSpecifications`** *(Optional)*
+* Launch template khud par tags lagane ke liye.
+
+#### `LaunchTemplateData` ki Main & Sub-Properties
+
+Jab aap `LaunchTemplateData` define karte hain, toh uske andar yeh sari properties aati hain:
+
+##### 1. Basic Instance Settings
+* **`ImageId`** *(Optional)*: AMI ID (misal ke tor par Ubuntu ya Amazon Linux ki ID).
+* **`InstanceType`** *(Optional)*: Server ka size (jaise `t3.micro`, `t2.micro`).
+* **`KeyName`** *(Optional)*: SSH key ka naam jo login ke liye use hogi.
+* **`KernelId`** *(Optional)*: Custom kernel ID agar zaroorat ho.
+* **`RamdiskId`** *(Optional)*: RAM disk ID.
+
+##### 2. Network & Security Settings
+* **`SecurityGroupIds`** *(Optional)*: Security groups ki IDs ki list (jaise `sg-01234567`).
+* **`SecurityGroups`** *(Optional)*: Security groups ke naam (Classic EC2 ke liye, VPC mein IDs use hoti hain).
+* **`NetworkInterfaces`** *(Optional - Nested)*: Advanced network settings ke liye list. Iske andar yeh sub-properties hoti hain:
+* `DeviceIndex`, `SubnetId`, `Groups`, `AssociatePublicIpAddress`, `DeleteOnTermination`, `PrivateIpAddress`, `PrivateIpAddresses`, `SecondaryPrivateIpAddressCount`.
+
+##### 3. Storage / Hard Disk (`BlockDeviceMappings`)
+* **`BlockDeviceMappings`** *(Optional - Nested)*: Hard disks define karne ke liye. Iske andar yeh hota hai:
+* `DeviceName` (jaise `/dev/xvda`).
+* `Ebs` (Sub-object): `VolumeSize`, `VolumeType` (gp2/gp3), `DeleteOnTermination`, `Encrypted`, `Iops`, `Throughput`, `SnapshotId`.
+* `NoDevice` / `VirtualName`.
+
+##### 4. IAM & Bootstrapping
+* **`IamInstanceProfile`** *(Optional - Nested)*: Instance ko IAM role assign karne ke liye. Iske andar `Arn` ya `Name` diya jata hai.
+* **`UserData`** *(Optional)*: Server boot hote waqt chalne wali script (Base64 encoded ya `Fn::Sub` format mein).
+
+##### 5. Advanced CPU & Performance Settings
+* **`CpuOptions`** *(Optional - Nested)*: CPU cores aur threads control karne ke liye (`CoreCount`, `ThreadsPerCore`).
+* **`CreditSpecification`** *(Optional - Nested)*: T-series instances ke liye CPU credits mode (`CpuCredits`: `standard` ya `unlimited`).
+* **`EbsOptimized`** *(Optional)*: EBS storage ke liye dedicated fast network channel (`true` / `false`).
+* **`Monitoring`** *(Optional - Nested)*: Detailed CloudWatch monitoring enable karne ke liye (`Enabled`: `true` / `false`).
+
+##### 6. Placement & Lifecycle Settings
+* **`Placement`** *(Optional - Nested)*: Server ki physical placement ke liye. Iske andar yeh hota hai:
+* `AvailabilityZone`, `GroupName`, `Tenancy` (default/dedicated), `HostId`, `SpreadDomain`, `PartitionNumber`.
+* **`InstanceInitiatedShutdownBehavior`** *(Optional)*: Jab andar se shutdown chale toh kya ho (`stop` ya `terminate`).
+* **`DisableApiTermination`** *(Optional)*: Ghalati se instance delete hone se bachane ki protection (`true` / `false`).
+* **`HibernationOptions`** *(Optional - Nested)*: Server ko hibernate karne ki setting (`Configured`: `true` / `false`).
+
+#### 7. Instance Market Options (Spot Instances)
+* **`InstanceMarketOptions`** *(Optional - Nested)*: Agar aap Spot instances khareedna chahte hain. Iske andar `MarketType` aur `SpotOptions` (jaise max price, spot instance type) define hote hain.
+
+#### 8. Metadata Options (IMDSv2)
+* **`MetadataOptions`** *(Optional - Nested)*: Instance metadata service ki security ke liye. Iske andar yeh hota hai:
+* `HttpEndpoint`, `HttpTokens` (optional/required), `HttpPutResponseHopLimit`, `InstanceMetadataTags`.
+
+#### 9. Tags & Licensing
+* **`TagSpecifications`** *(Optional - Nested)*: Jab is template se instances ya volumes banein, toh un par automatically tags lagane ke liye (`ResourceType`: `instance` ya `volume`, aur `Tags`: Key-Value pairs).
+* **`LicenseSpecifications`** *(Optional - Nested)*: Software licenses ke liye (`LicenseConfigurationArn`).
+
+---
 
 #### Single EC2 Aur Launch Template Mein Bada Farq:
 
@@ -881,7 +1077,7 @@ aws ec2 describe-instances --filters "Name=tag:Name,Values=jenkins-multiaz" "Nam
 * **Private IP:** `172.31.38.173`
 * **Subnet ID:** `subnet-28933375`
 
-Aap browser mein `[http://34.235.131.229:8080](http://34.235.131.229:8080)` khol kar Jenkins chalte hue dekh sakte hain.
+Aap browser mein `http://34.235.131.229:8080` khol kar Jenkins chalte hue dekh sakte hain.
 
 ---
 
@@ -891,7 +1087,6 @@ Aap manual machine terminate kar ke Auto Scaling recovery test karein ($Instance
 
 ```bash
 aws ec2 terminate-instances --instance-ids $InstanceId
-
 ```
 
 Kuch minto baad Auto Scaling Group detect karega ke machine khatam ho chuki hai aur naye Subnet/AZ mein nayi machine khari kar dega.
@@ -947,7 +1142,6 @@ Extra charges se bachane ke liye stack ko delete karein:
 ```bash
 aws cloudformation delete-stack --stack-name jenkins-multiaz
 aws cloudformation wait stack-delete-complete --stack-name jenkins-multiaz
-
 ```
 
 * `delete-stack`: Multi-AZ Auto Scaling group, launch template, aur EC2 instances ko delete karna shuru karta hai.
@@ -986,8 +1180,19 @@ Referencing **Figure 13.5** (`image_c1f156.png`):
 
 **Figure 13.5** batata hai ke EBS volume single AZ tak kyun mehdood (limit) hota hai:
 
-1. **AZ-A (Bayein Taraf):** EC2 instance fail ho jata hai. Iska EBS volume `us-east-1a` mein hi phansa reh jata hai kyunki yeh volume sirf AZ-A se access ho sakta hai.
-2. **AZ-B (Daayein Taraf):** Auto Scaling naye AZ-B mein naya EC2 instance launch karta hai. Lekin kyunki purana volume yahan nahi aa sakta, is liye ek **naya aur bilkul khali (empty) EBS volume** attach hota hai, jis se purana data zaya lagne lagta hai.
+#### 1. EBS Volume Ka Buniyadi Qanoon (Single AZ Limit)
+* **Tasveer ka Caption:** *"An EBS volume is available only in a single availability zone."*
+* **Iska Matlab:** AWS mein jo EBS volume (hard disk/storage) aap banate hain, wo sirf aur sirf usi **ek Availability Zone (AZ)** ke andar locked hoti hai jahan wo banai gayi ho.
+* Jaisa ke left side par note mein likha hai: *"EBS volume is accessible from availability zone A only."* Iska matlab hai ke AZ-A wali volume ko aap kisi doosre AZ (jaise AZ-B) mein direct use nahi kar sakte.
+
+#### 2. Pehle Zone Mein Kharabi (Left Side - Availability Zone A)
+* **Waqea:** Left side par `Availability zone A` mein ek EC2 instance (server) chal raha tha aur uske sath ek green color ka EBS volume juda hua tha.
+* **Kharabi:** Server ke upar cross ka nishaan ($\text{🚫}$) yeh dikha raha hai ke khuda na khasta agar yeh server ya poora data center kharab ho jaye, toh kya hoga? Purana server band ho gaya aur uska data usi zone ki volume mein reh gaya.
+
+#### 3. Doosre Zone Mein Naya Server Banana (Right Side - Availability Zone B)
+* **Rasta (Workflow):** Jab AZ-A ka server kharab ho jata hai, tab hamare paas rasta yeh bachta hai ke hum doosre zone mein apna system dobara khada karein. Jaisa ke beech ke teer par likha hai:
+* *"Launch new virtual server in other availability zone"* (Doosre availability zone mein naya virtual server launch karo).
+* **Naya Disk:** Jab aap `Availability zone B` mein naya EC2 instance banate hain, toh uske sath jo disk milti hai, wo tasveer ke mutabiq ek **"New and empty EBS volume"** hoti hai—yani wo bilkul khali hoti hai, usmein purane server ka data direct mojood nahi hota.
 
 ---
 
@@ -1303,34 +1508,7 @@ Auto Scaling ke sath ek fix (static) IP/endpoint rakhne ke 3 tareeqay hain:
 
 ### Figure 13.6 Analysis
 
-Referencing **Figure 13.6** (`image_c18cd1.png`):
-
-```
-+-------------------------------------------------------------------+
-| Region                                                            |
-|  +-------------------------------------------------------------+  |
-|  | VPC (Virtual Private Cloud) 10.0.0.0/16                     |  |
-|  |                                                             |  |
-|  | +-----------------------+       +-------------------------+ |  |
-|  | | Availability zone 1   |       | Availability zone 2     | |  |
-|  | |                       |       |                         | |  |
-|  | | +-------------------+ |       | +---------------------+ | |  |
-|  | | | Subnet A          | |       | | Subnet C            | | |  |
-|  | | | 10.0.0.0/24       | |       | | 10.0.1.0/24         |<----+ A subnet is linked
-|  | | | public subnet     | |       | | public subnet       | | |  | to an availability
-|  | | +-------------------+ |       | +---------------------+ | |  | zone.
-|  | |                       |       |                         | |  |
-|  | | +-------------------+ |       | +---------------------+ | |  |
-|  | | | Subnet B          | |       | | Subnet D            | | |  |
-|  | | | 10.0.2.0/24       | |       | | 10.0.3.0/24         | | |  |
-|  | | | private subnet    | |       | | private subnet      | | |  |
-|  | | +-------------------+ |       | +---------------------+ | |  |
-|  | +-----------------------+       +-------------------------+ |  |
-|  +-------------------------------------------------------------+  |
-+-------------------------------------------------------------------+
-Figure 13.6 A VPC is bound to a region, and a subnet is linked to an availability zone.
-
-```
+Referencing **Figure 13.6**:
 
 <div align="center">
   <img src="./images/06.png" width="600"/>
@@ -1348,30 +1526,7 @@ Figure 13.6 A VPC is bound to a region, and a subnet is linked to an availabilit
 
 ### Figure 13.7 Analysis
 
-Referencing **Figure 13.7** (`image_c18c9a.png`):
-
-```
-+-------------------------------------------------------------------+
-| Region                                                            |
-|  +-------------------------------------------------------------+  |
-|  | VPC 10.0.0.0/16                                             |  |
-|  |                                                             |  |
-|  | +-----------------------+       +-------------------------+ |  |
-|  | | Availability zone 1   |       | Availability zone 2     | |  |
-|  | |                       |       |                         | |  |
-|  | | +-------------------+ |       | +---------------------+ | |  |
-|  | | | Subnet A          | |       | | Subnet C            | | |  |
-|  | | | 10.0.0.0/24       | |       | | 10.0.1.0/24         | | |  |
-|  | | | [EC2 Fail X]      |-------->| | [EC2 Instance]      | | |  |
-|  | | | 10.0.0.100        | | Shift | | 10.0.0.100 (INVALID) | | |  |
-|  | | +-------------------+ |       | +---------------------+ | |  |
-|  | +-----------------------+       +-------------------------+ |  |
-|  +-------------------------------------------------------------+  |
-+-------------------------------------------------------------------+
-The private IP address has to change because the virtual machine is recovered in another subnet.
-Figure 13.7 The virtual machine starts in another subnet in case of a failover and changes the private IP address.
-
-```
+Referencing **Figure 13.7**:
 
 <div align="center">
   <img src="./images/07.png" width="600"/>
