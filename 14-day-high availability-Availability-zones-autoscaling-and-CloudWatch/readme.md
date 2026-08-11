@@ -401,6 +401,66 @@ CloudWatch Alarm 3 cheezon se mil kar banta hai:
 
 ---
 
+### CloudWatch Alarm Properties
+
+AWS CloudFormation mein `AWS::CloudWatch::Alarm` resource ki tamam top-level properties, unki sub-properties, aur unke **Required** ya **Optional** hone ki tafseel neechay di gayi hai:
+
+1. **`AlarmName`** *(Optional)*
+* **Kya hai:** Alarm ka makhsoos naam. Agar aap yeh nahi dete, toh AWS khud-b-khud ek unique naam generate kar deta hai.
+2. **`AlarmDescription`** *(Optional)*
+* **Kya hai:** Alarm ki wazahat ya tafseel ke yeh alarm kis maqsad ke liye banaya gaya hai.
+3. **`ActionsEnabled`** *(Optional)*
+* **Kya hai:** Kya alarm trigger hone par actions (jaise email bhejna ya auto recovery karna) run hon ya nahi (`true` ya `false`). Default value `true` hoti hai.
+4. **`AlarmActions`** *(Optional)*
+* **Kya hai:** Jab alarm "ALARM" state mein jaye (yani masla paida ho jaye), toh kaun se actions run hon (jaise SNS topic ka ARN ya auto scaling action).
+5. **`OKActions`** *(Optional)*
+* **Kya hai:** Jab alarm wapas "OK" state mein aa jaye (yani masla hal ho jaye), tab kaun se actions run hon.
+6. **`InsufficientDataActions`** *(Optional)*
+* **Kya hai:** Jab data poora na ho ya available na ho, tab kya action liya jaye.
+7. **`MetricName`** *(Conditional / Required for standard metrics)*
+* **Kya hai:** Jis metric par aap nazar rakh rahe hain uska naam (misal ke tor par `CPUUtilization`).
+8. **`Namespace`** *(Conditional / Required for standard metrics)*
+* **Kya hai:** Metric kis AWS service ka hai uska namespace (misal ke tor par `AWS/EC2`).
+9. **`Statistic`** *(Conditional)*
+* **Kya hai:** Data ko calculate karne ka tareeqa (misal ke tor par `Average`, `Sum`, `Maximum`, `Minimum`, `SampleCount`).
+10. **`ExtendedStatistic`** *(Optional)*
+* **Kya hai:** Percentile-based statistics ke liye (jaise `p99` ya `p95`).
+11. **`Period`** *(Conditional)*
+* **Kya hai:** Kitne seconds ke interval par metric check hoga (misal ke tor par `60` ya `300`).
+12. **`EvaluationPeriods`** *(Required)*
+* **Kya hai:** Kitne consecutive periods tak condition match hone par alarm trigger hoga (misal ke tor par `2` matlab pichle 2 checks mein condition poori honi chahiye).
+13. **`DatapointsToAlarm`** *(Optional)*
+* **Kya hai:** Jitne evaluation periods hain unme se kitne datapoints par condition poori honi chahiye taake alarm trigger ho.
+14. **`Threshold`** *(Conditional)*
+* **Kya hai:** Wo limit ya value jis par alarm trigger hona chahiye (misal ke tor par `80` agar CPU 80% se ooper jaye).
+15. **`ComparisonOperator`** *(Required)*
+* **Kya hai:** Threshold ke sath comparison ka rule (misal ke tor par `GreaterThanOrEqualToThreshold`, `LessThanThreshold` waghera).
+16. **`TreatMissingData`** *(Optional)*
+* **Kya hai:** Agar metric ka data na mile toh CloudWatch kya samjhe (`breaching`, `notBreaching`, `ignore`, `missing`).
+17. **`EvaluateLowSampleCountPercentile`** *(Optional)*
+* **Kya hai:** Low sample count evaluation ke liye setting (`evaluate` ya `ignore`).
+18. **`Dimensions`** *(Optional)*
+* **Kya hai:** Metric ke sath mazeed filters lagane ke liye (jaise kis specific EC2 instance ka CPU check karna hai).
+19. **`Metrics`** *(Optional)*
+* **Kya hai:** Agar aap ek se zyada metrics ko mila kar koi mathematical expression (Math alarms) banana chahte hain.
+#### Sub-Properties (Nested Properties)
+##### 1. `Dimensions` ke andar wali properties:
+Agar aap `Dimensions` use kar rahe hain, toh uske andar yeh sub-properties hoti hain:
+* **`Name`** *(Required)*: Dimension ki key (misal ke tor par `InstanceId`).
+* **`Value`** *(Required)*: Dimension ki value (misal ke tor par `i-0123456789abcdef0`).
+##### 2. `Metrics` / `MetricDataQuery` ke andar wali properties (Math Alarms ke liye):
+Agar aap complex mathematical alarms bana rahe hain, toh `Metrics` list ke andar yeh sub-properties hoti hain:
+* **`Id`** *(Required)*: Is query ke liye ek unique ID.
+* **`Label`** *(Optional)*: Graph ya description ke liye label.
+* **`ReturnData`** *(Optional)*: Kya yeh data final alarm evaluation mein return karna hai ya nahi (`true` ya `false`).
+* **`Expression`** *(Optional)*: Math expression agar multiple metrics ko combine karna ho.
+* **`MetricStat`** *(Optional sub-object)*: Iske andar mazeed yeh properties hoti hain:
+* **`Metric`** *(Required)*: Asal metric ki details (iske andar mazeed sub-properties hain: `MetricName`, `Namespace`, `Dimensions` — yeh sab iske andar *Optional* hoti hain).
+* **`Period`** *(Required)*: Kitne seconds ka period hai.
+* **`Stat`** *(Required)*: Statistic type (jaise `Average`).
+* **`Unit`** *(Optional)*: Data ki unit (jaise `Seconds`, `Bytes`).
+---
+
 ## Listing 13.2 Creating a CloudWatch alarm to recover a failed EC2 instanc
 
 Neeche CloudWatch Alarm ka YAML code diya gaya hai jo underlying hardware fail hone par machine ko recover karta hai:
