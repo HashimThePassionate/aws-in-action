@@ -154,6 +154,141 @@ Template ke andar 3 ahem cheezein hain:
 
 ---
 
+### Elastic IP Main Properties
+
+#### 1. Public IP Address (`PublicIp`)
+- **Kya hai:** Yeh woh asal public IPv4 address hota hai (misal ke tor par `54.213.14.22`), jo internet par dikhta hai aur jiske zariye duniya ka koi bhi banda aapke server tak access kar sakta hai.
+#### 2. Allocation ID (`AllocationId`)
+- **Kya hai:** Jab aap EIP allocate karte hain, toh AWS background mein usay ek unique system ID deta hai (jaise `eipalloc-0123456789abcdef0`).
+**Kahan use hoti hai:** Jab aap Infrastructure as Code (jaise CloudFormation ya Terraform) likhte hain, toh EIP ko reference ya manage karne ke liye is **Allocation ID** ki zaroorat parti hai.
+#### 3. Association ID (`AssociationId`)
+- **Kya hai:** Jab aap EIP ko kisi EC2 instance ya Elastic Network Interface (ENI) ke sath link (attach) kar dete hain, toh AWS ek connection ID generate karta hai (jaise `eipassoc-abcdef123456`).
+**Kaha use hoti hai:** Yeh batati hai ke EIP kis waqt kis resource ke sath successfully bound hai. Agar aap EIP ko detach kar dein, toh yeh ID khatam ho jati hai.
+#### 4. Instance ID / Network Interface ID
+- **Kya hai:** Yeh property batati hai ke current mein yeh EIP kis EC2 instance (`i-0123456789abcdef`) ya kis Network Interface (`eni-0123456789abcdef`) ke sath attach hai. Agar EIP free (unattached) hai, toh yeh field khali hogi.
+#### 5. Domain / Scope (`Domain`)
+- **Kya hai:** Yeh batata hai ke EIP kis network environment ke liye banaya gaya hai. Modern AWS accounts mein yeh hamesha **`vpc`** hota hai (purane waqt mein EC2-Classic ka option bhi hota tha jo ab band ho chuka hai).
+#### 6. Network Border Group
+- **Kya hai:** Yeh specify karta hai ke EIP ka data kis local zone, wavelength zone, ya AWS Region ke data center se bind hai. Is se yeh tay hota hai ke IP kis physical network location se traffic route karega.
+#### 7. Public DNS (`PublicDnsName`)
+- **Kya hai:** Kuch cases mein EIP ke sath ek standard AWS domain name bhi mil jata hai (jaise `ec2-54-213-14-22.compute-1.amazonaws.com`), jiska istemal IP address ki jagah kiya ja sakta hai.
+#### 8. Tags
+- **Kya hai:** User-defined **Key-Value pairs** hote hain (jaise `Name: AppServer-EIP` ya `Environment: Production`). Tags ki madad se aap apni EIPs ko asani se pehchan sakte hain aur cost/billing track kar sakte hain.
+
+---
+
+### EC2 Instance Properties
+
+#### 1. ImageId (AMI ID)
+
+- **Kya hai:** Yeh batati hai ke server par kaun sa operating system (OS) install hoga (misal ke tor par Ubuntu, Amazon Linux, ya Windows). Isme AMI ki ID di jati hai (jaise `ami-0c73cd1c5347436f3`).
+
+#### 2. InstanceType
+
+- **Kya hai:** Yeh server ka size aur power decide karta hai ke usko kitni RAM aur kitne CPU cores chahiye (misal ke tor par `t3.micro`, `t3.medium`, ya `c5.xlarge`).
+
+#### 3. KeyName
+
+- **Kya hai:** Yeh aapki SSH key ka naam hota hai jiske zariye aap baad mein server ke andar secure tareeqay se login karte hain.
+
+#### 4. SubnetId
+
+- **Kya hai:** Yeh batati hai ke aapka EC2 instance VPC ke kis specific Subnet (jaise public subnet ya private subnet) ke andar launch hoga.
+
+#### 5. SecurityGroupIds (ya SecurityGroups)
+
+- **Kya hai:** Yeh server ki firewall hoti hai jo tay karti hai ke server par kaun sa traffic aa sakta hai aur kaun sa ja sakta hai. Isme hum security groups ki IDs provide karte hain (jaise `sg-0123456789`).
+
+#### 6. UserData (Bootstrapping Script)
+
+- **Kya hai:** Yeh woh code ya script hoti hai jo server pehli baar start (boot) hote hi automatically run ho jati hai (misal ke tor par Jenkins ya Docker install karne ki script). Isko base64 format mein bhi likha ja sakta hai.
+
+#### 7. IamInstanceProfile
+
+- **Kya hai:** Yeh EC2 instance ko ek IAM role assign karta hai taake instance baki AWS services (jaise S3, SSM, ya DynamoDB) ke sath secure tareeqay se baat kar sake.
+
+#### 8. BlockDeviceMappings (Hard Disks / Storage)
+
+Yeh property server ki hard disks (EBS Volumes) ko define karti hai. Iske andar yeh **nested properties** hoti hain:
+
+- **`DeviceName`**: Hard disk ka system naam (jaise `/dev/xvda` ya `/dev/sda1`).
+- **`Ebs` (Nested Object):** Iske andar hard disk ki mazeed tafseel hoti hai:
+- **`VolumeSize`**: Hard disk ka size GBs mein (misal ke tor par `30` GB).
+- **`VolumeType`**: Disk ki type (jaise `gp2`, `gp3`, ya `io1` SSD).
+- **`DeleteOnTermination`**: Agar true ho, toh instance delete hone par hard disk bhi khud-b-khud delete ho jayegi (`true` / `false`).
+- **`Encrypted`**: Kya hard disk encrypt karni hai ya nahi (`true` / `false`).
+- **`Iops`**: Agar high-performance disk ho, toh Input/Output operations per second ki limit.
+- **`Throughput`**: gp3 volumes ke liye data transfer speed (MB/s mein).
+
+
+
+#### 9. NetworkInterfaces (Advanced Network Settings)
+
+Agar aapko aik se ziada network cards ya khas IP settings karni hon, toh yeh property use hoti hai. Iske andar yeh **nested properties** hain:
+
+- **`DeviceIndex`**: Network card ka number (jaise `0` matlab primary network card).
+- **`SubnetId`**: Kis subnet mein card lagana hai.
+- **`GroupIds`**: Is network interface ke apne security groups.
+- **`AssociatePublicIpAddress`**: Kya is interface ko public IP dena hai ya nahi (`true` / `false`).
+- **`PrivateIpAddress`**: Agar aapko apni marzi ka koi specific private IP dena ho.
+- **`DeleteOnTermination`**: Instance delete hone par network interface delete ho ya nahi.
+
+#### 10. Tags
+
+- **Kya hai:** Server par naam ya labels lagane ke liye. Iske andar **Key-Value pairs** ki nested properties hoti hain:
+- **`Key`**: Label ka naam (misal ke tor par `Name`).
+- **`Value`**: Label ki value (misal ke tor par `Jenkins-Server`).
+
+
+
+#### 11. Baqi Tamam Advanced Properties (Single-Level)
+
+- **`AvailabilityZone`**: Khas data center ya zone batane ke liye jahan instance banana hai.
+- **`CpuOptions`**: CPU ke cores aur threads ki tadad ko manually control karne ke liye.
+* *Nested:* `CoreCount` aur `ThreadsPerCore`.
+
+
+- **`CreditSpecification`**: T-series instances ke liye CPU credits ka mode set karne ke liye (`standard` ya `unlimited`).
+- **`DisableApiTermination`**: Ghalati se server delete hone se bachane ke liye protection (`true` / `false`).
+- **`EbsOptimized`**: Kya instance aur EBS storage ke darmiyan dedicated fast network channel chahiye (`true` / `false`).
+- **`InstanceInitiatedShutdownBehavior`**: Jab aap anjamn andar se shutdown command chalayein, toh kya ho (`stop` ho ya `terminate` ho jaye).
+- **`Monitoring`**: Detailed CloudWatch monitoring on karni hai ya nahi (`true` / `false`).
+- **`PlacementGroupName`**: Agar servers ko kisi specific placement group (spread, partition, ya cluster) mein rakhna ho.
+- **`PrivateIpAddress`**: Instance ko direct default private IP dene ke liye.
+- **`SourceDestCheck`**: Network packets ki source/destination checking enable ya disable karne ke liye (NAT instances ke liye zaroori hota hai).
+- **`Tenancy`**: Kya server dedicated physical hardware par chalega ya shared hardware par (`default`, `dedicated`, ya `host`).
+
+---
+
+### CreationPolicy Property
+
+**`CreationPolicy`** AWS CloudFormation ka ek bohot hi ahem feature hai. Iska buniyadi maqsad CloudFormation ko yeh batana hota hai ke resource (jaise EC2 instance) banne ke foran baad aagey na barhe, balkay server ke andar software (jaise Jenkins ya Java) mukammal taur par install hone ka **intezar** kare.
+
+#### Yeh Kyun Zaroori Hai?
+
+Jab hum EC2 instance ke andar `UserData` script chalate hain jo software download aur install karti hai, toh is poore process mein 5 se 10 minute lag sakte hain.
+- Agar `CreationPolicy` na ho, toh CloudFormation sirf itna dekhega ke EC2 instance AWS par launch ho gaya hai, aur stack ko foran **"Create Complete"*- declare kar dega—jabke andar software abhi install ho raha hoga!
+- `CreationPolicy` CloudFormation ko rok kar rakhti hai aur kehti hai: *"Tab tak aage mat barho jab tak server khud code ke zariye signal (`cfn-signal`) na bhej de ke mera saara software install ho chuka hai."*
+
+#### CreationPolicy ki Properties
+
+`CreationPolicy` ke andar makhsoos properties hoti hain. Iski main aur sirf ek hi major property block **`ResourceSignal`** hota hai, aur uske andar mazeed do sub-properties hoti hain:
+
+##### ResourceSignal
+
+Yeh main property hai jo batati hai ke CloudFormation ne external signal ka intezar karna hai. Iske andar yeh do ahem cheezein aati hain:
+
+- **`Timeout`**
+  - **Kya hai:** Yeh CloudFormation ko batata hai ke server ke signal bhejne ka **zyada se zyada kitni der tak intezar karna hai**.
+  - **Format:** Yeh ISO 8601 duration format mein likha jata hai (misal ke tor par `PT10M` ka matlab hai **10 Minutes**).
+  - **Agar Timeout ho jaye:** Agar mukarrar waqt (jaise 10 minute) ke andar andar server se success signal na aaye, toh CloudFormation samajhta hai ke installation fail ho gayi hai, aur woh poora stack rollback (cancel) kar deta hai
+
+- **`Count`** *(Aam tor par Auto Scaling Groups ke liye)*
+  - **Kya hai:** Yeh batati hai ke CloudFormation ko aage barhne ke liye **kitne successful signals ki zaroorat hai**.
+  - **Misal:** Agar aapke Auto Scaling Group mein 3 instances ban rahe hain, toh aap `Count: 3` set karenge taake jab tak teeno instances apna installation mukammal kar ke signal na bhej dein, stack complete na ho. (Agar single EC2 instance ho toh yeh likhne ki zaroorat nahi parti).
+
+---
+
 ## Listing 13.1 Starting an EC2 instance using a Jenkins CI server with recovery alarm
 
 Writer ka diya gaya CloudFormation template ka code as-it-is neeche maujood hai:
