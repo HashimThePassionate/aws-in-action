@@ -884,3 +884,236 @@ aws cloudformation delete-stack --stack-name wordpress
 * `aws cloudformation delete-stack`: CloudFormation ko order deta hai ke `wordpress` stack ke zariye banaye gaye saare resources (EC2, ASG, Load Balancer, EFS, RDS, Security Groups) ko completely delete aur clean kar de.
 
 ---
+
+## Scaling a dynamic EC2 instances pool asynchronously decoupled by a queue
+
+Tasavvur karein ke aap ek social bookmarking service (jaise Pinterest ya Pocket) bana rahe hain jahan log apne pasandida website links ko save aur share kar sakte hain. Is application ka sab se ahem feature yeh hai ke jab bhi koi user naya link save kare, toh system us website ka ek chota sa preview image (screenshot/PNG) dikhaye.
+
+**Problem (Masla):**
+URL ko PNG image mein badalna (website open kar ke screenshot lena) ek behad heavy CPU aur RAM ka kaam hai. Shaam ke waqt jab bohot saare users ek sath naye bookmarks add karte hain, toh system par achanak bohot bara load aa jata hai. Agar aap yeh heavy kaam direct web server par hi karenge, toh website freeze ho jayegi, response slow ho jayega, aur users pareshan ho kar app chor jayenge.
+
+**ELI5 Analogy (Aasaan Misaal):**
+Maan lein aap ki fast-food ki dukaan hai. Jab koi customer burger ka order deta hai, toh counter par baitha cash collector khud kitchen mein ja kar burger talna shuru nahi karta. Woh order ki chit (message) ek line mein chipka deta hai (Queue), aur kitchen ke andar majood cooks (Worker EC2 Instances) us chit ko dekh kar burger banate hain. Is tarah counter par khara customer foran receipt le kar aazad ho jata hai (fast response time) aur background mein cooks apna kaam karte rehte hain.
+
+Is load-intensive kaam ko web application se alag kar ke background jobs mein convert karne se users ko har waqt fast response speed milti hai.
+
+---
+
+### Asynchronous Queue Decoupling ke Faide
+
+Jab aap dynamic EC2 pool ko queue (SQS) ke zariye asynchronous decouple karte hain, toh workload ke hisab se scale karna behad aasaan ho jata hai:
+
+* **No Immediate Response Needed:** User ko fawri screenshot nahi chahiye hota, is liye request ko foran answer karne ki bajaye **SQS Queue** mein daal diya jata hai.
+* **Accurate Scaling Metric:** Servers ki ginti ko badhane ya kam karne ke liye Queue ki length (yani kitne jobs pending hain) ek 100% exact metric ban jati hai.
+* **Zero Request Loss:** Shaam ko chahe achanak 50,000 requests kyun na aa jayein, koi bhi request fail ya drop nahi hoti kyunke saari requests SQS queue ke andar safe parhi rehti hain.
+
+---
+
+### URL2PNG Workflow (Step-by-Step Architecture)
+
+Website preview banane ke is poore process ko 5 steps mein baanta gaya hai:
+
+1. **Step 1:** Jab bhi koi user naya bookmark add karta hai, toh ek message SQS Queue ko bhej diya jata hai jis mein URL aur us bookmark ki Unique ID hoti hai.
+2. **Step 2:** EC2 instances par chalne wali Node.js application lagataar SQS Queue ko check (**poll**) karti rehti hai.
+3. **Step 3:** Node.js application queue se message uthati hai, URL ko background browser mein load karti hai aur us ka screenshot (PNG) banati hai.
+4. **Step 4:** Banne wala screenshot **Amazon S3 Bucket** par upload ho jata hai aur file ka naam (Object Key) wahi Unique ID rakha jata hai.
+5. **Step 5:** Users us Unique ID ka istemal kar ke direct S3 bucket se screenshot view ya download kar lete hain.
+
+**Scaling Rule Logic:**
+CloudWatch Alarm SQS queue ki length ko monitor karta hai. Agar Queue mein pending messages ki tadaad **5** tak pahunch jaye, toh CloudWatch Alarm Auto Scaling ko trigger karta hai aur ek NAYA EC2 Instance start ho jata hai. Jab Queue length **5 se kam** ho jati hai, toh doosra Alarm Auto Scaling ki desired capacity ko kam kar ke extra instance terminate kar deta hai.
+
+---
+
+### Figure 17.7 Autoscaling virtual machines that convert URLs into images, decoupled by an SQS queue
+
+<div align="center">
+  <img src="./images/07.png" width="600"/>
+</div>
+
+Is figure mein SQS queue-based asynchronous autoscaling architecture ka poora flow samjhaya gaya hai:
+
+1. **Message Producers (Web App):** Jab user link save karta hai, toh producer application job SQS Queue mein insert kar deti hai.
+2. **SQS Message Queue:** Jab tak jobs process nahi hote, woh yahan store rehte hain. Queue apni performance metric CloudWatch ko bhejti hai.
+3. **CloudWatch Metric and Alarm -> Autoscaling:** CloudWatch alarm queue length check karta hai. Agara threshold cross ho, toh Auto Scaling engine ko scaling ka order deta hai.
+4. **Virtual Machines (Worker EC2 Pool):** EC2 instances SQS queue se jobs fetch karte hain, URL ko PNG image mein convert karte hain.
+5. **S3 Object Store:** Conversion ke baad generated PNG images Amazon S3 Object Store mein upload kar di jati hain.
+
+---
+
+### URL2PNG CloudFormation Deployment Command
+
+URL2PNG ki is scalable application ko deploy karne ke liye CLI par yeh command chalai jati hai:
+
+```bash
+aws cloudformation create-stack --stack-name url2png \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/chapter17/url2png.yaml \
+  --capabilities CAPABILITY_IAM
+
+```
+
+#### Command Details Breakdown:
+
+* `aws cloudformation create-stack`: AWS CLI ko Naya Infrastructure Stack banane ki hidayat deta hai.
+* `--stack-name url2png`: CloudFormation Stack ka naam `url2png` rakhta hai.
+* `--template-url [https://s3.amazonaws.com/.../url2png.yaml](https://s3.amazonaws.com/.../url2png.yaml)`: Amazon S3 par majood SQS, EC2, S3 aur Autoscaling ki YAML configuration file ka link.
+* `--capabilities CAPABILITY_IAM`: CloudFormation ko naye IAM Roles aur Permissions banane ki ijazat deta hai.
+
+*(Is stack ko ban'ne mein lagbhag 5 minute lagte hain)*.
+
+---
+
+### Target-Tracking vs Step-Scaling Policy (Design Choice Trade-off)
+
+SQS Queue par scale karte waqt hum **Target-Tracking Policy** ka istemal **NAHI** kar sakte.
+
+**Kyun?**
+Target tracking tabhi kaam karti hai jab metric servers ki tadaad se seedhi divide hoti ho (jaise Average CPU). Queue mein parhe messages ki tadaad ka EC2 instances ki ginti se koi seedha mathematical correlation nahi hota. Is liye yahan hum **Step-Scaling Policy** ka istemal karenge jahan exact rules set kiye jatay hain.
+
+---
+
+### Listing 17.7 Monitoring the length of the SQS queue
+
+Yeh CloudFormation code SQS Queue ki length ko monitor karne ke liye **CloudWatch Alarm** banata hai:
+
+```yaml
+HighQueueAlarm:
+  Type: 'AWS::CloudWatch::Alarm'
+  Properties:
+    EvaluationPeriods: 1
+    Statistic: Sum
+    Threshold: 5
+    AlarmDescription: 'Alarm if queue length is higher than 5.'
+    Period: 300
+    AlarmActions:
+      - !Ref ScalingUpPolicy
+    Namespace: 'AWS/SQS'
+    Dimensions:
+      - Name: QueueName
+        Value: !Sub '${SQSQueue.QueueName}'
+    ComparisonOperator: GreaterThanThreshold
+    MetricName: ApproximateNumberOfMessagesVisible
+
+```
+
+#### Code Details Breakdown:
+
+* `HighQueueAlarm:` -> CloudWatch Alarm resource ka logical naam.
+* `Type: 'AWS::CloudWatch::Alarm'` -> Resource type definition.
+* `Properties:` -> Configuration settings block.
+* `EvaluationPeriods: 1` -> Alarm check karne ke liye 1 continuous time period ka data dekhta hai.
+* `Statistic: Sum` -> Period ke andar aane wale saare messages ki total ginti (sum) karta hai.
+* `Threshold: 5` -> Limit point **5** set karta hai. Agar queue mein 5 se ziada messages hue, toh alarm baj jayega.
+* `AlarmDescription: 'Alarm if queue length is higher than 5.'` -> Alarm ki wazahat ke liye description string.
+* `Period: 300` -> **300 Seconds (5 Minutes):** SQS metrics default mein har 5 minute baad CloudWatch ko publish hote hain, is liye period 300 rakha gaya hai.
+* `AlarmActions:` -> Alarm trigger hone par chalne wala action block.
+* `- !Ref ScalingUpPolicy` -> `ScalingUpPolicy` ko trigger kar ke desired EC2 instances badhata hai.
+* `Namespace: 'AWS/SQS'` -> Metric ka ghar/source SQS service hai.
+* `Dimensions:` -> Target resource specification.
+* `Name: QueueName` / `Value: !Sub '${SQSQueue.QueueName}'` -> Exact target SQS queue ka naam link karta hai.
+* `ComparisonOperator: GreaterThanThreshold` -> Operator jo check karta hai ke value 5 se ziada (`> 5`) hai ya nahi.
+* `MetricName: ApproximateNumberOfMessagesVisible` -> SQS metric ka exact naam jo queue mein majood pending messages ki tadaad batata hai.
+
+---
+
+### Listing 17.8 A step-scaling policy adding one more instance to an Auto Scaling group
+
+Yeh code Step-Scaling Policy define karta hai jo alarm bajne par Auto Scaling Group mein **1 extra server** add kar dega:
+
+```yaml
+ScalingUpPolicy:
+  Type: 'AWS::AutoScaling::ScalingPolicy'
+  Properties:
+    AdjustmentType: 'ChangeInCapacity'
+    AutoScalingGroupName: !Ref AutoScalingGroup
+    PolicyType: 'StepScaling'
+    MetricAggregationType: 'Average'
+    EstimatedInstanceWarmup: 60
+    StepAdjustments:
+      - MetricIntervalLowerBound: 0
+        ScalingAdjustment: 1
+
+```
+
+#### Code Details Breakdown:
+
+* `ScalingUpPolicy:` -> Policy resource definition.
+* `Type: 'AWS::AutoScaling::ScalingPolicy'` -> Auto Scaling Policy resource type.
+* `AdjustmentType: 'ChangeInCapacity'` -> Capacity ko aik absolute number se badhane ka tarika (e.g., existing count mein +1 add karna).
+* `AutoScalingGroupName: !Ref AutoScalingGroup` -> Jis Auto Scaling Group par yeh scaling apply honi hai.
+* `PolicyType: 'StepScaling'` -> Policy type ko Step Scaling set karta hai.
+* `MetricAggregationType: 'Average'` -> Alarm metric se milne wale data ko average format mein aggregate karta hai.
+* `EstimatedInstanceWarmup: 60` -> **60 Seconds Warmup:** Naya server launch hote hi pehle 60 seconds tak us ke metrics ko ignore kiya jata hai jab tak Node.js app aur system boot-up na ho jaye.
+* `StepAdjustments:` -> Scaling steps rules array.
+* `MetricIntervalLowerBound: 0` -> Step range ka lower bound 0 set karta hai (yani Alarm Threshold se lekar infinity tak).
+* `ScalingAdjustment: 1` -> Auto Scaling Group ki desired capacity mein **+1 instance** ka izafa karta hai.
+
+*(Note: Jab Queue khali ho jaye toh extra instances delete karne ke liye `LowQueueAlarm` aur opposite Step-Scaling policy `ScalingDownPolicy` banayi jati hai)*.
+
+---
+
+### URL2PNG Automated Load Test Execution
+
+Application par artificial load dalne ke liye hum CloudFormation Stack ko update kar ke SQS Queue mein ek sath **250 messages** inject karenge:
+
+```bash
+aws cloudformation update-stack --stack-name url2png \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/chapter17/url2png-loadtest.yaml \
+  --capabilities CAPABILITY_IAM
+
+```
+
+#### Command Details Breakdown:
+
+* `aws cloudformation update-stack`: `url2png` stack ko update karta hai.
+* `--template-url .../url2png-loadtest.yaml`: Load test template S3 URL jo queue mein 250 requests bhejti hai.
+* `--capabilities CAPABILITY_IAM`: IAM permissions validation.
+
+---
+
+### Load Test Monitoring (AWS Console Steps)
+
+Load test execution ke dauran console mein yeh 5 steps perform honge:
+
+1. **CloudWatch Service:** Console mein CloudWatch khol kar **Alarms** par click karein.
+2. **Alarm High State:** Load test shuru hote hi `url2png-HighQueueAlarm-*` alarm **ALARM State** mein chala jayega.
+3. **EC2 Instance Scale Up:** EC2 Console khol kar instances list karein. Auto Scaling naya instance launch karega. Total **3 instances** nazar aayenge (2 Worker Instances + 1 Load Test Runner Instance).
+4. **Alarm Low State:** Messages process hone aur queue khali hone ke baad, `url2png-LowQueueAlarm-*` alarm **ALARM State** mein jayega.
+5. **EC2 Instance Scale Down:** EC2 Console mein extra worker instance disappear (terminate) ho jayega. End mein total **2 instances** bachein ge (1 Worker Instance + 1 Load Test Runner Instance).
+
+*(Is poore automated cycle mein lagbhag 20 minutes lagte hain)*.
+
+---
+
+### Cleaning Up
+
+Practicals ke baad AWS resources delete kar ke bill se bachne ke liye yeh commands chalayein:
+
+```bash
+URL2PNG_BUCKET=$(aws cloudformation describe-stacks --stack-name url2png \
+  --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" \
+  --output text)
+
+aws s3 rm s3://${URL2PNG_BUCKET} --recursive
+
+aws cloudformation delete-stack --stack-name url2png
+
+```
+
+#### Commands Detail Breakdown:
+
+1. `URL2PNG_BUCKET=$(...)`: CloudFormation Outputs se URL2PNG ki S3 Bucket ka naam nikal kar environment variable mein save karta hai.
+2. `aws s3 rm s3://${URL2PNG_BUCKET} --recursive`: S3 bucket ke andar majood tamam generated PNG screenshot files ko delete karta hai (kyunke non-empty S3 bucket delete nahi hoti).
+3. `aws cloudformation delete-stack --stack-name url2png`: CloudFormation stack aur us ke banaye hue SQS, EC2, ASG, CloudWatch Alarms ko complete delete kar deta hai.
+
+---
+
+## Summary
+
+* **Auto Scaling Group aur Launch Template:** Jab bhi aap ko multiple identical (ek jaisay) virtual machines ko launch karna ho, Auto Scaling Group aur Launch Template sab se behtareen combination hain.
+* **CloudWatch Metrics Publishing:** EC2, SQS aur doosri AWS services continuously apni performance metrics (jaise CPU usage, Queue length) CloudWatch ko bhejti rehti hain.
+* **CloudWatch Alarms for Dynamic Scaling:** CloudWatch Alarms in metrics par nazar rakhte hain aur threshold cross hone par Auto Scaling Group ki Desired Capacity ko badal kar servers ko kam ya ziada kar sakte hain.
+* **Stateless Virtual Machines:** Workload ke mutabiq servers ko automatically scale karne ke liye Virtual Machines ka **Stateless** hona ek mandatory Best Practice hai.
+* **Decoupling Strategies:** Multiple virtual machines par workload ko barabar baantne ke liye **Synchronous Decoupling** (Load Balancer ke zariye) ya **Asynchronous Decoupling** (SQS Message Queue ke zariye) behad zaroori hai.
+
+
+---
