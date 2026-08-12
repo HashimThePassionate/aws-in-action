@@ -310,3 +310,225 @@ Mukhtasir yeh ke Auto Scaling groups ek behad mufeed tool hain jab aap ko ek se 
 
 
 ---
+
+## Using metrics or schedules to trigger scaling
+
+Ab tak aap ne dekha ke Auto Scaling group aur Launch Template ka istemal kar ke virtual machines ko kaise manage kiya jata hai. Is setup mein aap manually (khud apne haath se) Auto Scaling group ki desired capacity ko badal sakte hain taake naye servers launch ho sakein ya purane band ho sakein.
+
+Lekin ek blogging platform ko chalane ke liye, aap ko ye kaam manually karne ki bajaye **Scaling Policies** ke zariye **automatically** (khud-ba-khud) karna hota hai.
+
+**Real-world Example:**
+
+* **Lunch Break Traffic:** Aksar log dopahar ke khane ke waqt (11 a.m. se 1 p.m.) internet ziada chalate hain aur blogs parhte hain. Toh aap ko rozana is waqt extra virtual machines ki zaroorat hoti hai.
+* **Unpredictable Traffic:** Agar aap ke blog ka koi article Facebook ya X (Twitter) par viral ho jaye, toh achanak lakhon log website par aa jatay hain.
+
+In do alag halaton ko sambhalne ke liye AWS aap ko virtual machines ki tadaad badalne ke do (2) tareeqe deta hai:
+
+* **Defining a schedule:** Ek time-table (Schedule) bana dena jo baar baar dohraye jaane wale traffic patterns ke mutabiq servers ko kam ya ziada kare (jaise raat ke waqt jab log so rahe hon toh servers kam kar dena).
+* **Using a CloudWatch alarm:** CloudWatch Alarm ka istemal karna jo live metrics (jaise CPU utilization ya Load Balancer par aane wali requests) ko dekh kar scaling policy ko trigger kare.
+
+**Important Trade-off (Muqabla aur Samjhota):**
+
+* **Schedule par scale karna** aasaan hota hai kyunke is mein koi mushkil metric set nahi karni padti. Lekin yeh kam precise (kam mefuz) hota hai kyunke achanak aane wale traffic spike ko handle karne ke liye aap ko zaroorat se ziada servers pehle se chalane padte hain (**Overprovisioning**).
+* **CloudWatch Metrics par scale karna** behad precise hota hai kyunke yeh asli load ko dekh kar scale karta hai, lekin ek aisa metric dhoondna jis par 100% bharosa kiya ja sake, thoda complex kaam hai.
+
+---
+
+### Figure 17.3 Triggering autoscaling based on CloudWatch alarms or schedules
+
+Is figure mein Auto Scaling group ko trigger karne ke dono tareeqon ka muqammal breakdown dikhaya gaya hai:
+
+<div align="center">
+  <img src="./images/03.png" width="600"/>
+</div>
+
+1. **Left Side (CloudWatch Alarm Route):** CloudWatch alarm continuous system metric ko read karta hai. Agar **CPU load > 75%** hota hai, toh Scaling Policy ko command milti hai ke **+1 instance** (ek naya server) add kar do. Agar **CPU load < 25%** gir jata hai, toh Scaling Policy **-1 instance** (ek server) delete kar deti hai.
+2. **Right Side (Schedule Route):** Time-table ke mutabiq kaam hota hai. Subah **11 a.m.** hote hi schedule **+2 instances** add kar deta hai, aur shaam **4 p.m.** par **-2 instances** kam kar deta hai.
+3. **Center (Autoscaling Engine):** Autoscaling group dono tarf se aane wali instructions ko receive karta hai. Lekin yeh hamesha aap ki set ki hui **Minimum** aur **Maximum** limits ka khayal rakhta hai (woh kabhi bhi minimum se kam ya maximum se ziada servers launch nahi karega).
+4. **Bottom (Virtual Machines):** End result yeh hota hai ke Launch Template ke blueprint ko use karte hue actual EC2 instances start ya terminate hote hain.
+
+---
+
+## Scaling based on a schedule
+
+Blogging platform chalate waqt aap ko 2 kisam ke load patterns milte hain:
+
+* **One-time actions (Ek dafa hone wale waqiaat):** Aap ne raat ko TV par apni website ka ikhtihar (ad) chalaya, jis ke foran baad registration page par achanak traffic ka tufan aa gaya. Yeh kaam roz roz nahi hota.
+* **Recurring actions (Baar baar dohraye jane wale waqiaat):** Har roz dopahar 11 a.m. se 1 p.m. ke darmiyan log lunch break mein articles parhte hain. Yeh kaam har roz ek hi waqt par dohraya jata hai.
+
+AWS Scheduled Actions in dono maseebaton ka hal nikalte hain. Aap aik dafa hone wale (One-time) ya baar baar dohraye jane wale (Recurring) schedules set kar sakte hain.
+
+Is ka CloudFormation code book ke GitHub repository (`[https://github.com/AWSinAction/code3](https://github.com/AWSinAction/code3)`) mein `/chapter17/wordpress-schedule.yaml` par majood hai.
+
+---
+
+### Listing 17.2 Scheduling a one-time scaling action
+
+Niche diya gaya YAML code ek **One-Time Scheduled Action** banata hai jo specific date aur time par chalega:
+
+```yaml
+OneTimeScheduledActionUp:
+  Type: 'AWS::AutoScaling::ScheduledAction'
+  Properties:
+    AutoScalingGroupName: !Ref AutoScalingGroup
+    DesiredCapacity: 4
+    StartTime: '2025-01-01T12:00:00Z'
+
+```
+
+* `OneTimeScheduledActionUp:` -> CloudFormation resource ka logical naam.
+* `Type: 'AWS::AutoScaling::ScheduledAction'` -> AWS ko bataya ja raha hai ke yeh Auto Scaling ki Scheduled Action resource hai.
+* `Properties:` -> Configuration settings ka block.
+* `AutoScalingGroupName: !Ref AutoScalingGroup` -> Batata hai ke yeh schedule kis Auto Scaling Group par apply hoga (`!Ref` pehle se bane group ka ID lata hai).
+* `DesiredCapacity: 4` -> Schedule trigger hote hi total active servers ki tadaad ko **4** kar dega.
+* `StartTime: '2025-01-01T12:00:00Z'` -> UTC Time zone ke mutabiq exact date aur time (1 January 12:00 PM UTC) jis waqt yeh action execute hoga.
+
+---
+
+### Listing 17.3 Scheduling a recurring scaling action that runs at 20:00 UTC every day
+
+Aap Unix **Cron Syntax** ka istemal kar ke rozana dohraye jane wale (recurring) schedules bhi bana sakte hain. Niche di gayi example mein rozana karobari ghanton (08:00 se 20:00 UTC) ke liye servers ki tadaad barhai aur ghatai ja rahi hai:
+
+```yaml
+RecurringScheduledActionUp:
+  Type: 'AWS::AutoScaling::ScheduledAction'
+  Properties:
+    AutoScalingGroupName: !Ref AutoScalingGroup
+    DesiredCapacity: 4
+    Recurrence: '0 8 * * *'
+RecurringScheduledActionDown:
+  Type: 'AWS::AutoScaling::ScheduledAction'
+  Properties:
+    AutoScalingGroupName: !Ref AutoScalingGroup
+    DesiredCapacity: 2
+    Recurrence: '0 20 * * *'
+
+```
+
+* `RecurringScheduledActionUp:` -> Subah ke waqt capacity badhane wale resource ka naam.
+* `Type: 'AWS::AutoScaling::ScheduledAction'` -> Scheduled Action resource type.
+* `AutoScalingGroupName: !Ref AutoScalingGroup` -> Target Auto Scaling Group.
+* `DesiredCapacity: 4` -> Subah office timing shuru hote hi servers ki tadaad 4 kar do.
+* `Recurrence: '0 8 * * *'` -> Cron expression jo batata hai ke **Har roz subah 08:00 UTC** par yeh kaam karna hai.
+* `RecurringScheduledActionDown:` -> Shaam ke waqt capacity ghatane wale resource ka naam.
+* `DesiredCapacity: 2` -> Office timing khatam hote hi extra 2 servers band kar do, aur sirf 2 chalne do.
+* `Recurrence: '0 20 * * *'` -> Cron expression jo batata hai ke **Har roz shaam 20:00 UTC (8:00 PM)** par yeh kaam karna hai.
+
+---
+
+### Unix Cron Syntax Format
+
+Cron format 5 stars (`* * * * *`) par mabni hota hai:
+
+```text
+* * * * *
+| | | | |
+| | | | +-- day of week (0 - 6) (0 Sunday)
+| | | +---- month (1 - 12)
+| | +------ day of month (1 - 31)
+| +-------- hour (0 - 23)
++---------- min (0 - 59)
+
+```
+
+1. **Pehla Star (Minute):** 0 se 59 minutes (e.g., `0` ka matlab minute 0).
+2. **Doosra Star (Hour):** 0 se 23 ghante (e.g., `8` ka matlab subah 8 baje, `20` ka matlab raat 8 baje).
+3. **Teesra Star (Day of Month):** Mahine ka din (1 se 31). `*` ka matlab har din.
+4. **Chotha Star (Month):** Mahina (1 se 12). `*` ka matlab har mahina.
+5. **Panchvan Star (Day of Week):** Hafte ka din (0 se 6, jahan 0 = Sunday/Itwaar). `*` ka matlab hafte ka har din.
+
+**Best Practice Recommendation:** Scheduled scaling ka istemal tabhi karein jab aap ko pehle se pata ho ke traffic kab aaye ga—jaise internal company tools jo sirf office timing (9 AM - 5 PM) mein chalte hain ya koi planned marketing campaign.
+
+---
+
+## Scaling based on CloudWatch metrics
+
+Future ko predict karna behad mushkil hai. Traffic aksar aap ke plan kiye gaye schedule se hat kar achanak barh ya ghat jata hai. Agar aap ka koi blog post social media par viral ho jaye, toh schedule nakaam ho jayega. Is maseebat se bachne ke liye live traffic/load ko dekh kar scale karna padta hai.
+
+Aap **CloudWatch Alarms** aur **Scaling Policies** ka istemal kar ke actual workload ke mutabiq EC2 instances ki tadaad badal sakte hain.
+
+AWS mein **4 kisam ki Scaling Policies** hoti hain:
+
+1. **Step scaling:** Yeh behad flexible hai. Is mein aap alag alag steps set kar sakte hain (e.g., agar CPU load 70% ho toh +1 server, lekin agar direct 90% par chala jaye toh +3 servers add kar do).
+2. **Target tracking:** Yeh sab se modern aur aasaan tarika hai. Aap ko koi mushkil calculation nahi karni padti. Aap sirf ek target bata dete hain (jaise: *"Mera Average CPU Utilization 70% rehna chahiye"*). AWS khud hi servers add ya remove kar ke CPU ko 70% par maintain rakhta hai.
+3. **Predictive scaling:** Yeh Machine Learning (AI) ka istemal karta hai. Purane traffic history data ko dekh kar future ke load ko predict karta hai aur pehle se hi scale kar deta hai.
+4. **Simple scaling:** Yeh purana (Legacy) tareeqa hai jo ab khatam ho chuka hai aur is ki jagah Step Scaling ne le li hai.
+
+---
+
+### Figure 17.4 Triggering autoscaling based on a CloudWatch metric and alarm
+
+Is figure mein Live Metric scaling ke 4-step cycle ko samjhaya gaya hai:
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+1. **Step 1 (Publishes metrics):** Sabhi running Virtual Machines (EC2 instances) apni performance ka data (CPU load, network traffic) CloudWatch ko continuously bhejte hain.
+2. **Step 2 (Monitors metric):** CloudWatch Alarm continuously is metric par nazar rakhta hai.
+3. **Step 3 (Triggers scaling policy):** Jab CPU load set ki hui limit (threshold) ko cross karta hai, toh CloudWatch Alarm **Scaling Policy** ko trigger kar deta hai.
+4. **Step 4 (Increases/Decreases capacity):** Scaling Policy Auto Scaling group ki desired capacity badal deti hai. Is ke natije mein ASG naye EC2 instances launch karta hai ya fuzool instances terminate kar deta hai.
+
+---
+
+### CloudWatch Metrics Details & Missing Metric Note
+
+By default, EC2 instance CloudWatch ko yeh metrics automatically bhejta hai:
+
+* **CPU Utilization** (CPU kitna use ho raha hai)
+* **Network Utilization** (Kitna data in/out ho raha hai)
+* **Disk Utilization** (Disk read/write speed)
+
+> **Important Theoretical Aspect:** Default EC2 metrics mein **Memory (RAM) Usage ka koi metric majood NAHI hota!** Amazon hypervisor level par RAM usage read nahi kar sakta. Agar aap ko RAM par scale karna hai, toh aap ko application ke andar se Custom Metric CloudWatch ko bhejni paregi.
+
+CloudWatch metric ke **3 main parameters** hote hain:
+
+* **Namespace:** Metric ka ghar ya source (jaise `AWS/EC2`).
+* **Dimensions:** Metric ka scope (jaise Auto Scaling Group ki ID, taake saare servers ka average nikala ja sake).
+* **MetricName:** Metric ka khass naam (jaise `CPUUtilization`).
+
+---
+
+### Table 17.3 Parameters for a CloudWatch alarm that triggers scaling based on CPU usage of all virtual machines belonging to an Auto Scaling group
+
+| Context | Name | Description (Roman Urdu) | Possible values (Roman Urdu) |
+| --- | --- | --- | --- |
+| **Condition** | `Statistic` | Kisi metric par apply hone wala statistical function (hisaab kitab). | `Average`, `Sum`, `Minimum`, `Maximum`, `SampleCount` |
+| **Condition** | `Period` | Metric se values ka time-based slice (waqt ka tukda) define karta hai. | Seconds (60 ka multiple, e.g., 60, 300) |
+| **Condition** | `EvaluationPeriods` | Alarm check karte waqt evaluate karne ke liye periods ki tadaad. | Integer (e.g., 1 ya 2 periods) |
+| **Condition** | `Threshold` | Alarm trigger karne ke liye tay karda limit (limit point). | Number (e.g., 75% CPU) |
+| **Condition** | `ComparisonOperator` | Statistical result ko threshold se compare karne wala mathematical operator. | `GreaterThanOrEqualToThreshold`, `GreaterThanThreshold`, `LessThanThreshold`, `LessThanOrEqualToThreshold` |
+| **Metric** | `Namespace` | Metric kis service ka hai (Source). | EC2 service ke liye `AWS/EC2` |
+| **Metric** | `Dimensions` | Metric ka scope (kis cheez par apply ho raha hai). | Auto Scaling group ka reference (saare instances ka aggregated average nikalne ke liye). |
+| **Metric** | `MetricName` | Metric ka exact naam. | Misal ke taur par, `CPUUtilization` |
+| **Action** | `AlarmActions` | Limit (threshold) cross hone par jo action trigger hoga. | Target Scaling Policy ka ARN (reference link) |
+
+**Custom Metrics:** Aap AWS ke diye gaye metrics ke alawa apni Application se **Custom Metrics** bhi CloudWatch ko bhej sakte hain—jaise Application Thread Pool Usage, Request Processing Times, ya Active User Sessions.
+
+---
+
+## Scaling based on CPU load with VMs that offer burstable performance
+
+Kuch virtual machines—jaise **T2, T3, aur T4g instance families**—burstable performance offer karti hain. Is ka matlab kya hai?
+
+**ELI5 Analogy (Aasaan Misaal):**
+In instances ke paas ek **Baseline Performance** hoti hai (jaise `t2.micro` ki baseline performance physical CPU ka sirf **10%** hoti hai). Jab server par load kam hota hai, toh yeh instance **CPU Credits** (sikka/tokens) jama karta rehta hai. Jab achanak traffic ka spike aata hai, toh yeh instance un credits ko kharch kar ke full 100% speed par **burst** (daudna) shuru kar deta hai.
+
+Lekin jab saare CPU Credits khatam ho jatay hain, toh instance zabardasti dubara apni **10% baseline** speed par wapas aa jata hai.
+
+### The Scaling Trap (Burstable Performance par scaling ka khatra)
+
+Burstable instances (T2/T3) par **CPU Load ko dekh kar Auto Scaling lagana khatarnak aur tricky ho sakta hai**.
+
+**Problem Scenario:**
+
+1. Aap ki website par load thoda sa barha.
+2. Instances ne apne saare CPU Credits kharch kar diye aur zero credits par aa gaye.
+3. Ab server ki speed 10% par drop ho gayi. Speed kam hone ki wajah se choti si request process hone mein bhi CPU 100% busy dikhayega.
+4. CloudWatch Alarm dekhega ke *"Arey Baap Re! CPU Load 100% ho gaya hai!"* aur Auto Scaling group naye servers launch karna shuru kar dega—jabke asliyat mein traffic nahi barha tha, balki sirf CPU Credits khatam huay thay!
+
+**Solution / Best Practice:**
+Agar aap Burstable (T2/T3) instances use kar rahe hain, toh CPU Utilization par scale karne ki bajaye **doosri metrics (jaise Number of Active Sessions / Load Balancer Requests)** par scale karein, ya phir Non-burstable instance families (jaise **C5, M5, C6i**) ka istemal karein jahan baseline CPU fix 100% milti hai.
+
+
+---
