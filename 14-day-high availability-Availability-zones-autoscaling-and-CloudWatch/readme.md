@@ -1740,7 +1740,6 @@ Apne AWS account ke tamam available regions dekhne ke liye CLI command:
 
 ```bash
 aws ec2 describe-regions
-
 ```
 
 #### Command Ka JSON Output:
@@ -1765,7 +1764,6 @@ aws ec2 describe-regions
         }
     ]
 }
-
 ```
 
 * `Endpoint`: Is specific region ki EC2 service se baat karne ke liye URL endpoint.
@@ -1780,7 +1778,6 @@ Kisi specific region (e.g., `us-east-1`) ke Availability Zones dekhne ke liye co
 
 ```bash
 aws ec2 describe-availability-zones --region us-east-1
-
 ```
 
 #### Command Ka JSON Output Breakdown:
@@ -1821,7 +1818,6 @@ aws ec2 describe-availability-zones --region us-east-1
         }
     ]
 }
-
 ```
 
 #### Key Output Parameters Explained:
@@ -1865,7 +1861,7 @@ Karobar (business) ke nuqte-nazar se Disaster Recovery ki ehammiyat ko naapne ke
 
 ### Figure 13.8 Analysis
 
-Referencing **Figure 13.8** (`image_c1883b.png`):
+Referencing **Figure 13.8**:
 
 <div align="center">
   <img src="./images/08.png" width="600"/>
