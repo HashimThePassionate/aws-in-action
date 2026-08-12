@@ -532,3 +532,355 @@ Agar aap Burstable (T2/T3) instances use kar rahe hain, toh CPU Utilization par 
 
 
 ---
+
+## Decoupling your dynamic EC2 instance pool
+
+Jab aap ko apni blogging platform par visitors ki demand ke hisab se virtual machines ki tadaad ko kam ya ziada karna hota hai, toh Auto Scaling groups aap ki madad karte hain taake bilkul ek jaise (uniform) servers launch ho sakain. SATH HI, Scheduled Actions aur CloudWatch Alarms automatically un servers ki tadaad ko badal dete hain.
+
+Lekin sab se bara sawaal yeh paida hota hai: **Naye aur purane users aap ke EC2 instances tak pahunchenge kaise taake blog ke articles read kar sakain? HTTP requests ko kahan bheja jana chahiye?**
+
+Chapter 14 mein hum ne **Decoupling** (System ke hisson ko ek doosre se alag karna) ka concept samjha tha:
+
+1. **Synchronous Decoupling:** Elastic Load Balancer (ELB) ke zariye.
+2. **Asynchronous Decoupling:** Simple Queue Service (SQS) ke zariye.
+
+**Aasaan Misaal (ELI5):**
+Maan lein aap ki dukaan par achanak bohot saare customers aa gaye hain aur aap ne andar kaam karne wale worker (servers) barha diye hain. Lekin agar bahar ka darwaza (IP Address) baar baar badalta rahe, toh customer pareshan ho jayenge. Is liye bahar ka main gate (Entry Point) hamesha **ek hi** rehna chahiye, chahe andar 2 workers kaam kar rahe hon ya 100 workers.
+
+Auto Scaling ka istemal karne ke liye zaroori hai ke EC2 instances ko client (users) se alag (decouple) rakha jaye taake bahar ka interface badle bina piche servers ki tadaad badal sakay.
+
+---
+
+### Figure 17.5 Decoupling allows you to scale the number of virtual machines dynamically.
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+Is figure mein Decoupling ke do main tareeqon ko samjhaya gaya hai:
+
+1. **Synchronous Decoupling (Upar wala hissa):**
+* **Request:** User ki taraf se aane wali HTTP request.
+* **Load Balancer:** Central Entry Point ke taur par kaam karta hai.
+* **Autoscaling Pool:** Load Balancer requests ko piche majood Virtual Machines ($1..n$) par baant (distribute) deta hai. Internal servers 2 hon ya 10, user ko sirf ek Load Balancer ka URL dikhta hai.
+
+
+2. **Asynchronous Decoupling (Niche wala hissa):**
+* **Message Producers:** Web applications ya systems jo kaam generate karte hain.
+* **SQS Message Queue:** Ek temporary godam (buffer) jahan aane wale saare kaam/messages line mein lag jatay hain.
+* **Virtual Machines & Autoscaling:** Virtual Machines is Queue se ek ek kar ke message uthati hain (**polling**) aur process karti hain. Agar Queue mein messages barhne lagein, toh Auto Scaling piche naye servers add kar deta hai.
+
+
+
+---
+
+### Stateless Server Ki Shart (Prerequisite)
+
+Decoupled aur Scalable applications banane ke liye **Stateless Servers** ka hona zaroori hai. Stateless server ka matlab hai ke server apne andar koi data, uploaded files, ya user session save nahi karta, balki saara shared data kisi remote database ya storage par rakhta hai.
+
+Book mein is ke **2 real-world examples** diye gaye hain:
+
+* **WordPress Blog (Synchronous Example):**
+* **Decoupling:** Elastic Load Balancer (ELB) ke zariye.
+* **Scaling:** Autoscaling aur CloudWatch (CPU Utilization metric par).
+* **Data Storage (Statelessness):** Posts aur metadata **Amazon RDS (MySQL)** mein, jabke uploaded images aur files **Amazon EFS (Network Filesystem)** par store hoti hain.
+
+
+* **URL2PNG Web Application (Asynchronous Example):**
+* **Decoupling:** Simple Queue Service (SQS) Queue ke zariye.
+* **Scaling:** Autoscaling aur CloudWatch (Queue Length / Messages ki tadaad par).
+* **Data Storage (Statelessness):** Metadata **Amazon DynamoDB (NoSQL)** mein, aur screenshot images **Amazon S3 (Object Store)** par store hoti hain.
+
+
+
+---
+
+## Scaling a dynamic EC2 instance pool synchronously decoupled by a load balancer
+
+HTTP(S) requests ka jawab dena ek **Synchronous Task** (fawri jawab chaahne wala kaam) hai. Jab koi user aap ki website open karta hai, toh web server ko usay usi waqt screen par page dikhana hota hai. Dynamic EC2 pool chalate waqt Load Balancer ka istemal karna sab se best practice hai, kyunke yeh tamam requests ko multiple EC2 instances par baant deta hai.
+
+**Real-world Problem Scenario:**
+Aap ki company ka ek official blog WordPress par chal raha hai jahan announcements ki jati hain. Marketing team shikayat karti hai ke shaam ke waqt (jab daily traffic peak par hota hai) website bohot slow ho jati hai aur kabhi kabhi "Timeout" error de deti hai. Aap AWS ki **Elasticity** ka istemal kar ke load ke hisab se servers ki tadaad badhana chahte hain.
+
+---
+
+### Figure 17.6 Autoscaling web servers running WordPress, storing data on RDS and EFS, decoupled with a load balancer scaling based on load
+
+<div align="center">
+  <img src="./images/06.png" width="600"/>
+</div>
+
+Is figure mein Highly Available aur Scalable WordPress Architecture ko step-by-step samjhaya gaya hai:
+
+1. **Users:** Blog visitors jo website open kar rahe hain.
+2. **Load Balancer:** Tamam visitors ki HTTP requests pehle Load Balancer par aati hain (Fixed Single Entry Point).
+3. **Virtual Machines (EC2 Pool):** Load Balancer requests ko active EC2 instances (Apache + WordPress PHP) par bhejta hai.
+4. **Amazon RDS (MySQL Database):** Saare EC2 instances ek hi **Multi-AZ RDS Database** se connect hote hain jahan blog ka textual data store hota hai.
+5. **EFS Network Filesystem:** Saare EC2 instances **Amazon EFS** se Jude hote hain taake sabhi servers par ek hi WordPress code aur user uploads (images/videos) available hon.
+6. **CloudWatch & Autoscaling:** EC2 instances apna CPU metrics CloudWatch ko bhejte hain. Jab CPU load barhta hai, CloudWatch alarm Auto Scaling ko trigger karta hai, aur ASG naye EC2 instances pool mein add kar deta hai.
+
+---
+
+### CloudFormation Deployment Command
+
+Is scalable WordPress architecture ko AWS par spin-up (create) karne ke liye yeh command chalayi jati hai:
+
+```bash
+aws cloudformation create-stack --stack-name wordpress \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/chapter17/wordpress.yaml \
+  --parameters "ParameterKey=WordpressAdminPassword,ParameterValue=$Password" \
+  --capabilities CAPABILITY_IAM
+
+```
+
+#### Command Detail Breakdown:
+
+* `aws cloudformation create-stack`: AWS CLI ko CloudFormation infrastructure stack create karne ki instruction deta hai.
+* `--stack-name wordpress`: Ban'ne wale stack ka naam `wordpress` rakhta hai.
+* `--template-url [https://s3.amazonaws.com/awsinaction-code3/chapter17/wordpress.yaml](https://s3.amazonaws.com/awsinaction-code3/chapter17/wordpress.yaml)`: S3 bucket mein majood CloudFormation YAML file ka link jahan poora infrastructure code likha hua hai.
+* `--parameters "ParameterKey=WordpressAdminPassword,ParameterValue=$Password"``: WordPress Database/Admin ke liye password parameter pass karta hai.
+* `--capabilities CAPABILITY_IAM`: CloudFormation ko naye IAM Roles aur Instance Profiles banane ki explicit permission deta hai.
+
+*(Note: Is stack ko ban'ne mein lagbhag 15 minute lagte hain).*
+
+---
+
+### Listing 17.4 Creating a scalable, HA WordPress setup, part 1
+
+Is template block mein EC2 instances launch karne ke liye **Launch Template** create kiya gaya hai:
+
+```yaml
+LaunchTemplate:
+  Type: 'AWS::EC2::LaunchTemplate'
+  Metadata:
+    # [...]
+  Properties:
+    LaunchTemplateData:
+      IamInstanceProfile:
+        Name: !Ref InstanceProfile
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      Monitoring:
+        Enabled: false
+      InstanceType: 't2.micro'
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          Groups:
+            - !Ref WebServerSecurityGroup
+      UserData:
+        # [...]
+
+```
+
+#### Code Detail Breakdown:
+
+* `LaunchTemplate:` -> CloudFormation resource ka name.
+* `Type: 'AWS::EC2::LaunchTemplate'` -> EC2 Launch Template resource type define karta hai.
+* `Metadata:` -> EC2 instance ki bootstrapping configuration info.
+* `Properties:` -> Launch template ki main settings.
+* `LaunchTemplateData:` -> Instances ke blueprint ka data.
+* `IamInstanceProfile:` -> Instance ke sath IAM profile attach karta hai.
+* `Name: !Ref InstanceProfile` -> Virtual machines ko AWS services (jaise EFS, CloudWatch) se secure baat karne ke ijazat deta hai.
+* `ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]` -> Dynamic lookup function jo aap ke current AWS Region ke mutabiq sahi Amazon Machine Image (AMI) select karta hai.
+* `Monitoring:` -> Monitoring settings block.
+* `Enabled: false` -> Extra kharchon se bachne ke liye EC2 Detailed Monitoring (1-minute metrics) ko disable rakha gaya hai aur Basic Monitoring (5-minute metrics) use ho rahi hai. Production mein isay `true` rakha jata hai.
+* `InstanceType: 't2.micro'` -> Free tier eligible hardware size (1 vCPU, 1GB RAM).
+* `NetworkInterfaces:` -> Virtual Network interfaces card list.
+* `- AssociatePublicIpAddress: true` -> Instance ko public internet access ke liye Public IP deta hai.
+* `DeviceIndex: 0` -> Primary Network interface (eth0).
+* `Groups:` -> Security Groups list.
+* `- !Ref WebServerSecurityGroup` -> Web server Security Group attach karta hai jo HTTP requests allow karta hai.
+* `UserData:` -> Automated startup bash script jo WordPress ko install, configure aur EFS drive ko mount karti hai.
+
+---
+
+### Listing 17.5 Creating a scalable, HA WordPress setup, part 2
+
+Is block mein **Auto Scaling Group** define kiya gaya hai jo Launch Template ko istemal karta hai:
+
+```yaml
+AutoScalingGroup:
+  Type: 'AWS::AutoScaling::AutoScalingGroup'
+  DependsOn:
+    - EFSMountTargetA
+    - EFSMountTargetB
+  Properties:
+    TargetGroupARNs:
+      - !Ref LoadBalancerTargetGroup
+    LaunchTemplate:
+      LaunchTemplateId: !Ref LaunchTemplate
+      Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'
+    MinSize: 2
+    MaxSize: 4
+    HealthCheckGracePeriod: 300
+    HealthCheckType: ELB
+    VPCZoneIdentifier:
+      - !Ref SubnetA
+      - !Ref SubnetB
+    Tags:
+      - PropagateAtLaunch: true
+        Value: wordpress
+        Key: Name
+
+```
+
+#### Code Detail Breakdown:
+
+* `AutoScalingGroup:` -> Auto Scaling Group resource block.
+* `Type: 'AWS::AutoScaling::AutoScalingGroup'` -> ASG resource type.
+* `DependsOn:` -> **Bohot Ahem Dependency Block!** CloudFormation ko paband karta hai ke pehle `EFSMountTargetA` aur `EFSMountTargetB` banayein. Kyunke EC2 instances start hote hi EFS mount karte hain, agar EFS Mount Targets tayyar nahi honge toh bootstrap script fail ho jayegi!
+* `TargetGroupARNs:` -> Load Balancer target group link.
+* `- !Ref LoadBalancerTargetGroup` -> Naye servers ko automatic ALB ke target group mein add/remove karta hai.
+* `LaunchTemplate:` -> Blueprint reference.
+* `LaunchTemplateId: !Ref LaunchTemplate` -> Listing 17.4 wale Launch Template ko reference karta hai.
+* `Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'` -> Always latest version use karta hai.
+* `MinSize: 2` -> High Availability ke liye kam az kam 2 servers hamesha chalte rahenge.
+* `MaxSize: 4` -> Upper limit (4 se ziada servers launch nahi honge).
+* `HealthCheckGracePeriod: 300` -> Naye server ko bootstrap hone aur web server tayyar hone ke liye **5 minute (300 seconds)** ka grace period deta hai pehle se unhealthy mark karne se pehle.
+* `HealthCheckType: ELB` -> Health status check karne ke liye Load Balancer ke health check HTTP endpoints istemal karta hai.
+* `VPCZoneIdentifier:` -> Subnet placement.
+* `- !Ref SubnetA` / `- !Ref SubnetB` -> High Availability ke liye servers ko do alag alag Availability Zones ke subnets mein launch karta hai.
+* `Tags:` -> Resource Tagging.
+* `PropagateAtLaunch: true` -> Is tag (`Name: wordpress`) ko naye launch hone wale har EC2 instance par automatic copy/apply kar deta hai.
+
+---
+
+### Target-Tracking Scaling Policy Concept
+
+AWS mein **Target-Tracking Scaling Policy** bilkul aap ke ghar ke **Thermostat** (AC/Heater Control) ki tarah kaam karti hai:
+Aap ek Target Value set kar dete hain (jaise temperature 24°C), aur thermostat khud hi cooling ko kam ya ziada karta hai. Yahan aap target set karte hain (jaise CPU 70%), aur AWS background mein khud hi CloudWatch Alarms aur adjustments handle karta hai.
+
+**Predefined Metric Specifications:**
+
+1. `ASGAverageCPUUtilization`: Auto Scaling Group ke saare instances ka average CPU load.
+2. `ALBRequestCountPerTarget`: Application Load Balancer se har instance ko aane wali requests ki ginti.
+3. `ASGAverageNetworkIn` / `ASGAverageNetworkOut`: Netork traffic throughput (Bytes in/out).
+
+> **Important Rule (Metric Requirement for Target Tracking):**
+> Target tracking ke liye sirf wahi metric use ho sakti hai jo **Proportional** ho—yani naya instance add karne se woh metric sidha kam hoti ho!
+> *Misal:* CPU load 100% hai, doosra server add karne se CPU load baant kar 50% ho jayega (Proportional).
+> *Ghalti:* **Request Latency (Response Time)** ko target tracking mein use NAHI kiya ja sakta, kyunke naya EC2 server add karne se response latency ka kam hona zaroori nahi (ho sakta hai slow response ki wajah Database bottleneck ho).
+
+---
+
+### Listing 17.6 Creating a scalable, HA WordPress setup, part 3
+
+Is block mein Target Tracking Policy ko configure kiya gaya hai:
+
+```yaml
+ScalingPolicy:
+  Type: 'AWS::AutoScaling::ScalingPolicy'
+  Properties:
+    AutoScalingGroupName: !Ref AutoScalingGroup
+    PolicyType: TargetTrackingScaling
+    TargetTrackingConfiguration:
+      PredefinedMetricSpecification:
+        PredefinedMetricType: ASGAverageCPUUtilization
+      TargetValue: 70
+      EstimatedInstanceWarmup: 60
+
+```
+
+#### Code Detail Breakdown:
+
+* `ScalingPolicy:` -> Policy resource definition.
+* `Type: 'AWS::AutoScaling::ScalingPolicy'` -> Scaling policy resource type.
+* `AutoScalingGroupName: !Ref AutoScalingGroup` -> Jis ASG par yeh policy apply honi hai.
+* `PolicyType: TargetTrackingScaling` -> Target tracking scaling mechanism set karta hai.
+* `TargetTrackingConfiguration:` -> Target Tracking configuration block.
+* `PredefinedMetricSpecification:` -> Built-in metric selection.
+* `PredefinedMetricType: ASGAverageCPUUtilization` -> ASG ke tamaam instances ke Average CPU utilization par scale karega.
+* `TargetValue: 70` -> Target CPU Load **70%** set karta hai.
+* `EstimatedInstanceWarmup: 60` -> **Warmup Period (60 Seconds):** Naya launch hone wala server jab tak bootstrap hota hai, us ke pehle 60 seconds ke CPU Spike ko CloudWatch calculation se bahar rakhta hai taake fuzool mein mazeed extra servers launch na hon.
+
+---
+
+### WordPress Verification Steps (Stack Complete hone ke baad)
+
+Jab CloudFormation Stack status `CREATE_COMPLETE` ho jaye:
+
+1. CloudFormation Console mein `wordpress` stack par click karein aur **Outputs** tab mein jayein.
+2. `URL` key ke samne diye gaye link ko browser mein kholein.
+3. Navigation bar mein **Log In** link par click karein.
+4. Username `admin` aur woh Password dalein jo aap ne CLI command mein pass kiya tha.
+5. Left menu se **Posts** par click karein.
+6. **Add New** par click karein.
+7. Title aur Text likhein, aur ek image upload karein.
+8. **Publish** par click karein.
+9. **View Post** link par click kar ke blog post ko dekhein.
+
+---
+
+## Simple HTTP load test
+
+Hum WordPress setup par artificial traffic bhej kar load test karne ke liye **Apache Bench (`ab`)** tool ka istemal karenge (jo `httpd-tools` package ka hissa hai).
+
+### Load Test Script Command
+
+```bash
+ab -n 500000 -c 15 -t 300 -s 120 -r $UrlLoadBalancer
+
+```
+
+#### Command Detail Breakdown:
+
+* `ab`: Apache Bench testing tool execution.
+* `-n 500000`: Total **500,000 (5 Lakh)** HTTP requests bhejega.
+* `-c 15`: Single time par **15 Concurrent Threads** (ek sath 15 requests) chalaye ga.
+* `-t 300`: Load test ki Maximum Time limit **300 seconds (5 Minutes)** rakhta hai.
+* `-s 120`: Connection Timeout limit **120 seconds** set karta hai.
+* `-r`: Socket errors/catch par test ko abort nahi hone deta, continue rakhta hai.
+* `$UrlLoadBalancer`: Load balancer ka DNS URL environment variable.
+
+---
+
+### Updating Stack for Automated Load Test
+
+Book ne automated load test ke liye ek dedicated CloudFormation stack update template diya hai:
+
+```bash
+aws cloudformation update-stack --stack-name wordpress \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/chapter17/wordpress-loadtest.yaml \
+  --parameters ParameterKey=WordpressAdminPassword,UsePreviousValue=true \
+  --capabilities CAPABILITY_IAM
+
+```
+
+#### Command Detail Breakdown:
+
+* `aws cloudformation update-stack`: Pehle se bane stack ko update karta hai.
+* `--stack-name wordpress`: Stack ka naam.
+* `--template-url .../wordpress-loadtest.yaml`: Load test setup wali updated YAML template.
+* `--parameters ParameterKey=WordpressAdminPassword,UsePreviousValue=true`: Purane password ko hi dobara retention/use karne ka instruction.
+* `--capabilities CAPABILITY_IAM`: IAM updates permissions.
+
+---
+
+### Load Testing Monitoring (Console Steps)
+
+Load test execution ke dauran console mein yeh 5 steps hote hue dekhein:
+
+1. **CloudWatch Service:** AWS Console mein CloudWatch kholein aur left menu se **Alarms** par click karein.
+2. **Alarm High State:** Load test shuru hone ke lagbhag 10 minute baad `TargetTracking-wordpress-AutoScalingGroup--AlarmHigh-` alarm **ALARM State** (red) mein chala jayega.
+3. **EC2 Instances Scaling Up:** EC2 Console khol kar active instances dekhein. Auto scaling **2 naye EC2 instances launch karega**. Ab total **5 instances** honge (4 WordPress Web Servers + 1 Load Test Runner Server).
+4. **Alarm Low State:** Load test khatam hone par CloudWatch par `TargetTracking-wordpress-AutoScalingGroup--AlarmLow-` alarm **ALARM State** mein jayega (kyunke CPU usage drop ho gaya hai).
+5. **EC2 Instances Scaling Down:** EC2 Console mein 2 extra instances terminate (disappear) ho jayenge. Aakhir mein total **3 instances** bachein ge (2 Original Web Servers + 1 Load Test Runner Server).
+
+*(Is poore scaling cycle mein lagbhag 30 minutes lagte hain).*
+
+---
+
+## Cleaning up
+
+Practical khatam karne ke baad account se tamam resources delete kar ke bill se bachne ke liye yeh command chalayein:
+
+```bash
+aws cloudformation delete-stack --stack-name wordpress
+
+```
+
+#### Command Detail Breakdown:
+
+* `aws cloudformation delete-stack`: CloudFormation ko order deta hai ke `wordpress` stack ke zariye banaye gaye saare resources (EC2, ASG, Load Balancer, EFS, RDS, Security Groups) ko completely delete aur clean kar de.
+
+---
