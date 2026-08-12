@@ -1,5 +1,42 @@
 # Achieving high availability: Availability zones, autoscaling, and CloudWatch
 
+<details>
+  <summary><strong>📚 Table of contents</strong></summary>
+
+  <ul>
+    <li><a href="#this-chapter-covers">This chapter covers</a>
+      <ul>
+        <li><a href="#real-world-example-dukaan-ki-misaal-online-shop">Real-World Example</a></li>
+        <li><a href="#virtual-machine-kharab-hone-ki-4-badi-wajahein-system-failure-scenarios">Failure Scenarios</a></li>
+        <li><a href="#aws-kya-karta-hai-aur-aap-ki-kya-zimmedari-hai">AWS Responsibility</a></li>
+      </ul>
+    </li>
+    <li><a href="#examples-are-100-covered-by-the-free-tier">Free Tier</a></li>
+    <li><a href="#high-availability-kya-hai-definition">High Availability</a></li>
+    <li><a href="#high-availability-vs-fault-tolerance">High Availability vs Fault Tolerance</a></li>
+    <li><a href="#aws-ke-building-blocks-ha-banane-ke-zariye">AWS Building Blocks</a></li>
+    <li><a href="#recovering-from-ec2-instance-failure-with-cloudwatch">Recovering EC2 with CloudWatch</a>
+      <ul>
+        <li><a href="#real-world-scenario-agile-team-aur-jenkins-ci-server">Jenkins Scenario</a></li>
+        <li><a href="#aws-cloudwatch">AWS CloudWatch</a></li>
+        <li><a href="#cloudwatch-alarm-ke-3-component-aur-3-states">CloudWatch Alarm</a></li>
+      </ul>
+    </li>
+    <li><a href="#recovering-from-a-data-center-outage-with-an-auto-scaling-group">Recovering from a Data Center Outage</a></li>
+    <li><a href="#pitfall-recovering-network-attached-storage">Pitfall: Network-Attached Storage</a></li>
+    <li><a href="#pitfall-network-interface-recovery">Pitfall: Network Interface Recovery</a></li>
+    <li><a href="#insights-into-availability-zones">Insights into Availability Zones</a></li>
+    <li><a href="#architecting-for-high-availability">Architecting for High Availability</a>
+      <ul>
+        <li><a href="#rto-and-rpo-comparison-for-a-single-ec2-instance">RTO / RPO Comparison</a></li>
+      </ul>
+    </li>
+    <li><a href="#aws-services-come-with-different-high-availability-guarantees">AWS Services & SLA</a></li>
+    <li><a href="#summary">Summary</a></li>
+  </ul>
+
+</details>
+
 ## This chapter covers
 
 Is chapter mein hum cloud engineering aur AWS ke sab se aham hissay ko samajhne wale hain. Writer batata hai ke is chapter mein hum char (4) mukhya (main) cheezein seekhenge:
