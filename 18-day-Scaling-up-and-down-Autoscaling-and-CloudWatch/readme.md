@@ -135,3 +135,178 @@ Hum ne Stateless Server ka concept Part 3 mein samjha tha aur Decoupling ko Chap
 
 
 ---
+
+
+## Managing a dynamic EC2 instance pool
+
+Tasavvur karein ke aap ko ek aisi web application (jaise blog ki website) chalani hai jo traffic ke hisab se khud ko kam ya ziada kar sake. Jab website par visitors/requests ki tadaad barhne lage, toh system ko khud-ba-khud bilkul ek jaise naye virtual machines (EC2 instances) chalu (launch) karne chahiye. Aur jab visitors kam ho jayein, toh fuzool chalne wale virtual machines ko khud-ba-khud band (terminate) kar dena chahiye.
+
+Is poore kaam ko bagair kisi insaan ke (automated tareeqay se) chalane ke liye, app ki tamam configuration aur deployment **Bootstrapping** ke dauran honi chahiye. Bootstrapping ka matlab hai jab naya server pehli baar on hota hai, toh woh khud hi saara zaroori software aur code install kar ke ready ho jaye, bina kisi engineer ke button dabaye.
+
+Is section mein aap sab se pehle ek **Auto Scaling group (ASG)** banana seekhenge. Phir aap dekhenge ke Scheduled Actions (khas waqt ke mutabiq) ke zariye EC2 instances ki tadaad kaise badli jati hai. Is ke baad CloudWatch metrics (jaise CPU utilization) ko dekh kar automatically scale karna seekhenge.
+
+Auto Scaling group aap ko dynamic EC2 pool ko 2 tareeqon se manage karne ki ijazat deta hai:
+
+* **Dynamically adjust the number of virtual machines that are running:** Chalne wale virtual machines ki tadaad ko load ke hisab se khud-ba-khud kam ya ziada karna.
+* **Launch, configure, and deploy uniform virtual machines:** Bilkul ek jaise (uniform) virtual machines ko launch, configure, aur un par app deploy karna.
+
+Auto Scaling group hamesha aap ki tay karda limits (bounds) ke andar hi phailta aur sikudta hai:
+
+1. **Minimum 2 Virtual Machines:** Kam az kam 2 servers set karne se yeh faida hota hai ke agar ek Data Center (Availability Zone) mein koi kharabi ya bijli ka outage aa jaye, tab bhi doosre Data Center mein doosra server chal raha hoga (Fault Tolerance).
+2. **Maximum Virtual Machines:** Ziada se ziada limit set karne se yeh faida hota hai ke aap ka cloud ka bill aap ke budget se bahar na nikal jaye.
+
+Autoscaling ke **3 mukhya hissey (Parts)** hote hain:
+
+* **A launch template that defines the size, image, and configuration of virtual machines:** Ek Launch Template jo naye banne wale virtual machines ka size, Operating System (Image), aur configuration (blueprint) tay karti hai.
+* **An Auto Scaling group that specifies how many virtual machines need to be running based on the launch template:** Ek Auto Scaling group jo yeh hisab rakhta hai ke Launch Template ke zariye kitne virtual machines active rehne chahiye.
+* **Scaling plans that adjust the desired number of EC2 instances in the Auto Scaling group based on a plan or dynamically:** Scaling Plans jo time-table ya live load ke hisab se Auto Scaling group ke andar desired servers ki tadaad ko badalte hain.
+
+Agar aap chahte hain ke multiple EC2 instances mil kar kaam karein, toh yeh zaroori hai ke har naya server bilkul ek jaisa (identical/homogeneous) ho. Naye servers ka blueprint banane ke liye hum **Launch Template** ka istemal karte hain.
+
+---
+
+## Figure 17.2 Autoscaling consists of an Auto Scaling group and a launch template, launching and terminating uniform virtual machines.
+
+Is figure mein Autoscaling ke poore architecture aur working mechanism ko samjhaya gaya hai:
+
+<div align="center">
+  <img src="./images/02.png" width="600"/>
+</div>
+
+1. **Top Box (Dynamic Pool & Limits):** Autoscaling EC2 instances ka ek dynamic pool define karti hai. Aap is mein minimum, maximum, aur desired number of virtual machines set karte hain.
+2. **Auto Scaling group:** Yeh group instances ki ginti ko manage karta hai. Jab naye server ki zaroorat hoti hai, toh yeh Launch Template ko signal bhejta hai ki *"Naya Virtual Machine Launch Karo"*.
+3. **Launch Template (Blueprint):** Yeh virtual machine ka naksha (blueprint) hai. Is nakshe ko dekh kar naye exact identical (ek jaise) EC2 instances launch hote hain.
+4. **Health Monitoring & Termination:** Auto Scaling group har waqt servers ki health check karta rehta hai (EC2 State ya Load Balancer ke zariye). Agar koi server kharab (unhealthy) ho jaye ya traffic kam ho jaye, toh Auto Scaling group us server ko terminate (delete) kar deta hai.
+5. **Bottom Note (Stateless & Decoupled):** Yeh saari EC2 fleet (servers) hamesha **Stateless** (jahan data save na ho) aur **Decoupled** (ek doosre se alag) honi chahiye taake kisi ek server ke aane ya jaane se application par koi bura asar na pare.
+
+---
+
+### Table 17.1 Launch template parameters
+
+| Name | Description (Roman Urdu) | Possible values (Roman Urdu) |
+| --- | --- | --- |
+| **ImageId** | Woh image (OS) jis se virtual machine shuru ki jati hai. | Amazon Machine Image (AMI) ki ID (jaise `ami-028f2b5ee08012131`). |
+| **InstanceType** | Nayi virtual machines ka size aur hardware capacity. | Instance type (jaise ke `t2.micro` ya modern `t3.micro`). |
+| **UserData** | Virtual machine ke liye user data jo bootstrapping (startup) ke dauran script execute karne ke liye istemal hota hai. | BASE64-encoded string ya plain bash script. |
+| **NetworkInterfaces** | Virtual machine ke network interfaces ko configure karta hai. Sab se ahem baat yeh hai ke yeh parameter aap ko instance ke sath public IP address attach karne ki ijazat deta hai. | Network interface configurations ki list (Security groups aur Public IP settings). |
+| **IamInstanceProfile** | Ek IAM role ke sath linked IAM instance profile attach karta hai taake server doosri AWS services se secure baat kar sake. | IAM instance profile ka naam ya Amazon Resource Name (ARN, yani ek ID). |
+
+---
+
+Launch template banane ke baad, aap ek Auto Scaling group banate hain jo is template ka hawala (reference) deta hai. Auto Scaling group mein 3 main numbers hote hain:
+
+* **Desired Capacity:** Matlooba servers ki tadaad jo har waqt chalni chahiye. Agar chalne wale servers is number se kam honge, toh ASG naye servers add karega. Agar chalne wale servers is number se ziada honge, toh ASG extra servers ko terminate kar dega. Desired capacity ko aap manually, schedule par, ya load ke hisab se badal sakte hain.
+* **Minimum Size (MinSize):** Sehna yogya sab se kam limit. ASG kabhi bhi servers ki tadaad ko is se neche nahi girne dega.
+* **Maximum Size (MaxSize):** Oopri limit. ASG kabhi bhi servers ki tadaad ko is limit se aage nahi barhne dega.
+
+Auto Scaling group yeh bhi dekhta rehta hai ke EC2 instances healthy (sahi salamat) hain ya nahi. Agar koi instance kharab ho jaye, toh ASG usay automatically delete kar ke naya instance launch kar deta hai.
+
+---
+
+### Table 17.2 Auto Scaling group parameters
+
+| Name | Description (Roman Urdu) | Possible values (Roman Urdu) |
+| --- | --- | --- |
+| **DesiredCapacity** | Matlooba (desired) healthy virtual machines ki tadaad. | Integer (Koi bhi mukammal adad, jaise 2, 4). |
+| **MaxSize** | Virtual machines ki maximum tadaad; oopri scaling limit (upper scaling limit). | Integer. |
+| **MinSize** | Virtual machines ki minimum tadaad; nichli scaling limit (lower scaling limit). | Integer. |
+| **HealthCheckType** | Auto Scaling group virtual machines ki health kis tarah check karti hai. | `EC2` (instance ki basic hardware/OS health) ya `ELB` (load balancer ke zariye application ke URL ki health check). |
+| **HealthCheckGracePeriod** | Nayi instance launch hone ke baad health check ko us waqt tak pause rakha jata hai jab tak instance mukammal bootstrap na ho jaye. | Sekondon ki tadaad (Number of seconds, e.g., 300). |
+| **LaunchTemplate** | Virtual machines shuru karte waqt blueprint ke tor par istemal hone wale launch template ki ID (`LaunchTemplateId`) aur version. | Launch template ki ID aur version. |
+| **TargetGroupARNs** | Load balancer ke target groups, jahan autoscaling nayi instances ko khud ba khud register karti hai. | Target group ARNs ki list. |
+| **VPCZoneIdentifier** | Subnets ki list jin mein EC2 instances launch karni hain. | Kisi VPC ke subnet identifiers ki list. |
+
+Agar aap `VPCZoneIdentifier` mein ek se ziada subnets dete hain, toh Auto Scaling group naye EC2 instances ko un saare subnets (aur multiple Availability Zones) mein barabar baant (evenly distribute) kar ke launch karta hai taake high availability mile.
+
+---
+
+## Don’t forget to define a health check grace period
+
+Agar aap apne Auto Scaling group ke liye ELB (Load Balancer) ka health check istemal kar rahe hain, toh zaroor **HealthCheckGracePeriod** bhi set karein.
+
+**Yeh kyun zaroori hai?**
+Jab naya EC2 instance launch hota hai, toh usay start hone, operating system load karne, aur UserData script ke zariye web server (jaise Apache HTTPD) install karne mein 1 se 2 minute ka waqt lagta hai. Agar aap grace period nahi denge, toh Load Balancer pehle hi second mein check karega, application ko "Down" payee ga, aur ASG us naye server ko useless samajh kar terminate kar dega!
+
+Grace period wo waqt hai jab tak ASG naye server par health check failures ko ignore karta hai. Ek aam web application ke liye **5 minute (300 seconds)** ka grace period bilkul suitable hota hai.
+
+---
+
+## Listing 17.1 Auto Scaling group and launch template for a web app
+
+Niche di gayi CloudFormation YAML template ek dynamic EC2 pool ko setup karti hai:
+
+```yaml
+LaunchTemplate:
+  Type: 'AWS::EC2::LaunchTemplate'
+  Properties:
+    LaunchTemplateData:
+      IamInstanceProfile:
+        Name: !Ref InstanceProfile
+      ImageId: 'ami-028f2b5ee08012131'
+      InstanceType: 't2.micro'
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          Groups:
+            - !Ref WebServerSecurityGroup
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -x
+          yum -y install httpd
+AutoScalingGroup:
+  Type: 'AWS::AutoScaling::AutoScalingGroup'
+  Properties:
+    TargetGroupARNs:
+      - !Ref LoadBalancerTargetGroup
+    LaunchTemplate:
+      LaunchTemplateId: !Ref LaunchTemplate
+      Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'
+    MinSize: 2
+    MaxSize: 4
+    HealthCheckGracePeriod: 300
+    HealthCheckType: ELB
+    VPCZoneIdentifier:
+      - !Ref SubnetA
+      - !Ref SubnetB
+
+```
+
+### Template Code Details:
+
+* `LaunchTemplate:` -> AWS CloudFormation mein Launch Template resource create karne ki shuruaat.
+* `Type: 'AWS::EC2::LaunchTemplate'` -> AWS ko bataya ja raha hai ke yeh EC2 Launch Template ka resource hai.
+* `Properties:` -> Template ki configurations aur settings ka section.
+* `LaunchTemplateData:` -> Instance ke andar ki saari main details yahan di jati hain.
+* `IamInstanceProfile:` -> Instance ke sath IAM profile jodne ka block.
+* `Name: !Ref InstanceProfile` -> Ek pehle se bane hue `InstanceProfile` ka reference de raha hai taake EC2 ko AWS permissions mil sakain.
+* `ImageId: 'ami-028f2b5ee08012131'` -> Amazon Machine Image ki specific ID jo bata rahi hai ke Operating System konsa load hoga.
+* `InstanceType: 't2.micro'` -> Instance ka hardware size (1 vCPU, 1 GB RAM).
+* `NetworkInterfaces:` -> Virtual Network Card ki settings.
+* `- AssociatePublicIpAddress: true` -> Is baat ko yaqeen banata hai ke har naye server ko internet se direct access ke liye ek Public IP mile.
+* `DeviceIndex: 0` -> Primary network card (eth0) ki position set karta hai.
+* `Groups:` -> Security groups attach karne ki jagah.
+* `- !Ref WebServerSecurityGroup` -> Web server ke Security Group ka reference de raha hai (jo HTTP/HTTPS firewall rules apply karta hai).
+* `UserData:` -> Server boot hote hi chalne wali script ka block.
+* `'Fn::Base64': !Sub |` -> UserData script ko Base64 format mein encode karta hai jaisa ke AWS EC2 ko darkaar hota hai.
+* `#!/bin/bash -x` -> Linux script ka header jo commands ko debug mode (`-x`) ke sath execute karta hai.
+* `yum -y install httpd` -> Apache Web Server (httpd) ko automatically bina kisi human prompt (`-y`) ke install karta hai.
+* `AutoScalingGroup:` -> Auto Scaling Group resource ki shuruaat.
+* `Type: 'AWS::AutoScaling::AutoScalingGroup'` -> AWS ko batata hai ke yeh Auto Scaling Group ka resource hai.
+* `Properties:` -> ASG ki settings.
+* `TargetGroupARNs:` -> Load Balancer ke target group ki list.
+* `- !Ref LoadBalancerTargetGroup` -> Naye launch hone wale servers ko automatically Application Load Balancer ke Target Group mein register kar deta hai.
+* `LaunchTemplate:` -> ASG ko batata hai ke naye servers kis blueprint se banane hain.
+* `LaunchTemplateId: !Ref LaunchTemplate` -> Upar banaye gaye Launch Template ki ID ko link kar raha hai.
+* `Version: !GetAtt 'LaunchTemplate.LatestVersionNumber'` -> Hamesha Launch Template ka sab se **latest version** istemal karne ke liye dynamic attribute retrieve karta hai.
+* `MinSize: 2` -> ASG ko paband karta hai ke kam se kam 2 instances hamesha chalte rahein.
+* `MaxSize: 4` -> ASG ko paband karta hai ke ziada se ziada 4 instances tak hi scaling ho sakti hai.
+* `HealthCheckGracePeriod: 300` -> Server launch hone ke baad **300 seconds (5 minutes)** tak ELB health check failure par server ko terminate nahi hone deta taake bootstrapping (yum install httpd) poori ho sake.
+* `HealthCheckType: ELB` -> Server ki health ka faisla EC2 ke sath sath Load Balancer ke HTTP response checks par karta hai.
+* `VPCZoneIdentifier:` -> Subnets ki list jahan servers launch karne hain.
+* `- !Ref SubnetA` -> Pehla Subnet (e.g., Availability Zone A).
+* `- !Ref SubnetB` -> Doosra Subnet (e.g., Availability Zone B). Auto Scaling group naye servers ko in do subnets mein barabar baant kar launch karega.
+
+Mukhtasir yeh ke Auto Scaling groups ek behad mufeed tool hain jab aap ko ek se ziada ek jaise virtual machines ko alag alag Availability Zones mein chalana ho. Is ke alawa, Auto Scaling group kisi bhi kharab ya fail ho jane wale EC2 instance ko automatically delete kar ke naya replacement server chalu kar deta hai.
+
+
+---
