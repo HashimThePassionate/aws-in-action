@@ -1,5 +1,32 @@
 # Decoupling your infrastructure: Elastic Load Balancing and Simple Queue Service
 
+<details>
+  <summary><strong>📚 Table of contents</strong></summary>
+
+  <ul>
+    <li><a href="#this-chapter-covers">This chapter covers</a>
+      <ul>
+        <li><a href="#real-world-example-meeting-in-a-café-tightly-coupled-system">Real-World Example</a></li>
+        <li><a href="#decoupling-in-software-systems">Decoupling in Software Systems</a></li>
+      </ul>
+    </li>
+    <li><a href="#examples-are-100-covered-by-the-free-tier">Free Tier</a></li>
+    <li><a href="#note">Note</a></li>
+    <li><a href="#synchronous-decoupling-with-load-balancers">Synchronous Decoupling with Load Balancers</a></li>
+    <li><a href="#aws-elastic-load-balancing-elb-ki-types">ELB Types</a></li>
+    <li><a href="#setting-up-a-load-balancer-with-virtual-machines">Setting Up a Load Balancer</a></li>
+    <li><a href="#cleaning-up">Cleaning Up</a></li>
+    <li><a href="#asynchronous-decoupling-with-message-queues">Asynchronous Decoupling with Message Queues</a></li>
+    <li><a href="#turning-a-synchronous-process-into-an-asynchronous-one">Turning Synchronous into Asynchronous</a></li>
+    <li><a href="#architecture-of-the-url2png-application">URL2PNG Architecture</a></li>
+    <li><a href="#producing-messages-programmatically">Producing Messages</a></li>
+    <li><a href="#consuming-messages-programmatically">Consuming Messages</a></li>
+    <li><a href="#limitations-of-messaging-with-sqs">Limitations of Messaging with SQS</a></li>
+    <li><a href="#summary">Summary</a></li>
+  </ul>
+
+</details>
+
 ## This chapter covers
 
 Is chapter mein hum chaar (4) main cheezein seekhenge:
@@ -581,8 +608,6 @@ Bohot se log default taur par Synchronous system banate hain kyunki hum Request-
 
 ### Asynchronous Process (Naya Behtareen Tarika)
 
----
-
 ### Figure 14.6 ka Breakdown
 
 <div align="center">
@@ -594,7 +619,7 @@ Bohot se log default taur par Synchronous system banate hain kyunki hum Request-
 
 1. User web server ko URL bhejta hai.
 2. Web Server fawran ek **Random ID** generate karta hai aur message (ID + URL) **Queue** mein daal deta hai.
-3. Web Server User ko fawran bolta hai: "Aap ka kaam ho raha hai, aap is link par baad mein image dekh sakte hain" (maslan `[http://Bucket.s3.amazonaws.com/RandomID.png](http://Bucket.s3.amazonaws.com/RandomID.png)`).
+3. Web Server User ko fawran bolta hai: "Aap ka kaam ho raha hai, aap is link par baad mein image dekh sakte hain" (maslan `http://Bucket.s3.amazonaws.com/RandomID.png`.
 4. Background mein **Worker** (consumer) queue se message uthata hai.
 5. Worker website ka screenshot bana kar PNG file tayar karta hai.
 6. Worker image ko **S3 Bucket** mein upload kar deta hai.
@@ -605,8 +630,6 @@ Bohot se log default taur par Synchronous system banate hain kyunki hum Request-
 ## Architecture of the URL2PNG application
 
 Hum Node.js aur SQS ka istemal karke ek **URL2PNG** naam ka application banayenge.
-
----
 
 ### Figure 14.7 ka Breakdown
 
@@ -629,14 +652,12 @@ Sab se pehle, S3 bucket aur SQS queue banayein:
 
 ```bash
 aws s3 mb s3://url2png-$yourname
-
 ```
 
 2. **SQS Queue Banayein:**
 
 ```bash
 aws sqs create-queue --queue-name url2png
-
 ```
 
 *Output:*
@@ -645,7 +666,6 @@ aws sqs create-queue --queue-name url2png
 {
  "QueueUrl": "https://queue.amazonaws.com/878533158213/url2png"
 }
-
 ```
 
 *(Is `QueueUrl` ko note kar lein, ye aagay code mein use hogi).*
@@ -692,7 +712,6 @@ sqs.sendMessage({ // SQS par sendMessage operation ko invoke karta hai
       + '.s3.amazonaws.com/' + id + '.png');
   }
 });
-
 ```
 
 #### Code Explanation:
@@ -709,7 +728,6 @@ sqs.sendMessage({ // SQS par sendMessage operation ko invoke karta hai
 
 ```bash
 node index.js "http://aws.amazon.com"
-
 ```
 
 *Output:* `PNG will be soon available at http://url2png-$[yourname.s3.amazonaws.com/XYZ.png](https://yourname.s3.amazonaws.com/XYZ.png)`
@@ -720,7 +738,6 @@ node index.js "http://aws.amazon.com"
 aws sqs get-queue-attributes \
 --queue-url "$QueueUrl" \
 --attribute-names ApproximateNumberOfMessages
-
 ```
 
 *Output:* `"ApproximateNumberOfMessages": "1"` (SQS distributed nature ki waja se approximate count batata hai).
@@ -761,7 +778,6 @@ async function receive() {
     return null;
   }
 };
-
 ```
 
 #### Key Terms Explanation:
@@ -794,7 +810,6 @@ async function process(message) {
 
   await browser.close();
 };
-
 ```
 
 #### Code Explanation:
@@ -814,7 +829,6 @@ async function acknowledge(message) {
     ReceiptHandle: message.ReceiptHandle // Message ki unique receipt handle ID
   }).promise(); // Queue se message delete kar deta hai
 };
-
 ```
 
 #### Code Explanation:
@@ -839,7 +853,6 @@ async function run() {
 };
 
 run(); // Loop start karta hai
-
 ```
 
 #### Worker Chalana:
@@ -848,7 +861,6 @@ Terminal mein run karein:
 
 ```bash
 node worker.js
-
 ```
 
 Worker message uthayega, screenshot banaye ga, S3 par daale ga aur queue se delete kar dega. Phir aap browser mein wahi S3 link open karke screenshot dekh sakte hain!
@@ -870,14 +882,12 @@ Practical complete hone ke baad resources delete kar ke cleanup karein:
 
 ```bash
 aws sqs delete-queue --queue-url "$QueueUrl"
-
 ```
 
 2. **S3 Bucket Delete Karein:**
 
 ```bash
 aws s3 rb --force s3://url2png-$yourname
-
 ```
 
 ---
