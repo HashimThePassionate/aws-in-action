@@ -519,7 +519,7 @@ For example: **WordPress, Jenkins**, ya web scrape karne wale custom worker scri
 Figure 15.3 mein CloudFormation aur user data ke zariye hone wale rolling update ko step-by-step samjhaya gaya hai:
 
 <div align="center">
-  <img src="./images/02.png" width="600"/>
+  <img src="./images/03.png" width="600"/>
 </div>
 
 1. **Updates stack:** Engineer CloudFormation stack ka update initiate (shuru) karta hai.
