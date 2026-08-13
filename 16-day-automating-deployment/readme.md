@@ -64,76 +64,6 @@ Is chapter ke practical ko samajhne ke liye aap ko pehle se in baaton ka pata ho
 
 ## Real-World Example: Etherpad Application
 
-Writer ek bohot pyari real-world example deta hai:
-
-Sochiyay ke aap apne elaqay ke **AWS Meetup** ke organizer hain. Aap chahte hain ke community members ek sath mil kar documents edit kar sakein. Is ke liye aap ne **Etherpad** naam ki ek web application ko EC2 par deploy karne ka faisla kiya.
-
-Iska architecture bohot simple hai, jise **Figure 15.1** mein dikhaya gaya hai.
-
-### Deploying Software in the Cloud
-
-Writer batata hai ke taqriban 20 saal pehle hum ne apni pehli Virtual Machine (VM) rent ki thi. Humara maqsad **WordPress** (jo ke ek content management system hai) ko deploy karna tha.
-
-Us waqt hum ne yeh kaam manually (khud haath se) kiya tha:
-
-1. Virtual Machine mein **SSH** ke zariye login hue.
-2. Internet se **WordPress** download kiya.
-3. Scripting language **PHP** aur web server **Apache** install kiya.
-4. Configuration files ko edit kiya taake settings sahi ho sakein.
-5. Web server ko start kar diya.
-
-Writer samjhata hai ke chahe 20 saal pehle ka waqt ho ya aaj ka daor, chahe software open-source ho, kisi company ka ho, ya aapka apna banaya hua ho—software ko deploy karne ke 4 bunyadi steps hamesha wahi rehte hain:
-
-1. **Fetch source code or binaries:** Software ka code ya tayyar files (binaries) haasil karna.
-2. **Install dependencies:** Software ko chalane ke liye zaroori cheezein (jaise PHP, database) install karna.
-3. **Edit configuration files:** Software ki settings wali files ko zaroorat ke mutabiq badalna.
-4. **Start services:** Main software ya service ko chala dena.
-
-In tamam activities ko mila kar hum **Configuration Management** kehte hain.
-
----
-
-#### Cloud mein Deployments ko Automate karna kyun Zaroori hai?
-
-Writer cloud ke andar automation ke 2 sab se bare karano (reasons) ko bacho ki tarah asaan karke samjhata hai:
-
-* **To ensure high availability and scalability:** Cloud mein jab traffic barhta hai, toh **Auto Scaling group** khud-ba-khud nayi EC2 instances (virtual machines) chalata hai. Aab sochiyay, agar koi nayi machine kisi bhi waqt khud hi start ho sakti hai, toh kya aap har baar haath se login karke 4 steps perform karenge? Bilkul nahi! Is liye manual deployment ka option cloud mein chal hi nahi sakta.
-* **Manual changes are error prone and expensive to reproduce:** Jab insaan khud haath se setting karta hai toh ghalat-fahaamiyon aur mistakes ke chances ziada hotay hain, aur bar bar wahi kaam haath se karne mein waqt aur paisa zaya hota hai. Automating se reliability (bharosa) barhta hai aur har deployment ki cost kam hoti hai.
-
-Writer apne consulting clients ke tajurbe se batata hai ke jo organizations cloud mein automated deployments implement karti hain, unke kamyab hone ke chances bohot ziada hote hain.
-
----
-
-#### Is Chapter mein hum kya seekhein ge?
-
-Is chapter mein hum app deployment ko automate karne ke **3 alag alag approaches** seekhein ge taake aap apni zaroorat ke mutabiq behtareen solution chun sakein:
-
-1. **AWS CodeDeploy:** Chalne wali (running) EC2 instances par code deploy karne ke liye.
-2. **AWS CloudFormation, Auto Scaling groups, aur user data:** Rolling update karne ke liye.
-3. **Bundling an application into a customized AMI:** Packer (by HashiCorp) ke zariye immutable deployments karne ke liye.
-
----
-
-### Examples are 100% covered by the Free Tier
-
-Writer yahan batata hai ke is chapter ke jitne bhi practical examples hain, woh AWS ke **Free Tier** ke andar aate hain.
-
-> **Asaan Samajh:** Agar aap ne is book ke liye fresh AWS account banaya hai aur aap in examples ko kuch dinon se ziada nahi chalate, toh aap ko kuch bhi pay nahi karna parega. Bas har section ke khatam hone par apne resources delete (clean up) karna zaroori hai.
-
----
-
-### Chapter requirements
-
-Is chapter ke practical ko samajhne ke liye aap ko pehle se in baaton ka pata hona chahiye:
-
-* **Auto Scaling group** se EC2 instances chalana (Chapter 13).
-* **Elastic Load Balancing (ELB)** ke zariye traffic ko distribute karna (Chapter 14).
-* **CloudFormation** ke zariye cloud infrastructure ko automate karna (Chapter 4).
-
----
-
-#### Real-World Example: Etherpad Application
-
 Writer ek real-world example deta hai: Imagine karein aap ek local AWS meetup ke organizer hain, aur aap community members ko ek aisa tool dena chahte hain jahan sab mil kar real-time mein documents edit kar sakein. Is ke liye aap ne **Etherpad** web application ko EC2 par deploy karne ka faisla kiya.
 
 ### Figure 15.1 Breakdown
@@ -195,6 +125,66 @@ Writer in key terms ko bacho ki tarah clarify karta hai:
 
 ---
 
+#### 1. Application (`AWS::CodeDeploy::Application`)
+
+Yeh sab se pehla step hai. Yeh sirf ek container ya naam hota hai jo aapke project ki pehchan banta hai.
+
+**Top-Level Properties:**
+
+* **`ApplicationName`** *(Optional)*: Application ka naam.
+* **`ComputePlatform`** *(Optional)*: Yeh batata hai ke deployment kahan honi hai (`Server`, `Lambda`, ya `ECS`). Default `Server` hota hai.
+
+#### 2. Deployment Group (`AWS::CodeDeploy::DeploymentGroup`)
+
+Yeh CodeDeploy ka sab se ahem hissa hai. Yeh define karta hai ke **deployment kahan (which servers) aur kaise (strategy) hogi**.
+
+**Top-Level Properties:**
+
+* **`ApplicationName`** *(Required)*: Is deployment group ka parent application kaun sa hai.
+* **`DeploymentGroupName`** *(Optional)*: Group ka naam.
+* **`ServiceRoleArn`** *(Required)*: Woh IAM role jo CodeDeploy ko ijazat deta hai ke woh aapke EC2 instances par commands chala sake.
+* **`Ec2TagFilters`** *(Optional)*: Yeh batata hai ke kin EC2 instances par deployment karni hai. Aap tags use karte hain (jaise `Name: AppServer`).
+* **`AutoScalingGroups`** *(Optional)*: Agar aap ASG use kar rahe hain, toh yahan ASG ke naam diye jate hain.
+* **`LoadBalancerInfo`** *(Optional - Nested)*: Load Balancer ki details taake deployment ke dauran traffic handle ho sake.
+* `TargetGroupInfo`: Kaun se Target Groups ko update karna hai.
+* **`DeploymentConfigName`** *(Optional)*: Deployment ki speed aur health rule (jaise `CodeDeployDefault.OneAtATime`).
+* **`DeploymentStyle`** *(Optional - Nested)*:
+* `DeploymentType`: `IN_PLACE` (purane server par hi update) ya `BLUE_GREEN` (naye servers bana kar swap karna).
+* `DeploymentOption`: `WITH_TRAFFIC_CONTROL` (Blue/Green ke liye).
+
+
+* **`BlueGreenDeploymentConfiguration`** *(Optional)*: Agar Blue/Green use kar rahe hain, toh traffic shift karne ki strategy (jaise kitni der mein traffic naye servers par jana chahiye).
+
+
+#### 3. Deployment Configuration (`AWS::CodeDeploy::DeploymentConfig`)
+
+Yeh define karta hai ke deployment kitni "safe" hogi. Misal ke tor par, agar 10 servers hain, toh kya ek waqt mein sab par code bhejna hai ya ek-ek kar ke?
+
+**Top-Level Properties:**
+
+* **`DeploymentConfigName`** *(Optional)*: Config ka naam.
+* **`ComputePlatform`** *(Optional)*: (`Server`, `Lambda`, `ECS`).
+* **`MinimumHealthyHosts`** *(Required - Nested)*: Yeh batata hai ke deployment ke dauran kam az kam kitne servers ko "Healthy" rehna lazmi hai.
+* `Type`: (`HOST_COUNT` ya `FLEET_PERCENT`).
+* `Value`: (Number ya Percentage).
+
+#### Deployment Strategy (Asaan Summary)
+
+CodeDeploy do tarah ki deployment styles support karta hai:
+
+1. **In-place Deployment:**
+* Aapke existing servers (EC2) par naya code copy hota hai aur service restart hoti hai.
+* Isme server down hone ka thoda risk hota hai, isliye `MinimumHealthyHosts` set karna zaroori hai.
+
+
+2. **Blue/Green Deployment:**
+* AWS naye servers ("Green") banata hai, naya code deploy karta hai, test karta hai, aur phir Load Balancer ke zariye traffic purane ("Blue") servers se hata kar naye servers par shift kar deta hai.
+* Yeh zero-downtime deployment ke liye best hai.
+
+**Zaroori Note:** CodeDeploy chalane ke liye har EC2 instance par **CodeDeploy Agent** install hona lazmi hai. Yeh agent hi AWS se instructions leta hai aur code download/deploy karta hai.
+
+---
+
 #### Setting up the Infrastructure with CloudFormation
 
 Etherpad aur CodeDeploy ka setup karne ke liye hum pehle CloudFormation template chalayen ge.
@@ -204,7 +194,6 @@ Terminal par yeh command run karein:
 ```bash
 aws cloudformation deploy --stack-name etherpad-codedeploy \
   --template-file chapter15/codedeploy.yaml --capabilities CAPABILITY_IAM
-
 ```
 
 * **`aws cloudformation deploy`**: CloudFormation stack create ya update karne ki command.
@@ -259,7 +248,6 @@ DatabaseHostParameter: # Database hostname ko Systems Manager ke Parameter Store
     Type: 'String'
     Value: !GetAtt 'Database.Endpoint.Address'
 # [...]
-
 ```
 
 ##### Code Line-by-Line Breakdown:
@@ -271,8 +259,6 @@ DatabaseHostParameter: # Database hostname ko Systems Manager ke Parameter Store
 * `DeploymentConfigName: 'CodeDeployDefault.AllAtOnce'`: Target ki tamam instances par ek hi waqt mein code push kar deta hai.
 * `LoadBalancerInfo`: Deployment ke waqt ALB Target Group ko associate rakhtar hai taake traffic drop na ho.
 * `ServiceRoleArn`: CodeDeploy service ko AWS resources access karne ka IAM Role deta hai.
-
-
 4. `CodeDeployRole:`: AWS IAM Role jo `codedeploy.amazonaws.com` service ko permissions (`AWSCodeDeployRole` policy) deta hai.
 5. `DatabaseHostParameter:`: AWS Systems Manager (SSM) Parameter Store mein RDS Database ka Endpoint IP/DNS `/etherpad-codedeploy/database_host` ke name se safe karta hai.
 
@@ -299,7 +285,6 @@ CloudFormation deployment ke baad, outputs check karne ke liye yeh command run k
 ```bash
 aws cloudformation describe-stacks --stack-name etherpad-codedeploy \
   --query "Stacks[0].Outputs"
-
 ```
 
 **JSON Output:**
@@ -317,7 +302,6 @@ aws cloudformation describe-stacks --stack-name etherpad-codedeploy \
     "Description": "The URL of the Etherpad application"
   }
 ]
-
 ```
 
 * **`ArtifactBucket`**: Is S3 bucket ka naam (`etherpad-codedeploy-artifactbucket-12vahlx44tpg7`) agle step ke liye copy kar lein.
@@ -360,8 +344,6 @@ hooks: # Hooks aap ko deployment process ke doran scripts chalane ki ijazat dete
 * `files`:
 * `source: .`: Zip file ke andar ki tamam files.
 * `destination: /etherpad`: Server ke `/etherpad` directory mein save hongi.
-
-
 * `hooks`: Life-cycle events jahan hum apne custom scripts chalate hain:
 * `BeforeInstall`: Code copy hone se pehle `hook_before_install.sh` chalta hai (Timeout: 60 seconds).
 * `AfterInstall`: Code copy hone ke baad `hook_after_install.sh` chalta hai (Timeout: 60 seconds).
@@ -405,7 +387,6 @@ echo "
   \"exposeVersion\": true
 }
 " > settings.json # Database host par mushtamil Etherpad ke liye settings.json file generate karta hai
-
 ```
 
 ##### Line-by-Line Breakdown:
@@ -431,7 +412,6 @@ echo "
 ```bash
 aws s3 cp chapter15/etherpad-lite-1.8.17.zip \
   s3://$BucketName/etherpad-lite-1.8.17.zip
-
 ```
 
 #### Step 2: Deployment Create Karein
@@ -440,7 +420,6 @@ aws s3 cp chapter15/etherpad-lite-1.8.17.zip \
 aws deploy create-deployment --application-name etherpad-codedeploy \
   --deployment-group-name etherpad-codedeploy \
   --revision "revisionType=S3,s3Location={bucket=$BucketName,key=etherpad-lite-1.8.17.zip,bundleType=zip}"
-
 ```
 
 #### Step 3: Deployment Status Check Karein
@@ -449,7 +428,6 @@ aws deploy create-deployment --application-name etherpad-codedeploy \
 
 ```bash
 aws deploy get-deployment --deployment-id $DeploymentId
-
 ```
 
 Jab deployment successful ho jaye, ALB ka URL browser mein kholein. Version setting check karne par **`c85ab49`** (Etherpad v1.8.17) nazar aaye ga.
@@ -465,7 +443,6 @@ Agar v1.8.18 par update karna ho toh:
 ```bash
 aws s3 cp chapter15/etherpad-lite-1.8.18.zip \
   s3://$BucketName/etherpad-lite-1.8.18.zip
-
 ```
 
 2. Naya Deployment create karein:
@@ -474,14 +451,12 @@ aws s3 cp chapter15/etherpad-lite-1.8.18.zip \
 aws deploy create-deployment --application-name etherpad-codedeploy \
   --deployment-group-name etherpad-codedeploy \
   --revision "revisionType=S3,s3Location={bucket=$BucketName,key=etherpad-lite-1.8.18.zip,bundleType=zip}"
-
 ```
 
 3. Deployment status verify karein:
 
 ```bash
 aws deploy get-deployment --deployment-id $DeploymentId
-
 ```
 
 Deployment ke baad web application refresh karein. Ab version **`4b96ff6`** dikhayi dega.
@@ -495,7 +470,6 @@ Kaam khatam hone par AWS resources ko delete karne ke liye commands:
 ```bash
 aws s3 rm --recursive s3://${BucketName}
 aws cloudformation delete-stack --stack-name etherpad-codedeploy
-
 ```
 
 * **`aws s3 rm --recursive`**: Bucket mein maujood tamaam zip files aur objects ko pehle safa karta hai.
@@ -566,7 +540,6 @@ aws cloudformation deploy --stack-name etherpad-cloudformation \
   --template-file chapter15/cloudformation.yaml \
   --parameter-overrides EtherpadVersion=1.8.17 \
   --capabilities CAPABILITY_IAM
-
 ```
 
 ##### Command Breakdown:
@@ -582,7 +555,6 @@ Is command ko complete hone aur stack create hone mein taqriban **10 minute** la
 ```bash
 aws cloudformation describe-stacks --stack-name etherpad-cloudformation \
   --query "Stacks[0].Outputs[0].OutputValue" --output text
-
 ```
 
 Is URL ko browser mein kholein, ek naya pad banayein, aur settings icon par click karke version check karein. Version **`c85ab49`** hoga, jo ke v1.8.17 ka latest Git commit ID hai.
@@ -637,7 +609,6 @@ LaunchTemplate: # Auto Scaling group EC2 instances launch karte waqt launch temp
           /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} \
             --resource AutoScalingGroup --region ${AWS::Region} # Kamyab deployment ke baray mein CloudFormation ko notify karta hai
 # [...]
-
 ```
 
 ##### Detailed Code Breakdown:
@@ -679,7 +650,6 @@ Agar aap ka user data script fail ho jaye ya sahi kaam na kar raha ho, toh debug
 
 ```bash
 less /var/log/cloud-init-output.log
-
 ```
 
 ---
@@ -716,7 +686,6 @@ AutoScalingGroup:
         PauseTime: PT10M
         WaitOnResourceSignals: true # Auto Scaling group EC2 instance ki taraf se signal ka intezar karta hai
         MinInstancesInService: 1 # Yeh yakeeni banata hai ke zero downtime deployment ko ensure karne ke liye update ke doran instance up aur running ho
-
 ```
 
 ##### Detailed Code Breakdown:
@@ -726,8 +695,6 @@ AutoScalingGroup:
 * **`MinSize: '1'` & `MaxSize: '2'**`:
 * **Trade-off:** Etherpad clustering support nahi karta, is liye normal waqt mein `MinSize: 1` rahega.
 * Deployment ke dauran `MaxSize: 2` allow karta hai taake zero-downtime rolling update ke liye doosri nayi machine chal sake.
-
-
 * **`HealthCheckGracePeriod: 300`**: Nayi machine ko start hone aur app set up karne ke liye 300 seconds (5 minute) deta hai, is se pehle ELB use unhealthy mark nahi karega.
 * **`CreationPolicy / ResourceSignal / Timeout: 'PT10M'`**: Instance banne par 10 minutes tak `cfn-signal` ka intezar karta hai.
 * **`UpdatePolicy / AutoScalingRollingUpdate`**:
@@ -748,7 +715,6 @@ aws cloudformation deploy --stack-name etherpad-cloudformation \
   --template-file cloudformation.yaml \
   --parameter-overrides EtherpadVersion=1.8.18 \
   --capabilities CAPABILITY_IAM
-
 ```
 
 #### Backstage Sequence:
@@ -768,7 +734,6 @@ Practical khatam hone ke baad apne AWS account se CloudFormation stack aur resou
 
 ```bash
 aws cloudformation delete-stack --stack-name etherpad-cloudformation
-
 ```
 
 ---
@@ -838,7 +803,6 @@ packer { # Packer configuration block ko start karta hai
     }
   }
 }
-
 ```
 
 ##### Code Breakdown:
@@ -885,7 +849,6 @@ source "amazon-ebs" "etherpad" {
   ami_groups = ["all"]
   ami_regions = ["us-east-1"] # AMI ko distribute karne ke liye regions add karta hai
 }
-
 ```
 
 ##### Code Breakdown:
@@ -897,8 +860,6 @@ source "amazon-ebs" "etherpad" {
 * `name`: Amazon Linux 2 image search karta hai (`*` wildcard latest build dhoondta hai).
 * `most_recent = true`: Sab se latest AMI select karega.
 * `owners = ["137112412989"]`: Yeh AWS account ID Amazon ka official account hai, taake koi fake ya malicious image select na ho.
-
-
 * `ssh_interface = "session_manager"`: Security decision! Port 22 kholne ki zaroorat nahi, Session Manager se encrypted traffic guze gi.
 * `iam_instance_profile = "ec2-ssm-core"`: SSM agent ko access permissions deta hai.
 
@@ -928,7 +889,6 @@ provisioner "shell" { # Shell provisioner temporary build instance par script ex
     "./src/bin/installDeps.sh" # Etherpad dependencies install karta hai
   ]
 }
-
 ```
 
 ##### Code Breakdown:
@@ -941,8 +901,6 @@ provisioner "shell" { # Shell provisioner temporary build instance par script ex
 4. GitHub se Etherpad v1.8.17 ka source code clone karta hai.
 5. `./src/bin/installDeps.sh` chala kar saari dependencies pehle se download karke rakh leta hai.
 
-
-
 ---
 
 ### Step-by-Step: Packer Installing & Building AMI
@@ -952,7 +910,6 @@ provisioner "shell" { # Shell provisioner temporary build instance par script ex
 ```bash
 brew tap hashicorp/tap
 brew install hashicorp/tap/packer
-
 ```
 
 *(Baki operating systems ke liye binaries `packer.io/downloads.html` se li ja sakti hain).*
@@ -961,7 +918,6 @@ brew install hashicorp/tap/packer
 
 ```bash
 packer init chapter15/
-
 ```
 
 *Yeh command required plugins (Amazon plugin) ko download aur setup karti hai.*
@@ -970,7 +926,6 @@ packer init chapter15/
 
 ```bash
 packer build chapter15/etherpad.pkr.hcl
-
 ```
 
 Packer temporary instance chalaye ga, script run karega, instance ko stop karke AMI banaye ga, aur aakhir mein instance delete kar ke **AMI ID** print kar dega:
@@ -1007,7 +962,6 @@ aws cloudformation deploy --stack-name etherpad-packer \
   --template-file packer.yaml \
   --parameter-overrides AMI=$AMI \
   --capabilities CAPABILITY_IAM
-
 ```
 
 Deployment complete hone ke baad application URL haasil karne ki command:
@@ -1015,7 +969,6 @@ Deployment complete hone ke baad application URL haasil karne ki command:
 ```bash
 aws cloudformation describe-stacks --stack-name etherpad-packer \
   --query "Stacks[0].Outputs[0].OutputValue" --output text
-
 ```
 
 Browser mein URL kholein, version check karne par commit ID **`c85ab49`** (v1.8.17) dikhai de ga.
@@ -1064,7 +1017,6 @@ Resources:
             /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} \
               --resource AutoScalingGroup --region ${AWS::Region}
 # [...]
-
 ```
 
 ##### Architectural Design Question & Line Breakdown:
@@ -1107,7 +1059,6 @@ AutoScalingGroup: # Auto Scaling group yeh yakeeni banata hai ke aik EC2 instanc
         PauseTime: PT10M # Auto Scaling group cfn-signal ke zariye naye EC2 instance ke success signal ka 10 minutes tak intezar karega
         WaitOnResourceSignals: true # Rolling update ke doran EC2 instance se signal ka intezar karna enable karta hai
         MinInstancesInService: 1 # Deployment ke doran kam az kam aik instance ke chalne ko yakeeni bana kar zero-downtime deployments ko indicate karta hai
-
 ```
 
 ##### Line Breakdown:
@@ -1131,7 +1082,6 @@ Etherpad ke naye version (v1.8.18) ko roll out karne ke liye steps:
 2. Nayi AMI build karein:
 ```bash
 packer build chapter15/etherpad.pkr.hcl
-
 ```
 
 
@@ -1141,7 +1091,6 @@ aws cloudformation deploy --stack-name etherpad-packer \
   --template-file chapter15/packer.yaml \
   --parameter-overrides AMI=$AMI \
   --capabilities CAPABILITY_IAM
-
 ```
 
 
@@ -1158,7 +1107,6 @@ Practical mukammal karne ke baad account charges se bachne ke liye resources ko 
 
 ```bash
 aws cloudformation delete-stack --stack-name etherpad-packer
-
 ```
 
 ---
