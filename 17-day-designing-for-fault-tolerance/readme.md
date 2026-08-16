@@ -1,5 +1,43 @@
 # Designing for fault tolerance
 
+<details open>
+<summary><strong>📚 Table of Contents</strong></summary>
+
+- [This chapter covers](#this-chapter-covers)
+- [Failure Is Inevitable: Build for Failure](#failure-is-inevitable-build-for-failure)
+- [Core Architectural Concepts (Pehlu)](#core-architectural-concepts-pehlu)
+  - [1. Avoiding Single Points of Failure (SPOF)](#1-avoiding-single-points-of-failure-spof)
+  - [2. Redundancy (Duplication)](#2-redundancy-duplication)
+  - [3. Decoupling (Components ko Azaad Karna)](#3-decoupling-components-ko-azaad-karna)
+- [AWS Resilience Categories](#aws-resilience-categories)
+- [AWS Services Classification Breakdown](#aws-services-classification-breakdown)
+  - [Category 1: Neither Highly Available nor Fault Tolerant](#category-1-neither-highly-available-nor-fault-tolerant-single-point-of-failure)
+  - [Category 2: Highly Available (HA) by Default](#category-2-highly-available-ha-by-default)
+  - [Category 3: Fault Tolerant (FT) by Default](#category-3-fault-tolerant-ft-by-default)
+- [Chapter requirements](#chapter-requirements)
+- [The Practical Hands-on Application Overview](#the-practical-hands-on-application-overview)
+  - [Application Ka Maqsad](#application-ka-maqsad)
+  - [System Ka Design Step-by-Step](#system-ka-design-step-by-step)
+- [Using redundant EC2 instances to increase availability](#using-redundant-ec2-instances-to-increase-availability)
+- [Redundancy can remove a single point of failure](#redundancy-can-remove-a-single-point-of-failure)
+- [Redundancy requires decoupling](#redundancy-requires-decoupling)
+- [Considerations for making your code fault tolerant](#considerations-for-making-your-code-fault-tolerant)
+- [Idempotent retry makes fault tolerance possible](#idempotent-retry-makes-fault-tolerance-possible)
+- [Building a fault-tolerant web application: Imagery](#building-a-fault-tolerant-web-application-imagery)
+- [The idempotent state machine](#the-idempotent-state-machine)
+- [Implementing a fault-tolerant web service](#implementing-a-fault-tolerant-web-service)
+- [Implementing a fault-tolerant worker to consume SQS messages](#implementing-a-fault-tolerant-worker-to-consume-sqs-messages)
+- [Deploying the application](#deploying-the-application)
+- [BUNDLING RUNTIME AND APPLICATION INTO A MACHINE IMAGE (AMI)](#bundling-runtime-and-application-into-a-machine-image-ami)
+- [DEPLOYING S3, DYNAMODB, AND SQS](#deploying-s3-dynamodb-and-sqs)
+- [IAM ROLES FOR SERVER AND WORKER EC2 INSTANCES](#iam-roles-for-server-and-worker-ec2-instances)
+- [DEPLOYING THE SERVER WITH A LOAD BALANCER AND AN AUTO SCALING GROUP](#deploying-the-server-with-a-load-balancer-and-an-auto-scaling-group)
+- [DEPLOYING THE WORKER WITH AN AUTO SCALING GROUP](#deploying-the-worker-with-an-auto-scaling-group)
+- [Cleaning up](#cleaning-up)
+- [Summary](#summary)
+
+</details>
+
 ## This chapter covers
 
 * **What fault-tolerance is and why you need it** (Fault tolerance kya hoti hai aur aap ko is ki kyun zaroorat hai)
@@ -489,11 +527,11 @@ Ab hum is asynchronous process ko AWS ki services par map karenge. Kyunki AWS ki
 </div>
 
 `Figure 16.10` mein poora system AWS services ke sath joda gaya hai:
-1. **1. Create:** User Unique ID ke sath process create karta hai. Yeh entry **DynamoDB** table mein save hoti hai.
-2. **2. Upload:** Process ID ka istemal karke user raw image ko **Amazon S3** bucket mein upload karta hai. S3 ki key DynamoDB mein update hoti hai aur **SQS Queue** mein aik message trigger hota hai.
-3. **3. Process:** Aik **EC2 instance (Worker)** SQS message ko consume karta hai, S3 se raw image download karta hai, sepia filter apply karta hai, aur new sepia image ko dobara S3 mein upload kar deta hai. Phir DynamoDB mein state ko `"processed"` set kar deta hai.
-4. **4. Wait:** User DynamoDB se continuous polling karke state change hone ka intizar karta hai.
-5. **5. View:** State `"processed"` hote hi user S3 se sepia image hasil kar leta hai.
+1. **Create:** User Unique ID ke sath process create karta hai. Yeh entry **DynamoDB** table mein save hoti hai.
+2. **Upload:** Process ID ka istemal karke user raw image ko **Amazon S3** bucket mein upload karta hai. S3 ki key DynamoDB mein update hoti hai aur **SQS Queue** mein aik message trigger hota hai.
+3. **Process:** Aik **EC2 instance (Worker)** SQS message ko consume karta hai, S3 se raw image download karta hai, sepia filter apply karta hai, aur new sepia image ko dobara S3 mein upload kar deta hai. Phir DynamoDB mein state ko `"processed"` set kar deta hai.
+4. **Wait:** User DynamoDB se continuous polling karke state change hone ka intizar karta hai.
+5. **View:** State `"processed"` hote hi user S3 se sepia image hasil kar leta hai.
 
 
 
@@ -613,7 +651,7 @@ Imagery application ko do (2) mukhya hisson mein baanta gaya hai:
 ### Where is the code located?
 
 Is book ka tamaam code official GitHub repository par majood hai:
-`[https://github.com/AWSinAction/code3](https://github.com/AWSinAction/code3)` -> Folder: `/chapter16/`.
+`https://github.com/AWSinAction/code3` -> Folder: `/chapter16/`.
 
 #### Web Server Ki REST API Routes Table:
 
