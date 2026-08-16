@@ -266,3 +266,96 @@ Agarche Kubernetes developers mein bohot mashhoor hai, writer zyada tar workload
 
 
 ---
+
+## **The ECS basics: Cluster, service, task, and task definition**
+
+Amazon ECS par containers chalane ke poore nizam ko samajhne ke liye chaar bunyadi pillars ko step-by-step samajhna zaroori hai: **Cluster**, **Task Definition**, **Task**, aur **Service**.
+
+---
+
+**1. Cluster (Boundary / Logical Group)**
+
+* ECS par koi bhi kaam shuru karne ke liye sab se pehle ek **Cluster** banana parta hai.
+* Yeh koi physical machine nahi balke ek **Logical Group** (virtual boundary) hai, jiske andar aapke tamam containerized workloads aur resources organize rehte hain.
+* Mukhtalif qism ke kamon ko aapas mein alag (isolate) rakhne ke liye alag alag clusters banaye jate hain. Misal ke taur par:
+* Ek cluster **Test Environment** ke liye.
+* Doosra cluster **Production Environment** ke liye. Is tarah testing ke doran ki gayi ghalti ka asar live production users par nahi parta.
+
+
+* **Cost & Limits:** ECS cluster banana bilkul **muft (free)** hota hai. AWS default taur par ek account mein **10,000 clusters** tak banane ki ijazat deta hai (jo aam tor par kisi bhi organization ki zaroorat se bohot zyada hai).
+
+---
+
+**2. Task Definition (Blueprint / Recipe)**
+
+ECS par container chalane se pehle aapko ek **Task Definition** likhni parti hai. Yeh asal mein ek blueprint ya recipe hoti hai jismein ECS ko bataya jata hai ke container ko kaise chalana hai.
+
+Is recipe mein darj zail cheezein define ki jati hain:
+
+* **The container image URL:** Application image kahan store hai (maslan Amazon ECR ya Docker Hub ka address).
+* **Provisioned baseline and limit for CPU:** Container ko chalne ke liye kam az kam kitni CPU power chahiye (baseline) aur load barhne par wo zyada se zyada kitni CPU use kar sakta hai (limit).
+* **Provisioned baseline and limit for memory:** Container ke liye kam az kam aur zyada se zyada RAM (memory) ki hadd.
+* **Environment variables:** Application ke secret keys, configuration settings, ya database connection strings.
+* **Network configuration:** Container kis networking mode mein chalega aur wo bahir ki duniya ya doosre containers se kis port par rabta karega.
+
+> **Ahem Nuqta:** Aik hi Task Definition ke andar aap **aik container** bhi define kar sakte hain ya **ek se zyada containers** (multi-container task) bhi likh sakte hain.
+
+---
+
+**Figure 18.3 ka Jaiza**
+
+**Figure 18.3** Task Definition se Task banne ke amal ko wazeh karti hai:
+
+<div align="center">
+  <img src="./images/03.png" width="600"/>
+</div>
+
+* **Left Side (Task Definition):** Yahan tamam specifications (Image, CPU, Memory, ENV variables) mojood hain.
+* **Right Side (Cluster ke andar Running Tasks):** Jab hum command dete hain *"Run the task based on the task definition"*, toh Cluster ke andar actual Tasks launch ho jate hain.
+* **Co-located Containers on Same Host:** Figure 18.3 mein wazeh dikhaya gaya hai ke agar aik task ke andar multiple containers define hain, toh ECS un tamam containers ko **hamesha aik hi host (same underlying machine)** par launch karega. Iska sab se bara faida yeh hota hai ke agar do containers ko aapas mein local resources share karne hon — maslan `localhost` ke zariye high-speed networking ya shared local storage — toh wo asaani se bina network latency ke ek doosre se baat kar sakte hain.
+
+---
+
+**3. Task (Running Instance)**
+
+* Task asal mein Task Definition (recipe) ka aik **chalta hua amli roop (running instance)** hota hai.
+* Task create karne ke liye aapko do cheezein specify karni parti hain:
+1. Kaunse **Cluster** mein chalana hai.
+2. Kaunsi **Task Definition** ke mutabiq chalana hai.
+
+
+* Command milte hi ECS define kiye gaye containers ko cluster ke andar foran start kar deta hai.
+
+---
+
+**4. ECS Service (Automated Manager / 24/7 Supervisor)**
+
+Aap Task ko manually (khud se) bhi run kar sakte hain, lekin production mein manually task chalana kafi khatarnak hota hai. Farz karein aapne ek web server task chalaya aur wo raat ko kisi bug ya server failure ki wajah se crash ho gaya, toh manual task dobara khud nahi chalega aur aapki website band ho jayegi.
+
+Real-world web applications mein:
+
+* Kam az kam 2 containers har waqt 24/7 chalte rehne chahiye taake load do alag alag **Availability Zones (AZs)** mein taqseem ho sake (agar ek data center mein masla aaye toh doosra chalta rahe).
+* Jab website par achanak traffic barh jaye, toh foran naye containers start ho jane chahiye.
+
+Is poore automated nizam ko chalane ke liye **ECS Service** ka istemal hota hai. Aap ECS Service ko containers ke liye ek **Auto Scaling Group** samajh sakte hain.
+
+---
+
+**Figure 18.4 ka Jaiza**
+
+**Figure 18.4** ECS Service ke kirdar aur uske tehat chalne wale tasks ko dikhati hai:
+
+<div align="center">
+  <img src="./images/04.png" width="600"/>
+</div>
+
+* Diagram mein Service ke andar **Desired Count = 3** set hai. Iska matlab service ka kaam yeh ensure karna hai ke har lamha 3 Tasks active aur healthy chal rahe hon.
+* Ek ECS Service darj zail 5 ahem zimmedariyan sambhalti hai:
+* **Runs multiple tasks of the same kind:** Ek hi recipe ke mutabiq aik se zyada duplicate tasks chalana.
+* **Resilience (Monitors and replaces failed tasks):** Tasks ki sehat par musalsal nazar rakhna. Agar koi container crash ho jaye ya un-healthy ho jaye, toh service foran usay khatam karke uski jagah naya healthy task launch kar deti hai.
+* **Spreads tasks across availability zones:** High availability ke liye tasks ko mukhtalif Availability Zones ke darmiyan barabar phela kar chalati hai.
+* **Scalability (Scales the number of tasks based on load):** Traffic ke mutabiq tasks ki tadaad ko barhana (scale out) aur load kam hone par faltu tasks ko band karna (scale in).
+* **Deployment (Orchestrates rolling updates):** Jab application ka naya version release karna ho, toh service baghair kisi downtime ke rolling update karti hai — pehle naye version ka task chalu karti hai, jab wo theek chal parta hai tab purane version ke task ko band karti hai.
+
+---
+
