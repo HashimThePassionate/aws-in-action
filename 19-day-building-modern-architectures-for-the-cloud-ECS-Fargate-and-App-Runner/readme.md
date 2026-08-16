@@ -359,3 +359,120 @@ Is poore automated nizam ko chalane ke liye **ECS Service** ka istemal hota hai.
 
 ---
 
+## **AWS Fargate: Running containers without managing a cluster of virtual machines**
+
+**AWS ki Tareekh aur Fargate ki Zaroorat**
+
+Jab Amazon ECS 2015 mein launch hua, toh us waqt containers chalane ka setup do hisson (layers) mein banta tha:
+
+1. **Container Layer:** Application ka Docker container, uski configuration aur scaling.
+2. **Infrastructure Layer:** Wo EC2 virtual machines (servers) jin ke oopar ye containers chalte thay.
+
+Is purane model mein developer ko dohra bojh uthana parta tha: container ke sath sath neeche chalne wale EC2 instances ka Operating System update karna, security patches lagana, disk space monitor karna, aur un instances ki auto-scaling manage karna. Yeh kaam system ko intehayi mushkil aur complex bana deta tha.
+
+November 2017 mein AWS ne **AWS Fargate** launch kiya, jis ne game badal di. Fargate ek **Serverless Compute Engine** hai. Iska matlab ab aapko EC2 virtual machines create ya manage karne ki zaroorat nahi rehti — aap sirf container dete hain, aur AWS background mein compute power khud manage karta hai.
+
+---
+
+**Figure 18.5 ka Jaiza**
+
+**Figure 18.5** ECS with EC2 aur ECS with Fargate ke darmiyan farq ko wazeh karti hai:
+
+<div align="center">
+  <img src="./images/05.png" width="600"/>
+</div>
+
+* **Left Side (ECS with EC2 — 2 Layers of Work):**
+* **ECS services and tasks:** Aapko containers configure, scale, monitor aur patch karne parte hain.
+* **EC2 instances:** Neeche mojood virtual machines ko bhi alag se configure, scale, monitor aur OS patching karni parti hai.
+
+
+* **Right Side (ECS with Fargate — 1 Layer of Work):**
+* **ECS services and tasks:** Aap sirf apne containerized software par focus karte hain.
+* **Fargate (Managed by AWS):** Neeche ka tamam hardware, OS, security patches aur server maintenance AWS khud sambhalta hai.
+
+
+
+---
+
+**Fargate ki Availability aur Platforms**
+
+* Fargate sirf Amazon ECS ke sath hi nahi balke **Amazon EKS (Kubernetes)** ke sath bhi mukammal kaam karta hai.
+* Operating System ke aitbar se Fargate **Amazon Linux** ke sath sath **Microsoft Windows Server 2019 (Full aur Core editions)** ko bhi support karta hai.
+
+---
+
+**Resource Configuration: EC2 vs Fargate**
+
+* **EC2 Model:** Aapko bana banaya instance type (maslan `t3.medium` ya `m6g.medium`) choose karna parta hai, jismein CPU aur RAM ki miqdar pehle se fix hoti hai.
+* **Fargate Model:** Aap har task ke hisab se exact **CPU** aur **Memory (RAM)** define karte hain ke is task ko kitne resources chahiye.
+
+---
+
+**Table 18.2 Provisioning CPU and memory for Fargate**
+
+| CPU | Memory (Roman Urdu) |
+| --- | --- |
+| **0.25 vCPU** | 0.5 GB, 1 GB, ya 2 GB |
+| **0.5 vCPU** | Minimum 1 GB, Maximum 4 GB, 1 GB ke increments |
+| **1 vCPU** | Minimum 2 GB, Maximum 8 GB, 1 GB ke increments |
+| **2 vCPU** | Minimum 4 GB, Maximum 16 GB, 1 GB ke increments |
+| **4 vCPU** | Minimum 8 GB, Maximum 30 GB, 1 GB ke increments |
+| **8 vCPU** | Minimum 16 GB, Maximum 60 GB, 4 GB ke increments |
+| **16 vCPU** | Minimum 32 GB, Maximum 120 GB, 8 GB ke increments |
+
+*Table ki Samajh:* Fargate mein aap apni marzi se koi bhi random combination nahi bana sakte. Misal ke taur par, agar aap **0.25 vCPU** (1/4 core) muntakhib karte hain, toh aap sirf 0.5 GB, 1 GB ya 2 GB memory hi select kar sakte hain. Jabke **1 vCPU** ke sath aap 2 GB se lekar 8 GB tak memory 1 GB ke hisab se (2 GB, 3 GB, 4 GB... 8 GB) barha sakte hain.
+
+---
+
+**Fargate Pricing aur Cost Calculation**
+
+Fargate ka billing cycle **per-second** chalta hai — us lamhe se jab container image download hona shuru hoti hai, us lamhe tak jab task band (terminate) hota hai.
+
+Kharchay ka daromadar region, operating system, aur processor architecture (Intel/AMD `x86` ya AWS Graviton `ARM`) par hota hai. `us-east-1` region mein **Linux/ARM** ke sath **1 vCPU aur 4 GB Memory** wale task ka mahana kharcha is tarah calculate hota hai:
+
+* **1 vCPU ka Kharcha:**
+$$\$0.04048 \text{ (per hour)} \times 24 \text{ hours} \times 30 \text{ days} = \mathbf{\$29.15} \text{ per month}$$
+
+
+* **4 GB Memory ka Kharcha:**
+$$4 \text{ GB} \times \$0.004445 \text{ (per GB-hour)} \times 24 \text{ hours} \times 30 \text{ days} = \mathbf{\$12.80} \text{ per month}$$
+
+
+* **Total Mahana Bill:**
+$$\$29.15 + \$12.80 = \mathbf{\$41.95} \text{ per month}$$
+
+
+
+*(Book ke text mein summary sentence ke andar "1 vCPU and 2 GB memory" likha hai jo ek drafting typo hai, kyunki upar math aur calculation wazeh taur par 4 GB memory ke hisab se ki gayi hai).*
+
+---
+
+**Trade-Off: EC2 Sasta Hai Ya Fargate?**
+
+Khaam resources (raw compute) ke hisab se EC2 instance sasta dikhta hai:
+
+* Ek `m6g.medium` EC2 instance (1 vCPU, 4 GB RAM) taqreeban **$27.72 per month** deta hai, jabke wahi capacity Fargate par **$41.95 per month** parti hai.
+
+Lekin EC2 chalane ke do baray chhupe hue nuqsanat (hidden costs) hain:
+
+* **Resource Fragmentation aur Overprovisioning:** Agar aapne ek EC2 instance liya aur us par 2 containers chalaye jinhon ne 70% machine use ki, toh baqi 30% space khali reh kar zaya ho jati hai lekin bill poore 100% ka aata hai. Fargate mein aap sirf usi hissay ka pay karte hain jo aapne task ke liye reserve kiya.
+* **Engineering Time (Operational Overhead):** EC2 instances ko update karna, monitor karna, cluster auto-scaler configure karna aur security patches lagana engineers ka qeemti waqt leta hai jiski salary cloud bill se kahin zyada mehngi parti hai.
+
+Isi liye aksar use-cases mein Fargate ka thora sa zyada bill engineer ki mehnat aur time bacha kar overall sasta parta hai.
+
+---
+
+**Fargate ki Limitations**
+
+Fargate har kaam ke liye nahi hai. Iski ahem pabandiyan yeh hain:
+
+* **Resource Limit:** Ek single task zyada se zyada **16 vCPU aur 120 GB memory** tak ja sakta hai (bohot bhari database workloads ke liye kam parh sakta hai).
+* **Privileged Mode Missing:** Fargate par containers `--privileged` mode mein nahi chal sakte. Iska matlab container ko host machine ke kernel ya low-level hardware tak direct access nahi milti (maslan container ke andar Docker chalana ya custom network interfaces banana mumkin nahi).
+* **Missing GPU Support:** AI/Machine Learning ya high-performance graphic workloads ke liye Fargate par GPU compute dastiyab nahi hai.
+* **EBS Volume Attachment:** Fargate launch ke waqt standard **Amazon EBS (Elastic Block Store)** volumes ko directly attach karne ki ijazat nahi deta tha (data persist karne ke liye AWS EFS ya Ephemeral storage use karni parti thi). Modern AWS updates mein ECS Fargate par EBS volumes attach karne ki support shamil kar di gayi hai, lekin direct low-level block storage control ab bhi EC2 ke muqablay mein limited rehta hai.
+
+
+---
+
+
