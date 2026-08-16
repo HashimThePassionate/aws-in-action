@@ -476,3 +476,344 @@ Fargate har kaam ke liye nahi hai. Iski ahem pabandiyan yeh hain:
 ---
 
 
+## **Walking through a cloud-native architecture: ECS, Fargate, and S3**
+
+Real-world mein hum sab mukhtalif kamo ke doran notes banate hain — chahe client ke sath call par hon, kisi naye feature ka plan bana rahe hon, ya AWS ki koi nayi service explore kar rahe hon.
+
+Is section mein writer ek mukammal production-ready cloud application deploy karke dikha raha hai jiska naam **Notea** hai:
+
+* **Notea kya hai?** Yeh ek open-source, privacy-focused note-taking application hai.
+* **Tech Stack:** Iska frontend **React** mein bana hai, backend **Next.js** par chal raha hai, aur application ka poora data (tamam notes) permanently **Amazon S3** par save hota hai.
+
+---
+
+**Figure 18.6 ka Jaiza: Modern Cloud-Native Architecture**
+
+**Figure 18.6** mein do architectures ka aamne saamne mawazna (comparison) kiya gaya hai taake aapka EC2 ka purana concept seedha ECS par map ho sakay:
+
+<div align="center">
+  <img src="./images/06.png" width="600"/>
+</div>
+
+* **Left Side (Modern ECS & Fargate Architecture):**
+1. **Users:** Internet se users `HTTP` requests bhejte hain.
+2. **Application Load Balancer (ALB):** Tamam incoming traffic ko receive karta hai aur neeche chal rahe active ECS Tasks (containers) ke darmiyan barabar taqseem karta hai.
+3. **ECS Service & Tasks:** ECS Service tasks ko maintain karti hai aur traffic/CPU load barhne par Fargate par naye containers spin up karti hai.
+4. **Fargate:** Serverless compute capacity faraham karta hai (koi EC2 instance manage nahi karna parta).
+5. **Amazon S3 Bucket:** Application ka backend tamam notes ko S3 bucket ke andar read aur write karta hai.
+
+
+* **Right Side (Traditional EC2 Architecture):**
+1. ALB aane wali traffic ko EC2 instances par bhejta hai.
+2. Auto Scaling Group load ke hisab se EC2 virtual machines ko kam ya zyada karta hai.
+3. EC2 instances S3 se data read/write karte hain.
+
+
+* **Dono ka Direct Comparison:**
+* **ECS Service $\triangleq$ Auto Scaling Group:** Dono load ke hisab se scale karte hain, kharab hone wale nodes ko replace karte hain, rolling updates karte hain, aur load balancer (ALB) par naye nodes ko register karte hain.
+* **ECS Task $\triangleq$ EC2 Instance:** Dono ek base image se bante hain aur dono ke andar actual web application execute ho rahi hoti hai.
+
+
+
+---
+
+**CloudFormation ke Zariye Stack Deploy Karna**
+
+Is poore infrastructure (ALB, ECS Cluster, Fargate Tasks, IAM Roles, S3 Bucket, Auto Scaling) ko aik single CloudFormation template se deploy kiya gaya hai jo book ke GitHub repository (`awsinaction-code3/chapter18/notea.yaml`) par mojood hai.
+
+Terminal mein yeh command execute karein:
+
+```bash
+aws cloudformation create-stack --stack-name notea \
+  --template-url https://s3.amazonaws.com/awsinaction-code3/chapter18/notea.yaml --parameters \
+  "ParameterKey=ApplicationID,ParameterValue=$ApplicationId" \
+  "ParameterKey=Password,ParameterValue=$Password" \
+  --capabilities CAPABILITY_IAM
+```
+
+* `aws cloudformation create-stack`: CloudFormation ko naya stack banane ka hukum deta hai.
+* `--stack-name notea`: Stack ka naam `notea` rakha gaya hai.
+* `--template-url`: AWS S3 par mojood template file ka direct URL.
+* `--parameters`:
+* `ApplicationID`: Ek unique naam/abbreviation (maslan aapka naam) jo S3 bucket aur resources ke unique naamo ke liye use hoga.
+* `Password`: Notea application ko login karne ke liye password.
+
+
+* `CAPABILITY_IAM`: Kyunki yeh template IAM roles create karti hai, isliye AWS CLI ko explicit ijazat dena zaroori hai.
+
+> **Security Alert:** Kyunki yeh test deployment plain `HTTP` par chal rahi hai (HTTPS certificate attach nahi hai), isliye apna koi real/sensitive password use na karein, sirf ek temporary throwaway password rakhein.
+
+---
+
+**Stack Creation ka Intezar aur URL Hasil Karna**
+
+Deployment mukammal hone mein taqreeban 5 minute lagte hain. Status check karne aur direct URL nikalne ke liye yeh combined command chalayein:
+
+```bash
+aws cloudformation wait stack-create-complete \
+  --stack-name notea && aws cloudformation describe-stacks \
+  --stack-name notea --query "Stacks[0].Outputs[0].OutputValue" \
+  --output text
+```
+
+* `aws cloudformation wait stack-create-complete`: Yeh command terminal ko us waqt tak pause rakhta hai jab tak AWS par tamam resources kamyabi se ban nahi jate.
+* `aws cloudformation describe-stacks`: Stack banne ke baad uske Outputs mein se Load Balancer ka live public DNS/URL extract karta hai.
+
+---
+
+**Figure 18.7 ka Jaiza**
+
+<div align="center">
+  <img src="./images/07.png" width="600"/>
+</div>
+
+**Figure 18.7** Notea ka login page dikhati hai. Jab aap terminal se mila hua URL browser mein kholte hain, toh samne Notea ka login screen aata hai. Wahan wahi password enter karein jo aapne CloudFormation command ke parameter `$Password` mein define kiya tha, aur aapka note-taking dashboard khul jayega.
+
+---
+
+**Figure 18.8 ka Jaiza: Task Definition ke Components**
+
+**Figure 18.8** Task Definition ke mukhtalif hisson ko aik jagah summarize karti hai:
+
+<div align="center">
+  <img src="./images/08.png" width="600"/>
+</div>
+
+* **ECR (Image):** Container image kahan se download hogi.
+* **Environment variables:** Container ko chalne ke liye kon se configs chahiye.
+* **CPU / Memory:** Task ko chalne ke liye kitni compute power darkar hai.
+* **TaskRoleArn (IAM role):** Container ko S3 bucket access karne ka permission pass.
+* **Network (NetworkMode):** Task ka network connection (Fargate ke liye hamesha `awsvpc`).
+* **CloudWatch logs (LogConfiguration):** Application logs kahan save honge.
+* **Port mapping:** Container kis internal port par traffic sun raha hai.
+
+---
+
+**Listing 18.4 Configuring a task definition**
+
+```yaml
+TaskDefinition:
+  Type: 'AWS::ECS::TaskDefinition'
+  Properties:
+    ContainerDefinitions:
+      - Name: app
+        Image: 'public.ecr.aws/s5r5alt5/notea:latest'
+        PortMappings:
+          - ContainerPort: 3000
+            Protocol: tcp
+            Essential: true
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            'awslogs-region': !Ref 'AWS::Region'
+            'awslogs-group': !Ref LogGroup
+            'awslogs-stream-prefix': app
+        Environment:
+          - Name: 'PASSWORD'
+            Value: !Ref Password
+          - Name: 'STORE_REGION'
+            Value: !Ref 'AWS::Region'
+          - Name: 'STORE_BUCKET'
+            Value: !Ref Bucket
+          - Name: 'COOKIE_SECURE'
+            Value: 'false'
+    Cpu: 512
+    ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+    Family: !Ref 'AWS::StackName'
+    Memory: 1024
+    NetworkMode: awsvpc
+    RequiresCompatibilities:
+      - FARGATE
+    TaskRoleArn: !GetAtt TaskRole.Arn
+```
+
+* `ContainerDefinitions`: Task ke andar chalne wale containers ki list.
+* `Name: app`: Container ka reference naam.
+* `Image: 'public.ecr.aws/s5r5alt5/notea:latest'`: ECR Public repository se pre-built Notea application image.
+* `PortMappings`: Container ke andar port `3000` par web server listen kar raha hai. `Essential: true` ka matlab agar yeh container band hua toh poora task crash tasawwur hoga.
+* `LogConfiguration`: `awslogs` driver use kiya gaya hai jo container ke console outputs (stdout/stderr) ko seedha CloudWatch Logs group mein stream karta hai.
+* `Environment`: Container ko 4 configurations pass ki gayi hain: login password, S3 bucket ka region, S3 bucket ka naam, aur `COOKIE_SECURE: 'false'` (kyunki abhi plain HTTP use ho rahi hai).
+
+
+* `Cpu: 512`: Fargate is task ko **0.5 vCPU** ($512 / 1024$) compute power dega.
+* `Memory: 1024`: Task ke liye **1 GB (1024 MB)** RAM allocate hogi.
+* `NetworkMode: awsvpc`: Fargate ke liye lazmi network mode. Iska matlab har task ko VPC ke andar apna aik alag private IP aur **Elastic Network Interface (ENI)** milta hai, bilkul aik mukammal EC2 instance ki tarah.
+* `RequiresCompatibilities: [FARGATE]`: ECS ko batata hai ke yeh task sirf Fargate engine par launch hoga.
+
+---
+
+**Execution Role vs Task Role ka Farq**
+
+Task Definition ke andar do mukhtalif IAM roles istemal hote hain jin ka farq samajhna intehayi zaroori hai:
+
+* **ExecutionRoleArn (Fargate ka apna Guard Badge):** Yeh role **AWS Fargate infrastructure** use karta hai. Iska kaam container ke chalne se pehle ECR se private/public image download karna aur CloudWatch Logs mein log streams create karna hota hai.
+* **TaskRoleArn (Container ke andar chalne wali Application ka Badge):** Yeh role container ke **andar mojood code** ko milta hai. Notea application ko user ke notes save karne ke liye Amazon S3 bucket par read/write permissions chahiye hoti hain, jo is role ke zariye di jati hain.
+
+---
+
+**Listing 18.5 Granting the container access to objects in an S3 bucket**
+
+```yaml
+TaskRole:
+  Type: 'AWS::IAM::Role'
+  Properties:
+    AssumeRolePolicyDocument:
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'ecs-tasks.amazonaws.com'
+          Action: 'sts:AssumeRole'
+    Policies:
+      - PolicyName: S3AccessPolicy
+        PolicyDocument:
+          Statement:
+            - Effect: Allow
+              Action:
+                - 's3:GetObject'
+                - 's3:PutObject'
+                - 's3:DeleteObject'
+              Resource: !Sub '${Bucket.Arn}/*'
+            - Effect: Allow
+              Action:
+                - 's3:ListBucket'
+              Resource: !Sub '${Bucket.Arn}'
+Bucket:
+  Type: 'AWS::S3::Bucket'
+  Properties:
+    BucketName: !Sub 'awsinaction-notea-${ApplicationID}'
+```
+
+* `AssumeRolePolicyDocument`: ECS task service (`ecs-tasks.amazonaws.com`) ko is role ko pehanny (assume karne) ki ijazat deta hai.
+* `Policies (S3AccessPolicy)`:
+* `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`: Notes ko read karne, naya note create/update karne aur delete karne ki permission sirf is specific bucket ke contents (`${Bucket.Arn}/*`) par di gayi hai.
+* `s3:ListBucket`: Application ko bucket ke andar mojood files dekhne ki permission bucket level (`${Bucket.Arn}`) par di gayi hai.
+
+
+* `Bucket`: Aik Amazon S3 bucket create karta hai jiska naam unique rakhne ke liye `${ApplicationID}` append kiya gaya hai.
+
+---
+
+**Listing 18.6 Creating an ECS service to spin up tasks running the web app**
+
+```yaml
+Service:
+  DependsOn: HttpListener
+  Type: 'AWS::ECS::Service'
+  Properties:
+    Cluster: !Ref 'Cluster'
+    CapacityProviderStrategy:
+      - Base: 0
+        CapacityProvider: 'FARGATE'
+        Weight: 1
+    DeploymentConfiguration:
+      MaximumPercent: 200
+      MinimumHealthyPercent: 100
+      DeploymentCircuitBreaker:
+        Enable: true
+        Rollback: true
+    DesiredCount: 2
+    HealthCheckGracePeriodSeconds: 30
+    LoadBalancers:
+      - ContainerName: 'app'
+        ContainerPort: 3000
+        TargetGroupArn: !Ref TargetGroup
+    NetworkConfiguration:
+      AwsvpcConfiguration:
+        AssignPublicIp: 'ENABLED'
+        SecurityGroups:
+          - !Ref ServiceSecurityGroup
+        Subnets: [!Ref SubnetA, !Ref SubnetB]
+    PlatformVersion: '1.4.0'
+    TaskDefinition: !Ref TaskDefinition
+```
+
+* `DependsOn: HttpListener`: Service us waqt tak start nahi hogi jab tak Load Balancer ka HTTP Listener tayyar na ho jaye.
+* `CapacityProviderStrategy`: Tasks ko chalane ke liye `FARGATE` provider use ho raha hai (cost saving ke liye production mein yahan `FARGATE_SPOT` bhi mix kiya ja sakta hai).
+* **Zero-Downtime Deployment Strategy:**
+* `DesiredCount: 2`: Har waqt kam az kam 2 tasks chalte rahenge.
+* `MinimumHealthyPercent: 100`: Deployment ke doran chalne wale healthy tasks ki tadaad kabhi bhi 2 ($100\%$) se kam nahi hogi.
+* `MaximumPercent: 200`: Naya version release karte waqt ECS temporary taur par tasks ki tadaad 4 ($200\%$) tak le ja sakta hai (2 purane + 2 naye). Jab naye tasks healthy ho jate hain, tab purane 2 ko terminate kiya jata hai.
+* `DeploymentCircuitBreaker`: Agar naye version mein koi bug ho aur containers bar bar crash ho rahe hon, toh circuit breaker deployment ko rok kar automatically purane working version par **Rollback** kar deta hai.
+
+
+* `HealthCheckGracePeriodSeconds: 30`: Naya task start hone par container ko boot hone ke liye 30 seconds ka waqt diya jata hai, is doran ALB use un-healthy declare nahi karega.
+* `LoadBalancers`: Container `app` ki port `3000` ko ALB ke `TargetGroup` ke sath automatically attach aur detach karta hai.
+* `NetworkConfiguration`: Tasks ko do mukhtalif subnets (`SubnetA`, `SubnetB`) mein distribute karta hai taake High Availability (HA) hasil ho.
+
+---
+
+**Listing 18.7 Configuring autoscaling based on CPU utilization for the ECS service**
+
+Workload barhne par tasks automatically barhane aur load kam hone par kam karne ke liye **Application Auto Scaling** ka istemal kiya gaya hai:
+
+```yaml
+ScalableTarget:
+  Type: AWS::ApplicationAutoScaling::ScalableTarget
+  Properties:
+    MaxCapacity: '4'
+    MinCapacity: '2'
+    RoleARN: !GetAtt 'ScalableTargetRole.Arn'
+    ServiceNamespace: ecs
+    ScalableDimension: 'ecs:service:DesiredCount'
+    ResourceId: !Sub
+      - 'service/${Cluster}/${Service}'
+      - Cluster: !Ref Cluster
+        Service: !GetAtt 'Service.Name'
+CPUScalingPolicy:
+  Type: AWS::ApplicationAutoScaling::ScalingPolicy
+  Properties:
+    PolicyType: TargetTrackingScaling
+    PolicyName: !Sub 'awsinaction-notea-${ApplicationID}'
+    ScalingTargetId: !Ref ScalableTarget
+    TargetTrackingScalingPolicyConfiguration:
+      TargetValue: 50.0
+      ScaleInCooldown: 180
+      ScaleOutCooldown: 60
+      PredefinedMetricSpecification:
+        PredefinedMetricType: ECSServiceAverageCPUUtilization
+```
+
+* `ScalableTarget`: Scaling ki boundaries define karta hai:
+* `MinCapacity: 2`: Kam az kam 2 tasks har haal mein chalenge.
+* `MaxCapacity: 4`: Load chahe jitna bhi barh jaye, kharche ko control mein rakhne ke liye zyada se zyada 4 tasks tak jayega.
+* `ScalableDimension: 'ecs:service:DesiredCount'`: Service ke tasks ki tadaad ko adjust karega.
+
+
+* `TargetTrackingScalingPolicy`: Yeh bilkul car ke cruise control ya room AC ke thermostat ki tarah kaam karta hai:
+* `TargetValue: 50.0`: Average CPU utilization ka target **50%** set kiya gaya hai.
+* Agar CPU 50% se upar jayegi, toh auto-scaling foran naye tasks add karegi (Scale Out).
+* Agar CPU 50% se neeche aayegi, toh faltu tasks ko band kar degi (Scale In).
+* `ScaleOutCooldown: 60`: Naya task start karne ke baad 1 minute intezar karega situation ko dobara evaluate karne se pehle.
+* `ScaleInCooldown: 180`: Task terminate karne ke baad 3 minute intezar karega taake traffic ke chote jhatko (flapping) se bacha ja sake.
+
+
+
+---
+
+**Resources Clean Up (Khatam Karna)**
+
+Practice mukammal hone ke baad billing se bachne ke liye S3 bucket ka data delete karein aur CloudFormation stack ko remove karein:
+
+```bash
+aws s3 rm s3://awsinaction-notea-${ApplicationID} --recursive
+aws cloudformation delete-stack --stack-name notea
+aws cloudformation wait stack-delete-complete \
+  --stack-name notea
+```
+
+* `aws s3 rm ... --recursive`: S3 bucket jab tak poori khali na ho, CloudFormation usay delete nahi kar sakta, isliye pehle tamam uploaded files saaf ki jati hain.
+* `aws cloudformation delete-stack`: Tamam resources (ALB, ECS Service, Tasks, IAM Roles) ko mukammal taur par delete kar deta hai.
+* `aws cloudformation wait stack-delete-complete`: Deletion process complete hone tak terminal par wait karta hai.
+
+---
+
+**Summary**
+
+* **App Runner:** AWS par containers run karne ka sab se simple tareeqa hai, lekin isme advanced networking aur custom VPC configurations ki pabandiyan hoti hain.
+* **ECS vs EKS:** Dono baray container orchestrators hain. ECS cost-effective (free cluster management), CloudFormation ke sath natively integrated aur zyada tar AWS workloads ke liye behtareen choice hai.
+* **AWS Fargate:** Serverless container compute layer hai jo EC2 instances ko patch aur manage karne ki saari tension khatam kar deta hai.
+* **ECS Core Components:** **Cluster** (logical group), **Task Definition** (blueprint/recipe), **Task** (running container), aur **Service** (supervisor/auto-healer).
+* **Architectural Parity:** EC2 ke tamam concepts containers par apply hote hain — jahan ECS Service bilkul Auto Scaling Group ki tarah kaam karti hai aur ECS Task ek EC2 instance ki tarah software run karta hai.
+
+
+---
