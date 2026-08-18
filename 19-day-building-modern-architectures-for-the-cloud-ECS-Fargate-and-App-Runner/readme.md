@@ -1,5 +1,18 @@
 # Building modern architectures for the cloud: ECS, Fargate, and App Runner
 
+<details open>
+  <summary><strong>📚 Table of contents</strong></summary>
+
+  <ul>
+    <li><a href="#this-chapter-covers">This chapter covers</a></li>
+    <li><a href="#comparing-different-options-to-run-containers-on-aws">Comparing different options to run containers on AWS</a></li>
+    <li><a href="#the-ecs-basics-cluster-service-task-and-task-definition">The ECS basics: Cluster, service, task, and task definition</a></li>
+    <li><a href="#aws-fargate-running-containers-without-managing-a-cluster-of-virtual-machines">AWS Fargate: Running containers without managing a cluster of virtual machines</a></li>
+    <li><a href="#walking-through-a-cloud-native-architecture-ecs-fargate-and-s3">Walking through a cloud-native architecture: ECS, Fargate, and S3</a></li>
+  </ul>
+
+</details>
+
 ## **This chapter covers**
 
 * **Deploying a web server with App Runner, the simplest way to run containers on AWS:** AWS par containers run karne ka sab se asaan tareeqa AWS App Runner hai. Isme aapko na servers ki fikar karni parti hai, na complex networking ki — sirf container do aur application live.
