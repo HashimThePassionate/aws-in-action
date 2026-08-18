@@ -1,5 +1,32 @@
 # Scaling up and down Autoscaling and CloudWatch
 
+<details open>
+  <summary><strong>📚 Table of contents</strong></summary>
+
+  <ul>
+    <li><a href="#this-chapter-covers">This chapter covers</a></li>
+    <li><a href="#figure-171-typical-traffic-patterns-for-a-web-shop">Figure 17.1 Typical traffic patterns</a></li>
+    <li><a href="#examples-are-100-covered-by-the-free-tier">Examples are 100% covered by the Free Tier</a></li>
+    <li><a href="#managing-a-dynamic-ec2-instance-pool">Managing a dynamic EC2 instance pool</a></li>
+    <li><a href="#figure-172-autoscaling-consists-of-an-auto-scaling-group-and-a-launch-template-launching-and-terminating-uniform-virtual-machines">Figure 17.2 Autoscaling overview</a></li>
+    <li><a href="#dont-forget-to-define-a-health-check-grace-period">Health check grace period</a></li>
+    <li><a href="#listing-171-auto-scaling-group-and-launch-template-for-a-web-app">Listing 17.1 Web app template</a></li>
+    <li><a href="#using-metrics-or-schedules-to-trigger-scaling">Using metrics or schedules to trigger scaling</a></li>
+    <li><a href="#figure-173-triggering-autoscaling-based-on-cloudwatch-alarms-or-schedules">Figure 17.3 Scaling triggers</a></li>
+    <li><a href="#scaling-based-on-a-schedule">Scaling based on a schedule</a></li>
+    <li><a href="#unix-cron-syntax-format">Unix Cron syntax</a></li>
+    <li><a href="#scaling-based-on-cloudwatch-metrics">Scaling based on CloudWatch metrics</a></li>
+    <li><a href="#scaling-based-on-cpu-load-with-vms-that-offer-burstable-performance">Burstable performance scaling</a></li>
+    <li><a href="#decoupling-your-dynamic-ec2-instance-pool">Decoupling your dynamic EC2 instance pool</a></li>
+    <li><a href="#scaling-a-dynamic-ec2-instance-pool-synchronously-decoupled-by-a-load-balancer">Scaling behind a load balancer</a></li>
+    <li><a href="#simple-http-load-test">Simple HTTP load test</a></li>
+    <li><a href="#cleaning-up">Cleaning up</a></li>
+    <li><a href="#scaling-a-dynamic-ec2-instances-pool-asynchronously-decoupled-by-a-queue">Scaling behind a queue</a></li>
+    <li><a href="#summary">Summary</a></li>
+  </ul>
+
+</details>
+
 ## This chapter covers
 
 * **Creating an Auto Scaling group with a launch template:** Ek Auto Scaling group (ASG) ko Launch Template ki madad se banana. Modern AWS mein Launch Template humari virtual machines (EC2 instances) ka blueprint ya design hoti hai, jis mein hum batate hain ke naye banne wale server ka size, operating system aur configuration kya hogi.
